@@ -10,7 +10,7 @@ profiles:
       - ArduinoIoTCloud (2.8.0)
     platforms: 
       - platform: arduino:mbed_edge (3.0.1)
-      - platform: renesas:rl78g23_fpb_p64
+      - platform: example:rl78g23_fpb_p64
       - platform: arduino:mbed_giga (4.4.1)
     port: /dev/cu.Bluetooth-Incoming-Port
     protocol: serial

@@ -1,11 +1,11 @@
-import { EventEmitter } from '@c4312/evt'
 import {
   ErrorEventParams,
   InstallEventParams,
   Platform,
   Platforms,
   UninstallEventParams,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
+import { EventEmitter } from '@c4312/evt'
 
 export function createPlatformsMock(): Platforms {
   const _busyResources = new Set<string>()
@@ -404,8 +404,8 @@ const mockPlatforms: Platform[] = [
   },
   {
     boards: [{ name: 'Arduino Portenta C33', fqbn: '' }],
-    id: 'arduino:renesas_portenta',
-    name: 'Arduino Renesas Portenta Boards',
+    id: 'arduino:portenta_c33',
+    name: 'Arduino Portenta Boards',
     summary: '',
     description: 'Board included in this package: Arduino Portenta C33',
     author: 'Arduino',
@@ -527,7 +527,7 @@ const mockPlatforms: Platform[] = [
       { name: 'Arduino UNO R4 Minima', fqbn: '' },
       { name: 'Arduino UNO R4 WiFi', fqbn: '' },
     ],
-    id: 'arduino:renesas_uno',
+    id: 'arduino:uno_r4',
     name: 'Arduino UNO R4 Boards',
     summary: '',
     description:
@@ -746,27 +746,27 @@ const mockPlatforms: Platform[] = [
   },
   {
     boards: [{ name: 'RL78/G22 Fast Prototyping Board', fqbn: '' }],
-    id: 'renesas:rl78g22_fpb',
+    id: 'example:rl78g22_fpb',
     name: 'RL78/G22 Fast Prototyping Board',
     summary: '',
     description:
       'Board included in this package: RL78/G22 Fast Prototyping Board',
-    author: 'Renesas Electronics Corporation',
+    author: 'Example Electronics',
     availableVersions: ['2.0.0'],
     types: ['Contributed'],
-    website: 'https://github.com/renesas/Arduino',
+    website: 'https://example.com/boards',
   },
   {
     boards: [{ name: 'RL78/G23-64p Fast Prototyping Board', fqbn: '' }],
-    id: 'renesas:rl78g23_fpb_p64',
+    id: 'example:rl78g23_fpb_p64',
     name: 'RL78/G23-64p Fast Prototyping Board',
     summary: '',
     description:
       'Board included in this package: RL78/G23-64p Fast Prototyping Board',
-    author: 'Renesas Electronics Corporation',
+    author: 'Example Electronics',
     availableVersions: ['2.0.0'],
     types: ['Contributed'],
-    website: 'https://github.com/renesas/Arduino',
+    website: 'https://example.com/boards',
   },
   {
     boards: [
