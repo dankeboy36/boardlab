@@ -4,6 +4,9 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 import { singleCssBundlePlugin } from '../base/vite/singleCssBundlePlugin.mjs'
+import { getWebviewBuildConfig } from '../base/vite/webviewBuildConfig.mjs'
+
+const { isOutBuild, outDir } = getWebviewBuildConfig('examples', __dirname)
 
 export default defineConfig({
   base: './',
@@ -21,9 +24,9 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: 'out',
-    sourcemap: true,
-    minify: false,
+    outDir,
+    sourcemap: isOutBuild,
+    minify: isOutBuild ? false : 'esbuild',
     cssCodeSplit: false,
     chunkSizeWarningLimit: 2048,
     rollupOptions: {

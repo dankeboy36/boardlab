@@ -30,7 +30,7 @@
   "qna": "https://github.com/dankeboy36/boardlab/discussions",
   "author": "dankeboy36",
   "publisher": "dankeboy36",
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "workspaces": [
     "packages/protocol",
     "packages/servers/portino-bridge",
@@ -45,6 +45,8 @@
     "packages/webviews/profiles"
   ],
   "scripts": {
+    "prebundle": "rimraf dist && npm run compile",
+    "bundle": "webpack --mode production --devtool hidden-source-map",
     "precompile": "npm run build --workspaces",
     "compile": "tsc -p ./",
     "postcompile": "copyfiles -u 3 \"packages/servers/portino-bridge/out/**\" out/portino-bridge",
@@ -53,12 +55,13 @@
     "postinstall": "copyfiles -f ./node_modules/ardunno-cli/schemas/arduino-cli-schema.json ./schemas",
     "lint": "eslint packages --ext js,jsx,ts,tsx",
     "lint:fix": "eslint packages --ext js,jsx,ts,tsx --fix",
+    "prepackage": "npm run bundle",
+    "package": "vsce package",
     "prereset": "npm run reset --workspaces",
     "reset": "rimraf schemas out node_modules .vscode-test",
     "pretest": "npm run compile && npm run lint",
     "test": "node ./out/test/runTest.js",
     "test:unit": "vitest run",
-    "vscode:prepublish": "npm run compile",
     "watch": "tsc -watch -p ./"
   },
   "contributes": {
@@ -1389,6 +1392,7 @@
     "@typescript-eslint/eslint-plugin": "^8.44.1",
     "@typescript-eslint/parser": "^8.44.1",
     "@vscode/test-electron": "^2.3.8",
+    "@vscode/vsce": "^3.7.1",
     "copyfiles": "^2.4.1",
     "eslint": "^9.31.0",
     "eslint-config-prettier": "^10.1.5",
@@ -1406,9 +1410,12 @@
     "prettier-plugin-packagejson": "^2.5.18",
     "rimraf": "^6.0.1",
     "temp": "^0.9.4",
+    "ts-loader": "^9.5.4",
     "typescript": "^5.1.x",
     "vitest": "^4.0.8",
-    "vscode-arduino-api": "^0.2.1"
+    "vscode-arduino-api": "^0.2.1",
+    "webpack": "^5.104.1",
+    "webpack-cli": "^6.0.1"
   },
   "engines": {
     "vscode": "^1.101.0"

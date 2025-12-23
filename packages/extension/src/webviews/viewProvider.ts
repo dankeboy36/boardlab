@@ -1,3 +1,5 @@
+import path from 'node:path'
+
 import {
   notifyExamplesToolbarAction,
   notifyMonitorLineEndingChanged,
@@ -122,7 +124,15 @@ abstract class WebviewViewProvider implements vscode.WebviewViewProvider {
   }
 
   private getBuildRootSegments(): string[] {
-    return ['packages', 'webviews', this.type, 'out']
+    const overrideRoot = process.env.BOARDLAB_WEBVIEW_ROOT?.trim()
+    if (overrideRoot) {
+      if (overrideRoot.includes(path.win32.sep)) {
+        throw new Error('BOARDLAB_WEBVIEW_ROOT must use POSIX separators (/).')
+      }
+      const segments = overrideRoot.split(path.posix.sep).filter(Boolean)
+      return [...segments, this.type, 'out']
+    }
+    return ['dist', 'webviews', this.type]
   }
 }
 

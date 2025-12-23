@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import path from 'node:path'
 import { TextEncoder } from 'node:util'
 
 import {
@@ -747,7 +748,10 @@ export class ProfilesEditorProvider
     document: vscode.TextDocument,
     state: ProfilesDocumentState
   ): string {
-    const buildRoot = ['packages', 'webviews', 'profiles', 'out'] as const
+    const overrideRoot = process.env.BOARDLAB_WEBVIEW_ROOT?.trim()
+    const buildRoot = overrideRoot
+      ? ([...this.parseWebviewRoot(overrideRoot), 'profiles', 'out'] as const)
+      : (['dist', 'webviews', 'profiles'] as const)
     const stylesUri = getWebviewUri(webview, this.extensionUri, [
       ...buildRoot,
       'static',
@@ -813,6 +817,13 @@ export class ProfilesEditorProvider
       return match
     }
     return undefined
+  }
+
+  private parseWebviewRoot(root: string): string[] {
+    if (root.includes(path.win32.sep)) {
+      throw new Error('BOARDLAB_WEBVIEW_ROOT must use POSIX separators (/).')
+    }
+    return root.split(path.posix.sep).filter(Boolean)
   }
 
   private async ensureDocument(

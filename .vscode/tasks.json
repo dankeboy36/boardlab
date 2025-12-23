@@ -7,6 +7,11 @@
       "label": "npm: compile extension",
       "type": "shell",
       "command": "npm run compile --ignore-scripts",
+      "options": {
+        "env": {
+          "BOARDLAB_WEBVIEW_BUILD_TARGET": "out"
+        }
+      },
       "group": {
         "kind": "build",
         "isDefault": true
@@ -17,6 +22,11 @@
       "label": "npm: compile",
       "type": "npm",
       "script": "compile",
+      "options": {
+        "env": {
+          "BOARDLAB_WEBVIEW_BUILD_TARGET": "out"
+        }
+      },
       "group": {
         "kind": "build",
         "isDefault": true

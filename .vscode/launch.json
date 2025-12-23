@@ -15,7 +15,10 @@
         "${workspaceFolder}/test_workspace"
       ],
       "outFiles": ["${workspaceFolder}/out/**/*.js"],
-      "preLaunchTask": "npm: compile"
+      "preLaunchTask": "npm: compile",
+      "env": {
+        "BOARDLAB_WEBVIEW_ROOT": "packages/webviews"
+      }
     },
     {
       "name": "Preview Extension",
@@ -27,7 +30,10 @@
         "${workspaceFolder}/test_workspace"
       ],
       "outFiles": ["${workspaceFolder}/out/**/*.js"],
-      "preLaunchTask": "npm: compile extension"
+      "preLaunchTask": "npm: compile extension",
+      "env": {
+        "BOARDLAB_WEBVIEW_ROOT": "packages/webviews"
+      }
     },
     {
       "name": "Extension Tests",

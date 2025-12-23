@@ -1,9 +1,11 @@
 .DS_Store
 node_modules
 out
+dist
 .vscode-test
 test-results
 packages/webviews/**/build
 schemas
 test_workspace/arduino-cli*
 resources/arduino-examples
+*.vsix
