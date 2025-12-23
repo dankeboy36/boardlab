@@ -2,7 +2,7 @@
   "name": "boardlab",
   "displayName": "BoardLab",
   "version": "0.0.1-beta.1",
-  "description": "Vendor-independent board development in VS Code, powered by the Arduino CLI.",
+  "description": "Vendor-independent board development in VS Code, powered by the Arduino CLI",
   "categories": [
     "Programming Languages",
     "Other"
@@ -16,17 +16,17 @@
     "serial",
     "monitor"
   ],
-  "publisher": "dankeboy36",
+  "homepage": "https://github.com/dankeboy36/boardlab",
   "bugs": {
     "url": "https://github.com/dankeboy36/boardlab/issues"
   },
-  "homepage": "https://github.com/dankeboy36/boardlab",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/dankeboy36/boardlab.git"
   },
   "license": "MIT",
   "author": "dankeboy36",
+  "publisher": "dankeboy36",
   "main": "./out/extension.js",
   "workspaces": [
     "packages/protocol",
