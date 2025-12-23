@@ -379,7 +379,9 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
       })
       // child.unref() // TODO: uncomment when ready
     } catch (error) {
-      throw new Error(`Failed to launch monitor bridge service: ${String(error)}`)
+      throw new Error(
+        `Failed to launch monitor bridge service: ${String(error)}`
+      )
     }
     return port
   }
@@ -429,7 +431,9 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
     } catch (error) {
       this.attachToken = undefined
       this.readyInfo = undefined
-      throw new Error(`Failed to attach to monitor bridge service: ${String(error)}`)
+      throw new Error(
+        `Failed to attach to monitor bridge service: ${String(error)}`
+      )
     }
   }
 

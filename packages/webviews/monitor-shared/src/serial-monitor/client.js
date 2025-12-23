@@ -1,5 +1,4 @@
 // @ts-check
-import { EventEmitter } from '@c4312/evt'
 import {
   connectMonitorClient,
   disconnectMonitorClient,
@@ -12,6 +11,7 @@ import {
   requestMonitorSendMessage,
   requestMonitorUpdateBaudrate,
 } from '@boardlab/protocol'
+import { EventEmitter } from '@c4312/evt'
 import { nanoid } from 'nanoid'
 import defer from 'p-defer'
 import { CancellationTokenImpl, HOST_EXTENSION } from 'vscode-messenger-common'

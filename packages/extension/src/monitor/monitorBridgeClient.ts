@@ -41,8 +41,8 @@ interface BridgeClientOptions {
 }
 
 /**
- * Maintains a JSON-RPC connection to the BoardLab monitor bridge on behalf of the
- * extension host.
+ * Maintains a JSON-RPC connection to the BoardLab monitor bridge on behalf of
+ * the extension host.
  */
 export class MonitorBridgeClient implements vscode.Disposable {
   private connection: MessageConnection | undefined
@@ -196,7 +196,9 @@ export class MonitorBridgeClient implements vscode.Disposable {
     if (this.connectionPromise) {
       await this.connectionPromise
       if (!this.connection) {
-        throw new Error('Failed to establish BoardLab monitor bridge connection')
+        throw new Error(
+          'Failed to establish BoardLab monitor bridge connection'
+        )
       }
       return this.connection
     }

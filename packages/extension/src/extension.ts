@@ -156,10 +156,14 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       'boardlab.compile',
       async (params: { sketchPath?: string; fqbn?: string } = {}) => {
-        const resolved = await resolveSketchTaskParams(boardlabContext, params, {
-          needFqbn: true,
-          reuseCurrentBoard: false,
-        })
+        const resolved = await resolveSketchTaskParams(
+          boardlabContext,
+          params,
+          {
+            needFqbn: true,
+            reuseCurrentBoard: false,
+          }
+        )
         if (!resolved || !resolved.fqbn) {
           return
         }
@@ -290,10 +294,14 @@ export function activate(context: vscode.ExtensionContext) {
       async (
         params: { sketchPath?: string; fqbn?: string; port?: string } = {}
       ) => {
-        const resolved = await resolveSketchTaskParams(boardlabContext, params, {
-          needFqbn: true,
-          needPort: true,
-        })
+        const resolved = await resolveSketchTaskParams(
+          boardlabContext,
+          params,
+          {
+            needFqbn: true,
+            needPort: true,
+          }
+        )
         if (!resolved || !resolved.fqbn || !resolved.port) {
           return
         }
@@ -307,9 +315,13 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       'boardlab.exportBinary',
       async (params: { sketchPath?: string; fqbn?: string } = {}) => {
-        const resolved = await resolveSketchTaskParams(boardlabContext, params, {
-          needFqbn: true,
-        })
+        const resolved = await resolveSketchTaskParams(
+          boardlabContext,
+          params,
+          {
+            needFqbn: true,
+          }
+        )
         if (!resolved || !resolved.fqbn) {
           return
         }
@@ -327,11 +339,15 @@ export function activate(context: vscode.ExtensionContext) {
           programmer?: string
         } = {}
       ) => {
-        const resolved = await resolveSketchTaskParams(boardlabContext, params, {
-          needFqbn: true,
-          needPort: true,
-          needProgrammer: true,
-        })
+        const resolved = await resolveSketchTaskParams(
+          boardlabContext,
+          params,
+          {
+            needFqbn: true,
+            needPort: true,
+            needProgrammer: true,
+          }
+        )
         if (
           !resolved ||
           !resolved.fqbn ||
@@ -358,11 +374,15 @@ export function activate(context: vscode.ExtensionContext) {
           programmer?: string
         } = {}
       ) => {
-        const resolved = await resolveSketchTaskParams(boardlabContext, params, {
-          needFqbn: true,
-          needPort: true,
-          needProgrammer: true,
-        })
+        const resolved = await resolveSketchTaskParams(
+          boardlabContext,
+          params,
+          {
+            needFqbn: true,
+            needPort: true,
+            needProgrammer: true,
+          }
+        )
         if (
           !resolved ||
           !resolved.fqbn ||
@@ -383,9 +403,13 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       'boardlab.getBoardInfo',
       async (params: { sketchPath?: string; port?: string } = {}) => {
-        const resolved = await resolveSketchTaskParams(boardlabContext, params, {
-          needPort: true,
-        })
+        const resolved = await resolveSketchTaskParams(
+          boardlabContext,
+          params,
+          {
+            needPort: true,
+          }
+        )
         if (!resolved || !resolved.port) {
           return
         }
@@ -1262,25 +1286,30 @@ export function activate(context: vscode.ExtensionContext) {
       }
       await plotterEditors.sendToolbarAction('clear', active)
     }),
-    vscode.commands.registerCommand('boardlab.plotter.resetYScale', async () => {
-      const active = plotterEditors.getActiveDocument()
-      if (!active) {
-        vscode.window.showInformationMessage(
-          'Open a plotter editor to reset the Y scale.'
-        )
-        return
+    vscode.commands.registerCommand(
+      'boardlab.plotter.resetYScale',
+      async () => {
+        const active = plotterEditors.getActiveDocument()
+        if (!active) {
+          vscode.window.showInformationMessage(
+            'Open a plotter editor to reset the Y scale.'
+          )
+          return
+        }
+        await plotterEditors.sendToolbarAction('resetYScale', active)
       }
-      await plotterEditors.sendToolbarAction('resetYScale', active)
-    }),
-    vscode.commands.registerCommand('boardlab.monitor.configureLineEnding', () =>
-      configureLineEnding('monitor')
+    ),
+    vscode.commands.registerCommand(
+      'boardlab.monitor.configureLineEnding',
+      () => configureLineEnding('monitor')
     ),
     vscode.commands.registerCommand(
       'boardlab.monitor.configureBaudrate',
       configureMonitorBaudrate
     ),
-    vscode.commands.registerCommand('boardlab.plotter.configureLineEnding', () =>
-      configureLineEnding('plotter')
+    vscode.commands.registerCommand(
+      'boardlab.plotter.configureLineEnding',
+      () => configureLineEnding('plotter')
     )
   )
 
@@ -1651,8 +1680,9 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     const currentBaudrate =
-      boardlabContext.monitorManager.getCachedBaudrate(monitorPick.entry.port) ??
-      monitorPick.entry.baudrate
+      boardlabContext.monitorManager.getCachedBaudrate(
+        monitorPick.entry.port
+      ) ?? monitorPick.entry.baudrate
 
     const baudrateQuickPickEntries = baudrateOptions.map((option) => {
       const isSelected = option.value === currentBaudrate

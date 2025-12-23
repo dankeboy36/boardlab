@@ -53,7 +53,9 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
       this.statusBarItem,
       this.didChangeStatusBarEmitter,
       boardlabContext.onDidChangeSketch(() => this.updateStatusBarItem()),
-      boardlabContext.onDidChangeCurrentSketch(() => this.updateStatusBarItem()),
+      boardlabContext.onDidChangeCurrentSketch(() =>
+        this.updateStatusBarItem()
+      ),
       boardlabContext.sketchbooks.onDidChangeResolvedSketches(() =>
         this.updateStatusBarItem()
       ),
@@ -528,7 +530,8 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
       if (!ok) {
         throw new Error('Profile validation failed')
       }
-      const compileConfig = vscode.workspace.getConfiguration('boardlab.compile')
+      const compileConfig =
+        vscode.workspace.getConfiguration('boardlab.compile')
       const verbose = compileConfig.get<boolean>('verbose') ?? false
       const warnings = (
         compileConfig.get<string>('warnings') ?? 'none'
@@ -621,7 +624,11 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
       const ast = validateProfilesYAML(text, doc)
       let cli: vscode.Diagnostic[] = []
       try {
-        cli = await collectCliDiagnostics(this.boardlabContext as any, doc, text)
+        cli = await collectCliDiagnostics(
+          this.boardlabContext as any,
+          doc,
+          text
+        )
       } catch {}
       const all = [...ast, ...cli]
       const hasError = all.some(
@@ -752,7 +759,8 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
     if (selected?.id) {
       return selected.id
     }
-    const programmer = await this.boardlabContext.selectProgrammer(currentSketch)
+    const programmer =
+      await this.boardlabContext.selectProgrammer(currentSketch)
     if (!programmer) {
       return undefined
     }
@@ -1252,7 +1260,9 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
 
       const attemptResume = async (remaining: number): Promise<void> => {
         try {
-          await this.boardlabContext.monitorManager.resumeMonitor(portIdentifier)
+          await this.boardlabContext.monitorManager.resumeMonitor(
+            portIdentifier
+          )
         } catch (error) {
           if (remaining <= 0) {
             console.error('Failed to resume monitor', error)

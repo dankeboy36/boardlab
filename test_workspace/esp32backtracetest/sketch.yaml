@@ -8,14 +8,14 @@ profiles:
       - BeaconNano
       - 107-Arduino-Servo-RP2040 (0.1.0)
       - ArduinoIoTCloud (2.8.0)
-    platforms: 
+    platforms:
       - platform: arduino:mbed_edge (3.0.1)
       - platform: example:rl78g23_fpb_p64
       - platform: arduino:mbed_giga (4.4.1)
     port: /dev/cu.Bluetooth-Incoming-Port
     protocol: serial
     port_config:
-      stop_bits: "2"
+      stop_bits: '2'
   nanorp:
     fqbn: arduino:mbed_nano:nanorp2040connect
     platforms:

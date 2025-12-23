@@ -1,6 +1,6 @@
 // @ts-check
-import { useResizeObserver } from '@react-hookz/web'
 import { useMonitorStream } from '@boardlab/monitor-shared/serial-monitor'
+import { useResizeObserver } from '@react-hookz/web'
 import {
   forwardRef,
   useCallback,

@@ -14,9 +14,9 @@
     "watch": "echo monitor-shared: nothing to watch"
   },
   "dependencies": {
-    "@reduxjs/toolkit": "^2.8.2",
     "@boardlab/base": "0.0.0",
     "@boardlab/protocol": "0.0.0",
+    "@reduxjs/toolkit": "^2.8.2",
     "boards-list": "^1.1.0",
     "react": "^19.1.1",
     "react-redux": "^9.2.0",

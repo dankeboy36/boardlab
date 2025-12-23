@@ -384,20 +384,23 @@ export class BoardLabContextImpl implements BoardLabContext {
           }
         }
       ),
-      vscode.commands.registerCommand('boardlab.resetConfigOption', (params) => {
-        if (
-          params instanceof ConfigOptionItem &&
-          params.sketch instanceof SketchFolderImpl &&
-          isBoardDetails(params.sketch.board) &&
-          params.defaultConfigValue
-        ) {
-          this.updateConfigOptions(
-            params.sketch,
-            params.option,
+      vscode.commands.registerCommand(
+        'boardlab.resetConfigOption',
+        (params) => {
+          if (
+            params instanceof ConfigOptionItem &&
+            params.sketch instanceof SketchFolderImpl &&
+            isBoardDetails(params.sketch.board) &&
             params.defaultConfigValue
-          )
+          ) {
+            this.updateConfigOptions(
+              params.sketch,
+              params.option,
+              params.defaultConfigValue
+            )
+          }
         }
-      }),
+      ),
       vscode.commands.registerCommand('boardlab.pickSketch', () =>
         pickSketch(this.sketchbooks, this.pinnedSketches, this.recentSketches)
       ),

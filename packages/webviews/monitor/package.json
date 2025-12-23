@@ -16,11 +16,11 @@
     "test:e2e:install": "playwright install"
   },
   "dependencies": {
-    "@c4312/evt": "^0.1.1",
-    "@reduxjs/toolkit": "^2.8.2",
     "@boardlab/base": "0.0.0",
     "@boardlab/monitor-shared": "0.0.0",
     "@boardlab/protocol": "0.0.0",
+    "@c4312/evt": "^0.1.1",
+    "@reduxjs/toolkit": "^2.8.2",
     "@vscode/codicons": "^0.0.40",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-search": "^0.15.0",

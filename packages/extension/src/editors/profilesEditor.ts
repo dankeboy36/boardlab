@@ -126,7 +126,6 @@ import {
   computeProfilesQuickFixPlans,
   type ProfilesQuickFixPlan,
 } from '../profile/codeActions'
-import { buildClearPlatformVersionsEdit } from '../profile/quickFixes'
 import { findPairByPath, validateProfilesYAML } from '../profile/validation'
 import { disposeAll, QuickInputNoopLabel } from '../utils'
 
