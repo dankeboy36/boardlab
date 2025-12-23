@@ -1,19 +1,22 @@
-A simple, open format for guiding coding agents,
-used by over 60k open-source projects.
-
-Think of AGENTS.md as a README for agents: a dedicated, predictable place to provide the context and instructions to help AI coding agents work on your project.
-
-Explore Examples
-View on GitHub
-
 # AGENTS.md
 
-## Setup commands
-- Install deps: `pnpm install`
-- Start dev server: `pnpm dev`
-- Run tests: `pnpm test`
+## Setup
+
+- Install deps: `npm install`
+- Run the extension: use the `Run Extension` launch config in `.vscode/launch.json` (it runs `npm: compile` before launch)
+- Tests: `npm test`
+
+## Project layout
+
+- VS Code extension entrypoint and build output live at the repo root (`package.json`, `out/`)
+- Extension source: `packages/extension`
+- Shared protocol types: `packages/protocol`
+- Monitor bridge server (internal): `packages/servers/portino-bridge`
+- Webviews: `packages/webviews/*` (monitor, plotter, platforms, libraries, profiles, examples, resources)
+- Sample workspace for dev/testing: `test_workspace`
 
 ## Code style
+
+- Follow ESLint/Prettier configs in the repo
 - TypeScript strict mode
-- Single quotes, no semicolons
-- Use functional patterns where possible
+- Prefer single quotes and no semicolons in existing files
