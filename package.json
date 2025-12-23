@@ -1,0 +1,1401 @@
+{
+  "name": "vscode-ardunno",
+  "displayName": "ardunno",
+  "version": "0.0.1-beta.1",
+  "description": "Unofficial Arduino extension for VS Code",
+  "categories": [
+    "Other"
+  ],
+  "bugs": {
+    "url": "https://github.com/dankeboy36/vscode-ardunno/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dankeboy36/vscode-ardunno.git"
+  },
+  "license": "MIT",
+  "author": "dankeboy36",
+  "main": "./out/extension.js",
+  "workspaces": [
+    "packages/protocol",
+    "packages/servers/portino-bridge",
+    "packages/webviews/base",
+    "packages/webviews/monitor-shared",
+    "packages/webviews/resources",
+    "packages/webviews/examples",
+    "packages/webviews/monitor",
+    "packages/webviews/plotter",
+    "packages/webviews/platforms",
+    "packages/webviews/libraries",
+    "packages/webviews/profiles"
+  ],
+  "scripts": {
+    "precompile": "npm run build --workspaces",
+    "compile": "tsc -p ./",
+    "postcompile": "copyfiles -u 3 \"packages/servers/portino-bridge/out/**\" out/portino-bridge",
+    "download:builtins": "scripts/fetch-builtins.sh --tag 1.10.2 --target resources/arduino-examples",
+    "format": "prettier --write .",
+    "postinstall": "copyfiles -f ./node_modules/ardunno-cli/schemas/arduino-cli-schema.json ./schemas",
+    "lint": "eslint packages --ext js,jsx,ts,tsx",
+    "lint:fix": "eslint packages --ext js,jsx,ts,tsx --fix",
+    "prereset": "npm run reset --workspaces",
+    "reset": "rimraf schemas out node_modules .vscode-test",
+    "pretest": "npm run compile && npm run lint",
+    "test": "node ./out/test/runTest.js",
+    "test:unit": "vitest run",
+    "vscode:prepublish": "npm run compile",
+    "watch": "tsc -watch -p ./"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "ardunno.openArduinoCliConfig",
+        "title": "Open Arduino CLI Configuration",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.addAdditionalPackageIndexUrlToArduinoCliConfig",
+        "title": "Add Additional Package Index URL to Arduino CLI config",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.selectSketch",
+        "title": "Select Sketch",
+        "icon": "$(file-submodule)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.openMainSketchFile",
+        "title": "Open Main Sketch File",
+        "icon": "$(go-to-file)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.configureCurrentSketch",
+        "title": "Configure Current Sketch",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.compile",
+        "title": "Compile Sketch",
+        "icon": "$(check)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.upload",
+        "title": "Upload Sketch",
+        "icon": "$(arrow-right)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.uploadUsingProgrammer",
+        "title": "Upload Using Programmer",
+        "icon": "$(server-process)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.exportBinary",
+        "title": "Export Compiled Binary",
+        "icon": "$(file-binary)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.openMonitor",
+        "title": "Open Monitor",
+        "icon": "$(terminal)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.burnBootloader",
+        "title": "Burn Bootloader",
+        "icon": "$(flame)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.getBoardInfo",
+        "title": "Get Board Info",
+        "icon": "$(info)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.archiveSketch",
+        "title": "Archive Sketch",
+        "icon": "$(file-zip)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.extensions.searchBoardLab",
+        "title": "Search Marketplace for BoardLab Extensions",
+        "icon": "$(extensions)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.tool.runFromTree",
+        "title": "Open Resource",
+        "icon": "$(go-to-file)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.task.runFromTree",
+        "title": "Run Sketch Task",
+        "icon": "$(play)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.task.stopFromTree",
+        "title": "Stop Sketch Task",
+        "icon": "$(debug-stop)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.tool.runFromTree",
+        "title": "Open Resource",
+        "icon": "$(go-to-file)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.addSketchFolderToWorkspace",
+        "title": "Add Sketch Folder to Workspace",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.selectBoard",
+        "title": "Select Board",
+        "icon": "$(pencil)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.selectPort",
+        "title": "Select Port",
+        "icon": "$(pencil)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.configureBoard",
+        "title": "Configure Board",
+        "icon": "$(pencil)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.selectProgrammer",
+        "title": "Select Programmer",
+        "icon": "$(pencil)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.selectConfigOption",
+        "title": "Select Config Option",
+        "icon": "$(pencil)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.resetConfigOption",
+        "title": "Reset Config Option to Default",
+        "icon": "$(discard)",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.openCommandCenter",
+        "title": "Open Command Center",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.monitor.focus",
+        "title": "Open Monitor",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.monitor.copyAll",
+        "title": "Copy Output",
+        "category": "ardunno",
+        "icon": "$(clippy)"
+      },
+      {
+        "command": "ardunno.monitor.saveToFile",
+        "title": "Save Output",
+        "category": "ardunno",
+        "icon": "$(save)"
+      },
+      {
+        "command": "ardunno.monitor.clear",
+        "title": "Clear Output",
+        "category": "ardunno",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "ardunno.monitor.toggleScrollLock",
+        "title": "Toggle Scroll Lock",
+        "category": "ardunno",
+        "icon": "$(lock)"
+      },
+      {
+        "command": "ardunno.monitor.configureLineEnding",
+        "title": "Select Line Ending",
+        "category": "ardunno",
+        "icon": "$(whitespace)"
+      },
+      {
+        "command": "ardunno.monitor.configureBaudrate",
+        "title": "Configure Baudrate",
+        "category": "ardunno",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "ardunno.plotter.focus",
+        "title": "Open Plotter",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.plotter.clear",
+        "title": "Clear Plot",
+        "category": "ardunno",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "ardunno.plotter.resetYScale",
+        "title": "Reset Y Scale",
+        "category": "ardunno",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ardunno.plotter.configureLineEnding",
+        "title": "Select Line Ending",
+        "category": "ardunno",
+        "icon": "$(whitespace)"
+      },
+      {
+        "command": "arduino.examples.refresh",
+        "title": "Refresh Examples",
+        "category": "ardunno",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "arduino.examples.importToWorkspace",
+        "title": "Import Example to Folder…",
+        "category": "ardunno",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "arduino.examples.openTemp",
+        "title": "Open Example in New Window",
+        "category": "ardunno",
+        "icon": "$(new-window)"
+      },
+      {
+        "command": "arduino.examples.openPreview",
+        "title": "Open Example Preview",
+        "category": "ardunno",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "arduino.examples.openReadme",
+        "title": "Open Library README",
+        "category": "ardunno",
+        "icon": "$(book)"
+      },
+      {
+        "command": "ardunno.pickSketch",
+        "title": "Pick Sketch",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.pickBoard",
+        "title": "Pick Board",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.pickPort",
+        "title": "Pick Port",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.installPlatform",
+        "title": "Install",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.installLatestPlatform",
+        "title": "Install Latest",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.updatePlatform",
+        "title": "Update",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.uninstallPlatform",
+        "title": "Remove",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.installLibrary",
+        "title": "Install",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.installLatestLibrary",
+        "title": "Install Latest",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.updateLibrary",
+        "title": "Update",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.uninstallLibrary",
+        "title": "Remove",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.moreInfo",
+        "title": "More Info",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.profiles.setDefault",
+        "title": "Set as Default",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.profiles.delete",
+        "title": "Delete Profile",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.profiles.setActive",
+        "title": "Set as Active",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.profiles.openSketchProfile",
+        "title": "Open Sketch Profile",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.profiles.createSketchProfile",
+        "title": "Create Sketch Profile",
+        "category": "ardunno"
+      },
+      {
+        "command": "ardunno.profiles.openTextEditor",
+        "title": "Open Sketch Profile (YAML)",
+        "category": "ardunno",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "ardunno.libraries.filter.type.Updatable",
+        "title": "Updatable"
+      },
+      {
+        "command": "ardunno.libraries.filter.type.Updatable.checked",
+        "title": "✓ Updatable"
+      },
+      {
+        "command": "ardunno.libraries.filter.type.Installed",
+        "title": "Installed"
+      },
+      {
+        "command": "ardunno.libraries.filter.type.Installed.checked",
+        "title": "✓ Installed"
+      },
+      {
+        "command": "ardunno.libraries.filter.type.Arduino",
+        "title": "Arduino"
+      },
+      {
+        "command": "ardunno.libraries.filter.type.Arduino.checked",
+        "title": "✓ Arduino"
+      },
+      {
+        "command": "ardunno.libraries.filter.type.Partner",
+        "title": "Partner"
+      },
+      {
+        "command": "ardunno.libraries.filter.type.Partner.checked",
+        "title": "✓ Partner"
+      },
+      {
+        "command": "ardunno.libraries.filter.type.Recommended",
+        "title": "Recommended"
+      },
+      {
+        "command": "ardunno.libraries.filter.type.Recommended.checked",
+        "title": "✓ Recommended"
+      },
+      {
+        "command": "ardunno.libraries.filter.type.Contributed",
+        "title": "Contributed"
+      },
+      {
+        "command": "ardunno.libraries.filter.type.Contributed.checked",
+        "title": "✓ Contributed"
+      },
+      {
+        "command": "ardunno.libraries.filter.type.Retired",
+        "title": "Retired"
+      },
+      {
+        "command": "ardunno.libraries.filter.type.Retired.checked",
+        "title": "✓ Retired"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.Communication",
+        "title": "Communication"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.Communication.checked",
+        "title": "✓ Communication"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.DataProcessing",
+        "title": "Data Processing"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.DataProcessing.checked",
+        "title": "✓ Data Processing"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.DataStorage",
+        "title": "Data Storage"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.DataStorage.checked",
+        "title": "✓ Data Storage"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.DeviceControl",
+        "title": "Device Control"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.DeviceControl.checked",
+        "title": "✓ Device Control"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.Display",
+        "title": "Display"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.Display.checked",
+        "title": "✓ Display"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.Other",
+        "title": "Other"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.Other.checked",
+        "title": "✓ Other"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.Sensors",
+        "title": "Sensors"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.Sensors.checked",
+        "title": "✓ Sensors"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.SignalInputOutput",
+        "title": "Signal Input/Output"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.SignalInputOutput.checked",
+        "title": "✓ Signal Input/Output"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.Timing",
+        "title": "Timing"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.Timing.checked",
+        "title": "✓ Timing"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.Uncategorized",
+        "title": "Uncategorized"
+      },
+      {
+        "command": "ardunno.libraries.filter.topic.Uncategorized.checked",
+        "title": "✓ Uncategorized"
+      },
+      {
+        "command": "ardunno.platforms.filter.type.Updatable",
+        "title": "Updatable"
+      },
+      {
+        "command": "ardunno.platforms.filter.type.Updatable.checked",
+        "title": "✓ Updatable"
+      },
+      {
+        "command": "ardunno.platforms.filter.type.Arduino",
+        "title": "Arduino"
+      },
+      {
+        "command": "ardunno.platforms.filter.type.Arduino.checked",
+        "title": "✓ Arduino"
+      },
+      {
+        "command": "ardunno.platforms.filter.type.Contributed",
+        "title": "Contributed"
+      },
+      {
+        "command": "ardunno.platforms.filter.type.Contributed.checked",
+        "title": "✓ Contributed"
+      },
+      {
+        "command": "ardunno.platforms.filter.type.ArduinoCertified",
+        "title": "Arduino Certified"
+      },
+      {
+        "command": "ardunno.platforms.filter.type.ArduinoCertified.checked",
+        "title": "✓ Arduino Certified"
+      },
+      {
+        "command": "ardunno.platforms.filter.type.Partner",
+        "title": "Partner"
+      },
+      {
+        "command": "ardunno.platforms.filter.type.Partner.checked",
+        "title": "✓ Partner"
+      },
+      {
+        "command": "ardunno.platforms.filter.type.ArduinoHeart",
+        "title": "Arduino@Heart"
+      },
+      {
+        "command": "ardunno.platforms.filter.type.ArduinoHeart.checked",
+        "title": "✓ Arduino@Heart"
+      }
+    ],
+    "configuration": {
+      "title": "ardunno",
+      "properties": {
+        "ardunno.monitor.lineEnding": {
+          "type": "string",
+          "enum": [
+            "none",
+            "lf",
+            "cr",
+            "crlf"
+          ],
+          "default": "crlf",
+          "markdownDescription": "Line ending appended to messages sent from the Monitor and Plotter inputs."
+        },
+        "ardunno.monitor.bridgePort": {
+          "type": "number",
+          "default": 55888,
+          "markdownDescription": "Preferred TCP port for the Portino bridge server used to connect VS Code instances. If another process responds on this port with an unexpected protocol, the extension will warn and will not start its own bridge.",
+          "minimum": 55000
+        },
+        "ardunno.monitor.bridgeMode": {
+          "type": "string",
+          "enum": [
+            "external-process",
+            "in-process"
+          ],
+          "default": "external-process",
+          "markdownDescription": "Controls how the Portino bridge server is started. Use 'in-process' to run it inside the VS Code extension host for easier debugging. Changing this setting requires reloading the window."
+        },
+        "ardunno.cli.configPath": {
+          "type": "string",
+          "markdownDescription": "Absolute path to the Arduino CLI configuration file used by ardunno. Leave empty to auto-detect."
+        },
+        "ardunno.compile.verbose": {
+          "type": "boolean",
+          "markdownDescription": "True for verbose compile output. False by default",
+          "default": false
+        },
+        "ardunno.compile.warnings": {
+          "enum": [
+            "None",
+            "Default",
+            "More",
+            "All"
+          ],
+          "default": "None",
+          "markdownDescription": "Tells gcc which warning level to use. It's 'None' by default"
+        },
+        "ardunno.upload.verbose": {
+          "type": "boolean",
+          "markdownDescription": "True for verbose upload output. False by default.",
+          "default": false
+        }
+      }
+    },
+    "customEditors": [
+      {
+        "viewType": "ardunno.monitorEditor",
+        "displayName": "Monitor",
+        "selector": [
+          {
+            "scheme": "monitor",
+            "filenamePattern": "**/*"
+          }
+        ],
+        "priority": "option"
+      },
+      {
+        "viewType": "ardunno.plotterEditor",
+        "displayName": "Plotter",
+        "selector": [
+          {
+            "scheme": "monitor",
+            "filenamePattern": "**/*"
+          }
+        ],
+        "priority": "option"
+      },
+      {
+        "viewType": "ardunno.profilesEditor",
+        "displayName": "Profiles",
+        "selector": [
+          {
+            "scheme": "file",
+            "filenamePattern": "**/sketch.yaml"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": "arduino-cli.json",
+        "url": "./schemas/arduino-cli-schema.json"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "ardunno.monitor.copyAll",
+          "when": "activeCustomEditorId == ardunno.monitorEditor",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ardunno.monitor.saveToFile",
+          "when": "activeCustomEditorId == ardunno.monitorEditor",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ardunno.monitor.clear",
+          "when": "activeCustomEditorId == ardunno.monitorEditor",
+          "group": "navigation@3"
+        },
+        {
+          "command": "ardunno.monitor.toggleScrollLock",
+          "when": "activeCustomEditorId == ardunno.monitorEditor",
+          "group": "navigation@4"
+        },
+        {
+          "command": "ardunno.monitor.configureLineEnding",
+          "when": "activeCustomEditorId == ardunno.monitorEditor",
+          "group": "navigation@5"
+        },
+        {
+          "command": "ardunno.plotter.clear",
+          "when": "activeCustomEditorId == ardunno.plotterEditor",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ardunno.plotter.resetYScale",
+          "when": "activeCustomEditorId == ardunno.plotterEditor",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ardunno.plotter.configureLineEnding",
+          "when": "activeCustomEditorId == ardunno.plotterEditor",
+          "group": "navigation@3"
+        },
+        {
+          "command": "ardunno.profiles.openTextEditor",
+          "when": "activeCustomEditorId == ardunno.profilesEditor",
+          "group": "navigation@99"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "ardunno.selectSketch",
+          "when": "view == ardunno.currentSketch",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ardunno.openMainSketchFile",
+          "when": "view == ardunno.currentSketch",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ardunno.extensions.searchBoardLab",
+          "when": "view == ardunno.currentSketch",
+          "group": "extensions@99"
+        },
+        {
+          "command": "arduino.examples.refresh",
+          "when": "view == arduinoExamples",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ardunno.plotter.clear",
+          "when": "view == ardunno.plotter",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ardunno.plotter.resetYScale",
+          "when": "view == ardunno.plotter",
+          "group": "navigation@2"
+        },
+        {
+          "command": "ardunno.plotter.configureLineEnding",
+          "when": "view == ardunno.plotter",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "ardunno.selectBoard",
+          "when": "view == ardunno.currentSketch && viewItem == board",
+          "group": "inline"
+        },
+        {
+          "command": "ardunno.selectPort",
+          "when": "view == ardunno.currentSketch && viewItem == port",
+          "group": "inline"
+        },
+        {
+          "command": "ardunno.selectProgrammer",
+          "when": "view == ardunno.currentSketch && viewItem == programmer",
+          "group": "inline"
+        },
+        {
+          "command": "ardunno.selectConfigOption",
+          "when": "view == ardunno.currentSketch && (viewItem == configOption || viewItem == dirtyConfigOption)",
+          "group": "inline"
+        },
+        {
+          "command": "ardunno.resetConfigOption",
+          "when": "view == ardunno.currentSketch && viewItem == dirtyConfigOption",
+          "group": "inline"
+        },
+        {
+          "command": "ardunno.task.runFromTree",
+          "when": "view == ardunno.currentSketch && viewItem == taskIdle",
+          "group": "inline"
+        },
+        {
+          "command": "ardunno.task.stopFromTree",
+          "when": "view == ardunno.currentSketch && viewItem == taskRunning",
+          "group": "inline"
+        },
+        {
+          "command": "ardunno.tool.runFromTree",
+          "when": "view == ardunno.currentSketch && viewItem == tool",
+          "group": "inline"
+        },
+        {
+          "command": "ardunno.addSketchFolderToWorkspace",
+          "when": "view == ardunno.sketchbook && viewItem == sketchbookFolder",
+          "group": "inline"
+        },
+        {
+          "command": "ardunno.addSketchFolderToWorkspace",
+          "when": "view == ardunno.sketchbook && viewItem == sketchbookSketch",
+          "group": "inline"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "ardunno.pickSketch",
+          "when": "false"
+        },
+        {
+          "command": "ardunno.pickBoard",
+          "when": "false"
+        },
+        {
+          "command": "ardunno.pickPort",
+          "when": "false"
+        },
+        {
+          "command": "ardunno.installPlatform",
+          "when": "false"
+        },
+        {
+          "command": "ardunno.installLatestPlatform",
+          "when": "false"
+        },
+        {
+          "command": "ardunno.updatePlatform",
+          "when": "false"
+        },
+        {
+          "command": "ardunno.uninstallPlatform",
+          "when": "false"
+        },
+        {
+          "command": "ardunno.installLibrary",
+          "when": "false"
+        },
+        {
+          "command": "ardunno.installLatestLibrary",
+          "when": "false"
+        },
+        {
+          "command": "ardunno.updateLibrary",
+          "when": "false"
+        },
+        {
+          "command": "ardunno.uninstallLibrary",
+          "when": "false"
+        },
+        {
+          "command": "ardunno.moreInfo",
+          "when": "false"
+        },
+        {
+          "command": "ardunno.selectBoard",
+          "when": "currentSketchPath != ''"
+        },
+        {
+          "command": "ardunno.selectConfigOption",
+          "when": "false"
+        },
+        {
+          "command": "ardunno.resetConfigOption",
+          "when": "false"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "ardunno.moreInfo",
+          "when": "(webviewId == 'ardunno.platformsManager' || webviewId == 'ardunno.librariesManager') && webviewSection == 'toolbar'",
+          "group": "info@1"
+        },
+        {
+          "command": "ardunno.installLatestPlatform",
+          "when": "webviewId == 'ardunno.platformsManager' && webviewSection == 'toolbar' && canInstallLatest",
+          "group": "manage@1"
+        },
+        {
+          "command": "ardunno.installPlatform",
+          "when": "webviewId == 'ardunno.platformsManager' && webviewSection == 'toolbar' && canInstallSelected",
+          "group": "manage@2"
+        },
+        {
+          "command": "ardunno.updatePlatform",
+          "when": "webviewId == 'ardunno.platformsManager' && webviewSection == 'toolbar' && canUpdate",
+          "group": "manage@3"
+        },
+        {
+          "command": "ardunno.uninstallPlatform",
+          "when": "webviewId == 'ardunno.platformsManager' && webviewSection == 'toolbar' && canRemove",
+          "group": "manage@4"
+        },
+        {
+          "command": "ardunno.installLatestLibrary",
+          "when": "webviewId == 'ardunno.librariesManager' && webviewSection == 'toolbar' && canInstallLatest",
+          "group": "manage@1"
+        },
+        {
+          "command": "ardunno.installLibrary",
+          "when": "webviewId == 'ardunno.librariesManager' && webviewSection == 'toolbar' && canInstallSelected",
+          "group": "manage@2"
+        },
+        {
+          "command": "ardunno.updateLibrary",
+          "when": "webviewId == 'ardunno.librariesManager' && webviewSection == 'toolbar' && canUpdate",
+          "group": "manage@3"
+        },
+        {
+          "command": "ardunno.uninstallLibrary",
+          "when": "webviewId == 'ardunno.librariesManager' && webviewSection == 'toolbar' && canRemove",
+          "group": "manage@4"
+        },
+        {
+          "submenu": "ardunno.libraries.filter.type",
+          "when": "webviewId == 'ardunno.librariesManager' && webviewSection == 'search-filter'",
+          "group": "filter@1"
+        },
+        {
+          "submenu": "ardunno.libraries.filter.topic",
+          "when": "webviewId == 'ardunno.librariesManager' && webviewSection == 'search-filter'",
+          "group": "filter@2"
+        },
+        {
+          "submenu": "ardunno.platforms.filter.type",
+          "when": "webviewId == 'ardunno.platformsManager' && webviewSection == 'search-filter'",
+          "group": "filter@1"
+        },
+        {
+          "command": "ardunno.profiles.setDefault",
+          "when": "webviewType == 'ardunno.profilesEditor' && webviewSection == 'profiles-master' && canSetDefault",
+          "group": "manage@1"
+        },
+        {
+          "command": "ardunno.profiles.delete",
+          "when": "webviewType == 'ardunno.profilesEditor' && webviewSection == 'profiles-master' && canDelete",
+          "group": "manage@99"
+        },
+        {
+          "command": "ardunno.profiles.setActive",
+          "when": "webviewType == 'ardunno.profilesEditor' && webviewSection == 'profiles-master' && canSetActive",
+          "group": "manage@2"
+        },
+        {
+          "command": "ardunno.profiles.setDefault",
+          "when": "webviewId == 'ardunno.profilesEditor' && webviewSection == 'profiles-master' && canSetDefault",
+          "group": "manage@1"
+        },
+        {
+          "command": "ardunno.profiles.delete",
+          "when": "webviewId == 'ardunno.profilesEditor' && webviewSection == 'profiles-master' && canDelete",
+          "group": "manage@99"
+        },
+        {
+          "command": "ardunno.profiles.setActive",
+          "when": "webviewId == 'ardunno.profilesEditor' && webviewSection == 'profiles-master' && canSetActive",
+          "group": "manage@2"
+        }
+      ],
+      "ardunno.libraries.filter.type": [
+        {
+          "command": "ardunno.libraries.filter.type.Updatable",
+          "when": "ardunno.librariesFilter:type != 'Updatable'",
+          "group": "type@1"
+        },
+        {
+          "command": "ardunno.libraries.filter.type.Updatable.checked",
+          "when": "ardunno.librariesFilter:type == 'Updatable'",
+          "group": "type@1"
+        },
+        {
+          "command": "ardunno.libraries.filter.type.Installed",
+          "when": "ardunno.librariesFilter:type != 'Installed'",
+          "group": "type@2"
+        },
+        {
+          "command": "ardunno.libraries.filter.type.Installed.checked",
+          "when": "ardunno.librariesFilter:type == 'Installed'",
+          "group": "type@2"
+        },
+        {
+          "command": "ardunno.libraries.filter.type.Arduino",
+          "when": "ardunno.librariesFilter:type != 'Arduino'",
+          "group": "type@3"
+        },
+        {
+          "command": "ardunno.libraries.filter.type.Arduino.checked",
+          "when": "ardunno.librariesFilter:type == 'Arduino'",
+          "group": "type@3"
+        },
+        {
+          "command": "ardunno.libraries.filter.type.Partner",
+          "when": "ardunno.librariesFilter:type != 'Partner'",
+          "group": "type@4"
+        },
+        {
+          "command": "ardunno.libraries.filter.type.Partner.checked",
+          "when": "ardunno.librariesFilter:type == 'Partner'",
+          "group": "type@4"
+        },
+        {
+          "command": "ardunno.libraries.filter.type.Recommended",
+          "when": "ardunno.librariesFilter:type != 'Recommended'",
+          "group": "type@5"
+        },
+        {
+          "command": "ardunno.libraries.filter.type.Recommended.checked",
+          "when": "ardunno.librariesFilter:type == 'Recommended'",
+          "group": "type@5"
+        },
+        {
+          "command": "ardunno.libraries.filter.type.Contributed",
+          "when": "ardunno.librariesFilter:type != 'Contributed'",
+          "group": "type@6"
+        },
+        {
+          "command": "ardunno.libraries.filter.type.Contributed.checked",
+          "when": "ardunno.librariesFilter:type == 'Contributed'",
+          "group": "type@6"
+        },
+        {
+          "command": "ardunno.libraries.filter.type.Retired",
+          "when": "ardunno.librariesFilter:type != 'Retired'",
+          "group": "type@7"
+        },
+        {
+          "command": "ardunno.libraries.filter.type.Retired.checked",
+          "when": "ardunno.librariesFilter:type == 'Retired'",
+          "group": "type@7"
+        }
+      ],
+      "ardunno.libraries.filter.topic": [
+        {
+          "command": "ardunno.libraries.filter.topic.Communication",
+          "when": "ardunno.librariesFilter:topic != 'Communication'",
+          "group": "topic@1"
+        },
+        {
+          "command": "ardunno.libraries.filter.topic.Communication.checked",
+          "when": "ardunno.librariesFilter:topic == 'Communication'",
+          "group": "topic@1"
+        },
+        {
+          "command": "ardunno.libraries.filter.topic.DataProcessing",
+          "when": "ardunno.librariesFilter:topic != 'Data Processing'",
+          "group": "topic@2"
+        },
+        {
+          "command": "ardunno.libraries.filter.topic.DataProcessing.checked",
+          "when": "ardunno.librariesFilter:topic == 'Data Processing'",
+          "group": "topic@2"
+        },
+        {
+          "command": "ardunno.libraries.filter.topic.DataStorage",
+          "when": "ardunno.librariesFilter:topic != 'Data Storage'",
+          "group": "topic@3"
+        },
+        {
+          "command": "ardunno.libraries.filter.topic.DataStorage.checked",
+          "when": "ardunno.librariesFilter:topic == 'Data Storage'",
+          "group": "topic@3"
+        },
+        {
+          "command": "ardunno.libraries.filter.topic.DeviceControl",
+          "when": "ardunno.librariesFilter:topic != 'Device Control'",
+          "group": "topic@4"
+        },
+        {
+          "command": "ardunno.libraries.filter.topic.DeviceControl.checked",
+          "when": "ardunno.librariesFilter:topic == 'Device Control'",
+          "group": "topic@4"
+        },
+        {
+          "command": "ardunno.libraries.filter.topic.Display",
+          "when": "ardunno.librariesFilter:topic != 'Display'",
+          "group": "topic@5"
+        },
+        {
+          "command": "ardunno.libraries.filter.topic.Display.checked",
+          "when": "ardunno.librariesFilter:topic == 'Display'",
+          "group": "topic@5"
+        },
+        {
+          "command": "ardunno.libraries.filter.topic.Other",
+          "when": "ardunno.librariesFilter:topic != 'Other'",
+          "group": "topic@6"
+        },
+        {
+          "command": "ardunno.libraries.filter.topic.Other.checked",
+          "when": "ardunno.librariesFilter:topic == 'Other'",
+          "group": "topic@6"
+        },
+        {
+          "command": "ardunno.libraries.filter.topic.Sensors",
+          "when": "ardunno.librariesFilter:topic != 'Sensors'",
+          "group": "topic@7"
+        },
+        {
+          "command": "ardunno.libraries.filter.topic.Sensors.checked",
+          "when": "ardunno.librariesFilter:topic == 'Sensors'",
+          "group": "topic@7"
+        },
+        {
+          "command": "ardunno.libraries.filter.topic.SignalInputOutput",
+          "when": "ardunno.librariesFilter:topic != 'Signal Input/Output'",
+          "group": "topic@8"
+        },
+        {
+          "command": "ardunno.libraries.filter.topic.SignalInputOutput.checked",
+          "when": "ardunno.librariesFilter:topic == 'Signal Input/Output'",
+          "group": "topic@8"
+        },
+        {
+          "command": "ardunno.libraries.filter.topic.Timing",
+          "when": "ardunno.librariesFilter:topic != 'Timing'",
+          "group": "topic@9"
+        },
+        {
+          "command": "ardunno.libraries.filter.topic.Timing.checked",
+          "when": "ardunno.librariesFilter:topic == 'Timing'",
+          "group": "topic@9"
+        },
+        {
+          "command": "ardunno.libraries.filter.topic.Uncategorized",
+          "when": "ardunno.librariesFilter:topic != 'Uncategorized'",
+          "group": "topic@10"
+        },
+        {
+          "command": "ardunno.libraries.filter.topic.Uncategorized.checked",
+          "when": "ardunno.librariesFilter:topic == 'Uncategorized'",
+          "group": "topic@10"
+        }
+      ],
+      "ardunno.platforms.filter.type": [
+        {
+          "command": "ardunno.platforms.filter.type.Updatable",
+          "when": "ardunno.platformsFilter:type != 'Updatable'",
+          "group": "type@1"
+        },
+        {
+          "command": "ardunno.platforms.filter.type.Updatable.checked",
+          "when": "ardunno.platformsFilter:type == 'Updatable'",
+          "group": "type@1"
+        },
+        {
+          "command": "ardunno.platforms.filter.type.Arduino",
+          "when": "ardunno.platformsFilter:type != 'Arduino'",
+          "group": "type@2"
+        },
+        {
+          "command": "ardunno.platforms.filter.type.Arduino.checked",
+          "when": "ardunno.platformsFilter:type == 'Arduino'",
+          "group": "type@2"
+        },
+        {
+          "command": "ardunno.platforms.filter.type.Contributed",
+          "when": "ardunno.platformsFilter:type != 'Contributed'",
+          "group": "type@3"
+        },
+        {
+          "command": "ardunno.platforms.filter.type.Contributed.checked",
+          "when": "ardunno.platformsFilter:type == 'Contributed'",
+          "group": "type@3"
+        },
+        {
+          "command": "ardunno.platforms.filter.type.ArduinoCertified",
+          "when": "ardunno.platformsFilter:type != 'Arduino Certified'",
+          "group": "type@4"
+        },
+        {
+          "command": "ardunno.platforms.filter.type.ArduinoCertified.checked",
+          "when": "ardunno.platformsFilter:type == 'Arduino Certified'",
+          "group": "type@4"
+        },
+        {
+          "command": "ardunno.platforms.filter.type.Partner",
+          "when": "ardunno.platformsFilter:type != 'Partner'",
+          "group": "type@5"
+        },
+        {
+          "command": "ardunno.platforms.filter.type.Partner.checked",
+          "when": "ardunno.platformsFilter:type == 'Partner'",
+          "group": "type@5"
+        },
+        {
+          "command": "ardunno.platforms.filter.type.ArduinoHeart",
+          "when": "ardunno.platformsFilter:type != 'Arduino@Heart'",
+          "group": "type@6"
+        },
+        {
+          "command": "ardunno.platforms.filter.type.ArduinoHeart.checked",
+          "when": "ardunno.platformsFilter:type == 'Arduino@Heart'",
+          "group": "type@6"
+        }
+      ]
+    },
+    "problemMatchers": [
+      {
+        "name": "ardunno",
+        "fileLocation": "absolute",
+        "source": "ino",
+        "pattern": {
+          "regexp": "^(.*?):(\\d+):(\\d*):?\\s+(?:fatal\\s+)?(note|warning|error):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5,
+          "loop": true
+        }
+      }
+    ],
+    "submenus": [
+      {
+        "id": "ardunno.libraries.filter.type",
+        "label": "Type"
+      },
+      {
+        "id": "ardunno.libraries.filter.topic",
+        "label": "Topic"
+      },
+      {
+        "id": "ardunno.platforms.filter.type",
+        "label": "Type"
+      }
+    ],
+    "taskDefinitions": [
+      {
+        "type": "ardunno",
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "The Ardunno command to execute. Supported commands are 'compile', 'upload', 'burn-bootloader', 'export-binary', 'archive-sketch', 'upload-using-programmer', 'get-board-info', and 'reload-board-data'."
+          },
+          "sketchPath": {
+            "type": "string",
+            "description": "The path to the sketch to compile.",
+            "default": "${command:ardunno.pickSketch}"
+          },
+          "fqbn": {
+            "type": "string",
+            "description": "Fully Qualified Board Name (FQBN) for the compilation and upload or to disambiguate if more than one platform provides the pluggable monitor for a given port protocol. For example, 'arduino:avr:uno'.",
+            "default": "${command:ardunno.pickBoard}"
+          },
+          "port": {
+            "type": "string",
+            "description": "TODO! The qualified name of the port. The port protocol and the port address separated by a colon (`:`). The address can consists of the host and port separated by an additional colon. For example, 'serial:/dev/cu.usbmodem14201' or 'teensy:/usb:14300000'",
+            "default": "${command:ardunno.pickPort}"
+          },
+          "programmer": {
+            "type": "string",
+            "description": "The technical ID of the programmer to use"
+          }
+        }
+      }
+    ],
+    "views": {
+      "ardunnoSketches": [
+        {
+          "id": "ardunno.currentSketch",
+          "name": "Current Sketch",
+          "contextualTitle": "Current Sketch",
+          "icon": "$(circuit-board)"
+        },
+        {
+          "id": "ardunno.sketchbook",
+          "name": "Sketchbook",
+          "contextualTitle": "Sketchbook",
+          "icon": "$(file-submodule)"
+        },
+        {
+          "id": "arduinoExamples",
+          "name": "Examples",
+          "contextualTitle": "Examples",
+          "icon": "$(book)",
+          "type": "webview"
+        }
+      ],
+      "ardunnoPlatforms": [
+        {
+          "id": "ardunno.platformsManager",
+          "type": "webview",
+          "name": "Boards Manager",
+          "contextualTitle": "Boards Manager",
+          "icon": "$(package)"
+        }
+      ],
+      "ardunnoLibraries": [
+        {
+          "id": "ardunno.librariesManager",
+          "type": "webview",
+          "name": "Library Manager",
+          "contextualTitle": "Library Manager",
+          "icon": "$(library)"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "title": "Sketches",
+          "id": "ardunnoSketches",
+          "icon": "$(file-submodule)"
+        },
+        {
+          "title": "Boards",
+          "id": "ardunnoPlatforms",
+          "icon": "$(package)"
+        },
+        {
+          "title": "Libraries",
+          "id": "ardunnoLibraries",
+          "icon": "$(library)"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "ardunno.currentSketch",
+        "contents": "No sketch folders have been detected in the workspace. Open a sketch to import it into the workspace.\n[Open Sketch](command:ardunno.openSketch)\nTo learn more about sketches [read the docs](https://arduino.github.io/arduino-cli/latest/sketch-specification)."
+      }
+    ]
+  },
+  "activationEvents": [
+    "workspaceContains:**/*.ino",
+    "onLanguage:ino",
+    "onTaskType:ardunno",
+    "onFileSystem:ardunno-example",
+    "onFileSystem:arduino-example-md",
+    "onFileSystem:arduino-sketchbook",
+    "onFile:sketch.yaml"
+  ],
+  "dependencies": {
+    "@grpc/grpc-js": "^1.7.2",
+    "@types/semver": "^7.3.13",
+    "abort-controller-x": "^0.4.1",
+    "ajv": "^8.12.0",
+    "ardunno-cli": "^0.1.12",
+    "ardunno-sketch": "^0.1.0-beta.3",
+    "boards-list": "^1.1.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "fast-deep-equal": "^3.1.3",
+    "fqbn": "^1.3.0",
+    "get-arduino-tools": "^1.2.1",
+    "install-from-gh-to-vscode": "^0.1.0-beta.9",
+    "lodash.debounce": "^4.0.8",
+    "nice-grpc": "^2.1.7",
+    "nice-grpc-common": "^2.0.2",
+    "p-defer": "^3.0.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "rfdc": "^1.3.0",
+    "semver": "^7.5.4",
+    "tinyexec": "^1.0.1",
+    "vscode-messenger": "^0.5.1",
+    "vscode-messenger-common": "^0.5.1",
+    "vscode-ws-jsonrpc": "^3.4.0",
+    "ws": "^8.18.3",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/glob": "^8.0.0",
+    "@types/lodash.debounce": "^4.0.9",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "22.x",
+    "@types/temp": "^0.9.4",
+    "@types/vscode": "^1.84.2",
+    "@types/ws": "^8.18.1",
+    "@typescript-eslint/eslint-plugin": "^8.44.1",
+    "@typescript-eslint/parser": "^8.44.1",
+    "@vscode/test-electron": "^2.3.8",
+    "copyfiles": "^2.4.1",
+    "eslint": "^9.31.0",
+    "eslint-config-prettier": "^10.1.5",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-prettier": "^5.5.1",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "eslint-plugin-workspaces": "^0.10.0",
+    "glob": "^8.0.3",
+    "mocha": "^10.2.0",
+    "neostandard": "^0.12.2",
+    "prettier": "^3.6.2",
+    "prettier-plugin-jsdoc": "^1.3.3",
+    "prettier-plugin-organize-imports": "^4.1.0",
+    "prettier-plugin-packagejson": "^2.5.18",
+    "rimraf": "^6.0.1",
+    "temp": "^0.9.4",
+    "typescript": "^5.1.x",
+    "vitest": "^4.0.8",
+    "vscode-arduino-api": "^0.2.1"
+  },
+  "engines": {
+    "vscode": "^1.101.0"
+  }
+}

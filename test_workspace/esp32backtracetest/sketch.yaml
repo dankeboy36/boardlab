@@ -1,0 +1,76 @@
+profiles:
+  wroom:
+    fqbn: esp32:esp32:esp32da:FlashFreq=40,FlashMode=dio,FlashSize=16M,DebugLevel=none,LoopCore=1,EventsCore=1,EraseFlash=all,CPUFreq=20,PartitionScheme=noota_3g
+    libraries:
+      - LC_slowServo (10.0.0)
+      - LiquidCrystal I2C Multilingual
+      - Debounce
+      - BeaconNano
+      - 107-Arduino-Servo-RP2040 (0.1.0)
+      - ArduinoIoTCloud (2.8.0)
+    platforms: 
+      - platform: arduino:mbed_edge (3.0.1)
+      - platform: renesas:rl78g23_fpb_p64
+      - platform: arduino:mbed_giga (4.4.1)
+    port: /dev/cu.Bluetooth-Incoming-Port
+    protocol: serial
+    port_config:
+      stop_bits: "2"
+  nanorp:
+    fqbn: arduino:mbed_nano:nanorp2040connect
+    platforms:
+      - platform: arduino:mbed_nano (2.1.0)
+    libraries:
+      - ArduinoIoTCloud (1.0.2)
+      - Arduino_ConnectionHandler (0.6.4)
+      - TinyDHT sensor library (1.1.0)
+  another_profile_name:
+    notes: testing the limit of the AVR platform, may be unstable
+    fqbn: arduino:avr:uno
+    platforms:
+      - platform: arduino:avr (1.8.6)
+    libraries:
+      - VitconMQTT (1.0.1)
+      - Arduino_ConnectionHandler (0.6.4)
+      - TinyDHT sensor library (1.1.0)
+    port: /dev/ttyACM0
+    port_config:
+      baudrate: 115200
+  tiny:
+    notes: testing the very limit of the AVR platform, it will be very unstable
+    fqbn: attiny:avr:ATtinyX5:cpu=attiny85,clock=internal16
+    platforms:
+      - platform: attiny:avr (1.0.2)
+        platform_index_url: https://raw.githubusercontent.com/damellis/attiny/ide-1.6.x-boards-manager/package_damellis_attiny_index.json
+    libraries:
+      - ArduinoIoTCloud (2.6.0)
+      - Arduino_ConnectionHandler (0.6.4)
+      - TinyDHT sensor library (1.0.0)
+    port: /dev/cu.debug-console
+    protocol: serial
+  feather:
+    fqbn: adafruit:samd:adafruit_feather_m0
+    platforms:
+      - platform: adafruit:samd (1.6.0)
+        platform_index_url: https://adafruit.github.io/arduino-board-index/package_adafruit_index.json
+      - platform: arduino:mbed_edge (4.4.1)
+    libraries:
+      - ArduinoIoTCloud (2.6.1)
+      - Arduino_ConnectionHandler (1.0.2)
+      - TinyDHT sensor library (1.0.0)
+  esp32da:
+    fqbn: esp32:esp32:esp32da:UploadSpeed=230400,CPUFreq=13,FlashSize=16M
+    platforms:
+      - platform: esp32:esp32 (3.1.1)
+    libraries:
+      - Arduino_BuiltIn (1.0.0)
+    port_config: {}
+  Untitled 1:
+    platforms:
+      - platform: arduino:avr (1.8.6)
+  Untitled 2:
+    platforms:
+      - platform: arduino:mbed_opta (4.4.1)
+    libraries:
+      - 3BC Language Virtual Machine (0.1.3)
+default_profile: Untitled 2

@@ -1,0 +1,136 @@
+/* https://github.com/petyosi/react-virtuoso/issues/254 */
+/* Disable webpack-dev-server error overlay without custom webpack config or ejecting the CRA */
+/* https://stackoverflow.com/a/77094068/5529090 */
+iframe#webpack-dev-server-client-overlay {
+  display: none !important;
+}
+
+html,
+body {
+  /* VS Code puts a 20px padding to the side */
+  padding: unset;
+  /* Otherwise the scrollbar is not like the native one from VS Code */
+  scrollbar-color: unset;
+}
+#root {
+  height: 100%;
+}
+
+.view {
+  display: flex;
+  flex-flow: column;
+  height: 100%;
+  font-family: var(--font-family);
+}
+
+.view .search > vscode-textfield {
+  /* Ensure the text field does not overflow the list width and uses the default 320px */
+  width: auto;
+  max-width: 100%;
+  display: block;
+  box-sizing: border-box;
+  margin: 2px 16px;
+}
+
+.view .list {
+  flex: 1 1 0;
+  height: 100%;
+  position: relative; /* to let child div for the shadow to be positioned absolute */
+}
+
+.view .list .shadow {
+  display: block;
+  height: 3px;
+  width: 100%;
+  box-shadow: var(--vscode-scrollbar-shadow) 0 6px 6px -6px inset;
+  position: absolute; /* let the shadow stick to the top of the list */
+}
+
+.view .info {
+  margin: 2px 8px;
+  color: var(--vscode-search-resultsInfoForeground);
+  font-size: var(--vscode-editor-font-size);
+  font-weight: 400;
+}
+
+.view .list .item {
+  padding: 16px;
+}
+
+.view .list .item .header > div {
+  display: flex;
+}
+
+.view .list .item:hover .header .toolbar {
+  visibility: visible;
+  align-self: flex-start;
+}
+
+.view .list .item .header .toolbar {
+  visibility: hidden;
+  align-self: flex-start;
+}
+
+.view .list .item .header .title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 1 auto;
+}
+
+.view .list .item .header .title .name {
+  font-size: var(--vscode-font-size);
+  font-weight: 700;
+}
+
+/* A good example on how to customize the styles inside the shadow DOM: https://ionicframework.com/docs/theming/css-shadow-parts#how-part-works */
+.view .list .item .header > .version > vscode-badge {
+  text-transform: none;
+  margin-top: 2px;
+  margin-bottom: 2px;
+}
+
+.view .list .item .content {
+  display: flex;
+  flex-direction: column;
+  padding-top: 4px;
+  font-size: var(--vscode-editor-font-size);
+  color: var(--vscode-descriptionForeground);
+}
+
+.view .list .item .content > p {
+  margin-block-start: unset;
+  margin-block-end: unset;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.view .list .item .content .vscode-link {
+  color: var(--vscode-textLink-foreground);
+  text-decoration: underline;
+}
+
+.view .list .item .content .vscode-link:hover {
+  color: var(--vscode-textLink-activeForeground);
+}
+
+.view .list .item .footer {
+  display: flex;
+  align-items: center;
+  padding-top: 8px;
+}
+
+.view .list .item .footer > vscode-single-select {
+  margin-right: 12px;
+}
+
+.view .list .item .footer > vscode-progress-ring {
+  margin-left: 12px;
+}

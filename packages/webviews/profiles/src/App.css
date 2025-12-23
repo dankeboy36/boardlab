@@ -1,0 +1,319 @@
+body {
+  padding: 0;
+  margin: 0;
+  font-family: var(--vscode-font-family);
+  color: var(--vscode-foreground);
+  background-color: var(--vscode-editor-background);
+}
+
+#root {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+}
+
+.profiles-editor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  padding-top: 20px; /* VS Code Profiles' editor also has a padding */
+}
+
+.profiles-editor__split {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  /* To hide the default splitter border */
+  --vscode-editorWidget-border: var(--vscode-editor-background);
+}
+
+.profiles-editor__list-pane {
+  display: flex;
+  flex-direction: column;
+  /* 15px like the tree top margin in the VS Code Profiles' editor */
+  gap: 15px;
+  height: 100%;
+  min-height: 0;
+}
+
+/* Styles were taken from VS Code .profiles-editor .sidebar-container .new-profile-button */
+.profiles-editor__list-header {
+  padding: 0 20px 0 18px;
+  display: flex;
+  align-items: center;
+  height: 40px;
+  /* Align with VS Code Profiles' editor tree margin */
+  margin-left: 20px;
+}
+
+.profiles-editor__list-header vscode-button-group {
+  flex-grow: 1;
+}
+
+.profile-view__tree-container {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  margin-left: 20px;
+  border-radius: 2px;
+  outline: none;
+  /* not --vscode-editorWidget-border because it is override to be editor background to hide the split layout borders */
+  border-right: solid 1px var(--vscode-widget-border);
+}
+
+.profile-view__tree-container:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.profiles-editor__tree {
+  flex: 1;
+  overflow: auto;
+}
+
+/* Make description icons match normal icon color (not dimmed) */
+.profiles-editor__tree [slot='description'] vscode-icon {
+  /* Match the description text color, including selected state */
+  color: inherit;
+  --vscode-icon-foreground: currentColor;
+}
+
+.profiles-editor__tree-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Problems tree icon colors by severity (always override) */
+/* Inline problem icon colors (does not affect twisty/chevron) */
+.profiles-details-tree .problem-icon--error {
+  color: var(--vscode-problemsErrorIcon-foreground) !important;
+}
+.profiles-details-tree .problem-icon--warning {
+  color: var(--vscode-problemsWarningIcon-foreground) !important;
+}
+.profiles-details-tree .problem-icon--information,
+.profiles-details-tree .problem-icon--hint {
+  color: var(--vscode-problemsInfoIcon-foreground) !important;
+}
+.profiles-details-tree .problem-icon--success {
+  color: var(--vscode-testing-iconPassed, #89d185) !important;
+}
+
+/* Inherit when the tree is focused (active) and the row is selected (severity icon only) */
+.profiles-details-tree:focus-within
+  vscode-tree-item[selected]
+  > [slot='icon-leaf'].problem-icon-wrap
+  .problem-icon--severity,
+.profiles-details-tree:focus-within
+  vscode-tree-item[selected]
+  > [slot='icon-branch'].problem-icon-wrap
+  .problem-icon--severity,
+.profiles-details-tree:focus-within
+  vscode-tree-item[selected]
+  > [slot='icon-branch-opened'].problem-icon-wrap
+  .problem-icon--severity {
+  color: inherit !important;
+}
+
+/* Center item */
+.profiles-details-tree .problem-icon-wrap {
+  display: flex;
+}
+
+/* Hover: swap severity icon to lightbulb on the hovered row's icon only */
+.profiles-details-tree .problem-icon-wrap .problem-icon--lightbulb {
+  display: none;
+}
+.profiles-details-tree .problem-icon-wrap:hover .problem-icon--severity {
+  display: none;
+}
+.profiles-details-tree .problem-icon-wrap:hover .problem-icon--lightbulb {
+  display: inline-flex;
+}
+
+/* Lightbulb theme color */
+.profiles-details-tree .problem-icon--lightbulb {
+  color: var(--vscode-editorLightBulb-foreground, #ddb100);
+}
+
+/* Hover background removed — rely on default visuals */
+
+.profiles-editor__tree-empty {
+  padding: 6px 12px;
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+}
+
+.profiles-editor__details-pane {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.profiles-editor__details {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.profiles-editor__details-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px;
+}
+
+.profiles-editor__empty-state {
+  color: var(--vscode-descriptionForeground);
+  font-style: italic;
+}
+
+.profiles-editor__details-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.profiles-editor__details-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 20px;
+}
+
+.profiles-editor__details-title .badge-content {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Make description icons match normal icon color (not dimmed) */
+.profiles-editor__details-title .badge-content vscode-icon {
+  /* Match the description text color, including selected state */
+  color: inherit;
+  --vscode-icon-foreground: currentColor;
+}
+
+.profiles-editor__details-title .title {
+  margin: 0;
+  /* From VS Code profiles-editor .contents-container .profile-header .profile-title-container */
+  font-size: 26px;
+  font-weight: 600;
+}
+
+.profiles-editor__section {
+  display: flex;
+  flex-direction: column;
+  /* Take from .profiles-editor .contents-container .profile-body .profile-row-container .profile-label-element */
+  gap: 5px;
+}
+
+.profiles-editor__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.profiles-editor__error {
+  background-color: var(--vscode-inputValidation-errorBackground);
+  border-left: 3px solid var(--vscode-inputValidation-errorBorder);
+  color: var(--vscode-inputValidation-errorForeground);
+  padding: 8px 12px;
+  border-radius: 4px;
+}
+
+.profiles-editor__simple-tree {
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: 2px;
+  padding: 4px 0;
+}
+
+.profiles-editor__simple-tree-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 12px;
+}
+
+.profiles-editor__inline-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.profiles-editor__draft-actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 12px 20px 12px;
+}
+
+.profiles-editor__board-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.profiles-editor__board-name {
+  font-weight: 600;
+}
+
+.profiles-editor__loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.profiles-editor__config-item {
+  display: flex;
+  align-items: center;
+}
+
+.profiles-editor__subsection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.profiles-editor__subsection h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.profiles-editor__port-config {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.profiles-editor__port-config li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.profiles-editor__port-config-key {
+  font-weight: 500;
+}
+
+.profiles-editor__port-config-value {
+  color: var(--vscode-descriptionForeground);
+}

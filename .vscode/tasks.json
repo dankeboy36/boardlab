@@ -1,0 +1,67 @@
+// See https://go.microsoft.com/fwlink/?LinkId=733558
+// for the documentation about the tasks.json format
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "npm: compile extension",
+      "type": "shell",
+      "command": "npm run compile --ignore-scripts",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "npm: compile",
+      "type": "npm",
+      "script": "compile",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "npm: watch (extension)",
+      "type": "npm",
+      "script": "watch",
+      "problemMatcher": "$tsc-watch",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "never"
+      }
+    },
+    {
+      "label": "webviews: platforms dev",
+      "type": "shell",
+      "command": "npm run dev --workspace @vscode-ardunno/platforms"
+    },
+    {
+      "label": "webviews: libraries dev",
+      "type": "shell",
+      "command": "npm run dev --workspace @vscode-ardunno/libraries"
+    },
+    {
+      "label": "webviews: monitor dev",
+      "type": "shell",
+      "command": "npm run dev --workspace @vscode-ardunno/monitor"
+    },
+    {
+      "label": "webviews: plotter dev",
+      "type": "shell",
+      "command": "npm run dev --workspace @vscode-ardunno/plotter"
+    },
+    {
+      "label": "webviews: examples dev",
+      "type": "shell",
+      "command": "npm run dev --workspace @vscode-ardunno/examples"
+    },
+    {
+      "label": "webviews: profiles dev",
+      "type": "shell",
+      "command": "npm run dev --workspace @vscode-ardunno/profiles"
+    }
+  ]
+}

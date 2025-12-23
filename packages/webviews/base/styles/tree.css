@@ -1,0 +1,67 @@
+.tree-item__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tree-item__labelText {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0px;
+  color: inherit;
+  --vscode-toolbar-foreground: currentColor;
+  --vscode-toolbar-hoverForeground: currentColor;
+  --vscode-icon-foreground: currentColor;
+  --vscode-foreground: currentColor;
+}
+
+/* Shared behavior: only show action icons on hover/focus when opted in.
+   Apply by adding `tree--actions-on-hover` to the tree root element. */
+.tree--actions-on-hover .toolbar-group {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 80ms ease-in-out;
+}
+
+/* Show actions on the hovered item itself.
+   Suppress ancestor toolbars only when a descendant is also hovered
+   (do NOT suppress on descendant focus/active). */
+.tree--actions-on-hover
+  vscode-tree-item:hover:not(:has(vscode-tree-item:hover))
+  .toolbar-group {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Show actions on focused/active item. */
+.tree--actions-on-hover vscode-tree-item:focus .toolbar-group,
+.tree--actions-on-hover vscode-tree-item[active] .toolbar-group {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Keep actions visible on the selected item when the tree loses focus.
+   Still suppress ancestor toolbars only if a descendant is hovered. */
+.tree--actions-on-hover
+  vscode-tree-item[selected]:not(:has(vscode-tree-item:hover))
+  .toolbar-group {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Hide disabled action icons in all trees (cover various patterns) */
+.toolbar-group [data-disabled='true'],
+.toolbar-group [disabled],
+.toolbar-group [aria-disabled='true'] {
+  display: none !important;
+}

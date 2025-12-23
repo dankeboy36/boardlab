@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "ES2020",
+    "outDir": "out",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "sourceMap": true,
+    "rootDir": "src",
+    "skipLibCheck": true,
+    "strict": true,
+    "strictNullChecks": true,
+    "noImplicitOverride": true,
+    "esModuleInterop": true,
+    "declaration": true,
+    "jsx": "react-jsx"
+  }
+}

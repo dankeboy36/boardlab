@@ -1,0 +1,26 @@
+{
+  "name": "@vscode-ardunno/protocol",
+  "version": "0.0.0",
+  "private": true,
+  "description": "",
+  "keywords": [],
+  "license": "MIT",
+  "author": "dankeboy36",
+  "main": "./out/index.js",
+  "types": "./out/index.d.ts",
+  "scripts": {
+    "build": "tsc -p ./",
+    "reset": "rimraf out node_modules",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "@c4312/evt": "^0.1.1",
+    "ardunno-cli": "^0.1.12",
+    "boards-list": "^1.1.0",
+    "vscode-jsonrpc": "^8.2.1",
+    "vscode-messenger-common": "^0.5.1"
+  },
+  "devDependencies": {
+    "vscode-arduino-api": "^0.2.0"
+  }
+}
