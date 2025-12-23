@@ -14,7 +14,9 @@
     "boards",
     "firmware",
     "serial",
-    "monitor"
+    "monitor",
+    "iot",
+    "sketch"
   ],
   "homepage": "https://github.com/dankeboy36/boardlab",
   "bugs": {
@@ -25,6 +27,7 @@
     "url": "git+https://github.com/dankeboy36/boardlab.git"
   },
   "license": "MIT",
+  "qna": "https://github.com/dankeboy36/boardlab/discussions",
   "author": "dankeboy36",
   "publisher": "dankeboy36",
   "main": "./out/extension.js",
@@ -1409,5 +1412,9 @@
   },
   "engines": {
     "vscode": "^1.101.0"
-  }
+  },
+  "preview": true,
+  "extensionKind": [
+    "ui"
+  ]
 }
