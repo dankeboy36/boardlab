@@ -1,8 +1,8 @@
 import {
   PlatformFilterType,
   PlatformFilterTypeLiterals,
-} from '@vscode-ardunno/protocol'
-import { App, FilterDefinition } from '@vscode-ardunno/resources'
+} from '@boardlab/protocol'
+import { App, FilterDefinition } from '@boardlab/resources'
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 

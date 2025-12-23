@@ -2,7 +2,7 @@ import {
   MonitorBridgeInfo,
   NotifyDidChangeDetectedPorts,
   RequestDetectedPorts,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import type { DetectedPorts } from 'boards-list'
 import * as vscode from 'vscode'
 import type { Disposable, MessageConnection } from 'vscode-jsonrpc'
@@ -27,7 +27,7 @@ interface ReconnectOptions {
 const HEARTBEAT_INTERVAL_MS = 30_000
 const HEARTBEAT_TIMEOUT_MS = HEARTBEAT_INTERVAL_MS + 1_000
 
-/** Subscribes to the shared Portino server to surface detected port changes. */
+/** Subscribes to the shared monitor bridge to surface detected port changes. */
 export class BoardsListWatcher implements vscode.Disposable {
   private readonly onDidChangeDetectedPortsEmitter =
     new vscode.EventEmitter<DetectedPorts>()
@@ -122,7 +122,7 @@ export class BoardsListWatcher implements vscode.Disposable {
         throw error
       })
       if (!info?.wsUrl) {
-        throw new Error('Missing Portino bridge WebSocket URL')
+        throw new Error('Missing BoardLab monitor bridge WebSocket URL')
       }
       await this.openSocket(info.wsUrl)
     } catch (error) {
@@ -272,7 +272,7 @@ export class BoardsListWatcher implements vscode.Disposable {
           socket.ping()
         } catch (error) {
           console.error(
-            '[BoardsListWatcher] failed to ping Portino bridge',
+            '[BoardsListWatcher] failed to ping BoardLab monitor bridge',
             error
           )
         }

@@ -1,5 +1,5 @@
 {
-  "name": "@vscode-ardunno/examples",
+  "name": "@boardlab/examples",
   "version": "0.0.0",
   "private": true,
   "description": "Arduino Examples explorer webview",
@@ -12,8 +12,8 @@
     "reset": "rimraf build node_modules"
   },
   "dependencies": {
-    "@vscode-ardunno/base": "0.0.0",
-    "@vscode-ardunno/protocol": "0.0.0",
+    "@boardlab/base": "0.0.0",
+    "@boardlab/protocol": "0.0.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "vscode-elements-x": "^0.1.3",

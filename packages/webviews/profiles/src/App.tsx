@@ -6,7 +6,7 @@ import {
   useCodiconStylesheet,
   vscode,
   type TreeNode,
-} from '@vscode-ardunno/base'
+} from '@boardlab/base'
 import {
   BoardDescriptor,
   createProfile,
@@ -55,7 +55,7 @@ import {
   updateProfile,
   type ProfileLibraryDescriptor,
   type ProfilePlatformDescriptor,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import { createPortKey, type DetectedPorts } from 'boards-list'
 import { FQBN, valid as isValidFQBN } from 'fqbn'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -436,7 +436,7 @@ export function App(): JSX.Element {
       .catch((err) => console.warn('Failed to get active profile', err))
   }, [documentUri])
 
-  // Subscribe to detected ports updates and fetch initial snapshot via ArdunnoContext (no monitor connection)
+  // Subscribe to detected ports updates and fetch initial snapshot via BoardLabContext (no monitor connection)
   useEffect(() => {
     const messenger = vscode.messenger as Messenger | undefined
     if (!messenger) return

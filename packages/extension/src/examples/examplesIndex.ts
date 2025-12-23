@@ -8,7 +8,7 @@ import type {
   ExampleSketchNode,
   ExampleSource,
   ExampleTreeNode,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import { LibraryLocation, type InstalledLibrary } from 'ardunno-cli/api'
 import {
   sketchbookTreeSync,
@@ -17,7 +17,7 @@ import {
 } from 'ardunno-sketch'
 import * as vscode from 'vscode'
 
-import type { ArdunnoContext } from '../ardunnoContext'
+import type { BoardLabContext } from '../boardlabContext'
 import { isBoardDetails } from '../boards'
 import { disposeAll } from '../utils'
 
@@ -63,7 +63,7 @@ export class ExamplesIndex implements ExampleLocator, vscode.Disposable {
   private readonly _onDidChange = new vscode.EventEmitter<void>()
   readonly onDidChange = this._onDidChange.event
 
-  constructor(private readonly context: ArdunnoContext) {
+  constructor(private readonly context: BoardLabContext) {
     this.lastFqbn = getCurrentFqbn(context)
 
     this.disposables.push(
@@ -617,7 +617,7 @@ function uniqueId(base: string, used: Set<string>): string {
   return candidate
 }
 
-function getCurrentFqbn(context: ArdunnoContext): string | undefined {
+function getCurrentFqbn(context: BoardLabContext): string | undefined {
   const board = context.currentSketch?.board
   if (!board) {
     return undefined

@@ -13,7 +13,7 @@ import { FQBN } from 'fqbn'
 import * as vscode from 'vscode'
 import { SketchFolder, SketchFoldersChangeEvent } from 'vscode-arduino-api'
 
-import { ArdunnoContextImpl } from '../ardunnoContext'
+import { BoardLabContextImpl } from '../boardlabContext'
 import { getBoardDetails } from '../boards'
 import { Arduino } from '../cli/arduino'
 import { resolvePort } from '../ports'
@@ -65,11 +65,11 @@ export class Sketchbooks implements vscode.Disposable {
 
   constructor(
     private readonly context: vscode.ExtensionContext,
-    private readonly ardunnoContext: ArdunnoContextImpl
+    private readonly boardlabContext: BoardLabContextImpl
   ) {
     this._resolvedSketches = []
     this._currentUserDirPath =
-      ardunnoContext.cliContext.cliConfig.data?.userDirPath
+      boardlabContext.cliContext.cliConfig.data?.userDirPath
     this._onDidChange = new vscode.EventEmitter()
     this._onDidChangeSketchFolders = new vscode.EventEmitter()
     this._onDidChangeResolvedSketches = new vscode.EventEmitter()
@@ -95,7 +95,7 @@ export class Sketchbooks implements vscode.Disposable {
           this.refresh()
         }
       }),
-      ardunnoContext.cliContext.cliConfig.onDidChangeData((newCliConfig) => {
+      boardlabContext.cliContext.cliConfig.onDidChangeData((newCliConfig) => {
         if (this._currentUserDirPath !== newCliConfig?.userDirPath) {
           this._currentUserDirPath = newCliConfig?.userDirPath
           this._sketchbooks = undefined
@@ -113,7 +113,7 @@ export class Sketchbooks implements vscode.Disposable {
   private async resolveOpenedSketchFolders(
     openedSketches: readonly Sketch[] = this.openedSketches
   ): Promise<void> {
-    const { arduino } = await this.ardunnoContext.client
+    const { arduino } = await this.boardlabContext.client
     const resolvedSketches = await Promise.all(
       openedSketches.map((sketch) => this.resolve(sketch, arduino))
     )
@@ -297,7 +297,7 @@ export class Sketchbooks implements vscode.Disposable {
             ? (resolvePort(
                 createPortKey(prevState.port),
                 arduino,
-                this.ardunnoContext.boardsListWatcher.detectedPorts
+                this.boardlabContext.boardsListWatcher.detectedPorts
               ) ?? prevState.port)
             : undefined
           return {

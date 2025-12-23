@@ -1,6 +1,6 @@
 // @ts-check
-import { vscode } from '@vscode-ardunno/base'
-import { getMonitorBridgeInfo } from '@vscode-ardunno/protocol'
+import { vscode } from '@boardlab/base'
+import { getMonitorBridgeInfo } from '@boardlab/protocol'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { HOST_EXTENSION } from 'vscode-messenger-common'
 import {
@@ -9,19 +9,19 @@ import {
   toSocket,
 } from 'vscode-ws-jsonrpc'
 
-import { PortinoClient } from '../client.js'
-import { PortinoClientContext } from './PortinoClientContext.js'
+import { MonitorClient } from '../client.js'
+import { MonitorClientContext } from './MonitorClientContext.js'
 
 /** @param {string} url */
 function setGlobalHttpBase(url) {
   try {
-    /** @type {Record<string, unknown>} */ globalThis.__ARDUNNO_PORTINO_HTTP_BASE__ =
+    /** @type {Record<string, unknown>} */ globalThis.__BOARDLAB_MONITOR_HTTP_BASE__ =
       url
   } catch {}
 }
 
-/** Provides PortinoClient context with automatic reconnection. */
-export function PortinoClientContextProvider({ children }) {
+/** Provides MonitorClient context with automatic reconnection. */
+export function MonitorClientContextProvider({ children }) {
   const [wsUrl, setWsUrl] = useState(
     /** @type {string | undefined} */ (undefined)
   )
@@ -82,10 +82,10 @@ export function PortinoClientContextProvider({ children }) {
   }, [])
 
   const [client, setClient] = useState(
-    /** @type {PortinoClient | undefined} */ (undefined)
+    /** @type {MonitorClient | undefined} */ (undefined)
   )
   const [connectionStatus, setConnectionStatus] = useState(
-    /** @type {import('./PortinoClientContext.js').PortinoClientContextType['connectionStatus']} */ (
+    /** @type {import('./MonitorClientContext.js').MonitorClientContextType['connectionStatus']} */ (
       'disconnected'
     )
   )
@@ -117,17 +117,17 @@ export function PortinoClientContextProvider({ children }) {
     }
 
     setConnectionStatus('connecting')
-    const portinoClient = new PortinoClient({
+    const monitorClient = new MonitorClient({
       messenger,
       httpBaseUrl,
     })
-    setClient(portinoClient)
+    setClient(monitorClient)
     setConnectionStatus('connected')
 
     return () => {
       setConnectionStatus('disconnecting')
-      Promise.resolve(portinoClient.dispose()).catch((error) => {
-        console.error('Failed to dispose Portino client', error)
+      Promise.resolve(monitorClient.dispose()).catch((error) => {
+        console.error('Failed to dispose monitor client', error)
       })
       setClient(undefined)
       setConnectionStatus('disconnected')
@@ -149,7 +149,7 @@ export function PortinoClientContextProvider({ children }) {
     setClient((previous) => {
       if (previous) {
         Promise.resolve(previous.dispose()).catch((error) => {
-          console.error('Failed to dispose Portino client', error)
+          console.error('Failed to dispose monitor client', error)
         })
       }
       return undefined
@@ -236,10 +236,10 @@ export function PortinoClientContextProvider({ children }) {
       setClient((previous) => {
         if (previous) {
           Promise.resolve(previous.dispose()).catch((error) => {
-            console.error('Failed to dispose Portino client', error)
+            console.error('Failed to dispose monitor client', error)
           })
         }
-        return new PortinoClient({
+        return new MonitorClient({
           connection: Object.assign(connection, { url: new URL(socket.url) }),
           httpBaseUrl: httpBaseUrlRef.current,
         })
@@ -258,7 +258,7 @@ export function PortinoClientContextProvider({ children }) {
   }, [connect, dispose, connectionMode])
 
   return (
-    <PortinoClientContext.Provider
+    <MonitorClientContext.Provider
       value={{
         client,
         connectionStatus,
@@ -267,6 +267,6 @@ export function PortinoClientContextProvider({ children }) {
       }}
     >
       {children}
-    </PortinoClientContext.Provider>
+    </MonitorClientContext.Provider>
   )
 }

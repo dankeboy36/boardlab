@@ -58,29 +58,29 @@ export interface ListExamplesParams {
 }
 
 export const listExamples: RequestType<ListExamplesParams, ExampleLibrary[]> = {
-  method: 'arduino.examples.list',
+  method: 'boardlab.examples.list',
 }
 
 export const getExampleTree: RequestType<
   GetExampleTreeParams,
   ExampleTreeNode[]
 > = {
-  method: 'arduino.examples.getTree',
+  method: 'boardlab.examples.getTree',
 }
 
 export const openExampleReadme: RequestType<OpenExampleReadmeParams, boolean> =
   {
-    method: 'arduino.examples.openReadme',
+    method: 'boardlab.examples.openReadme',
   }
 
 export const openExampleSketch: RequestType<OpenExampleSketchParams, boolean> =
   {
-    method: 'arduino.examples.openSketch',
+    method: 'boardlab.examples.openSketch',
   }
 
 export const openExampleResource: RequestType<
   OpenExampleResourceParams,
   boolean
 > = {
-  method: 'arduino.examples.openResource',
+  method: 'boardlab.examples.openResource',
 }

@@ -34,7 +34,7 @@ import {
   willInstallPlatform,
   willUninstallLibrary,
   willUninstallPlatform,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import type {
   Library,
   LibraryInstallResponse,
@@ -51,7 +51,7 @@ import type {
   MessageParticipant,
 } from 'vscode-messenger-common'
 
-import type { ArdunnoContext } from './ardunnoContext'
+import type { BoardLabContext } from './boardlabContext'
 import type { Arduino } from './cli/arduino'
 import { disposeAll } from './utils'
 
@@ -121,7 +121,7 @@ abstract class ResourcesManager<
   readonly _busyResources = new Set<string>()
 
   constructor(
-    protected readonly ardunnoContext: ArdunnoContext,
+    protected readonly boardlabContext: BoardLabContext,
     protected readonly webviewType?: string
   ) {
     this.toDispose.push(
@@ -162,14 +162,14 @@ abstract class ResourcesManager<
   async lookupQuick(
     id: string,
     fetcher: (
-      arduino: ArdunnoContext,
+      arduino: BoardLabContext,
       signal?: AbortSignal
     ) => Promise<QuickResource | undefined>,
     signal?: AbortSignal
   ): Promise<QuickResource | undefined> {
     const cached = this._quickCache?.get(id)
     if (cached) return cached
-    const loaded = await fetcher(this.ardunnoContext, signal)
+    const loaded = await fetcher(this.boardlabContext, signal)
     if (loaded) this.setQuickCacheEntry(id, loaded)
     return loaded
   }
@@ -283,7 +283,7 @@ abstract class ResourcesManager<
   }
 
   protected async arduino(): Promise<Arduino> {
-    const client = await this.ardunnoContext.client
+    const client = await this.boardlabContext.client
     return client.arduino
   }
 
@@ -335,11 +335,11 @@ abstract class ResourcesManager<
 export class LibrariesManager extends ResourcesManager {
   private _installedVersions: Map<string, string> | undefined
   constructor(
-    ardunnoContext: ArdunnoContext,
+    boardlabContext: BoardLabContext,
     private readonly messenger?: Messenger,
     webviewType?: string
   ) {
-    super(ardunnoContext, webviewType)
+    super(boardlabContext, webviewType)
     // Invalidate shared quick cache on install/uninstall/index updates
     this.wireQuickCacheInvalidation()
     const registerInstallCommand = (
@@ -384,18 +384,18 @@ export class LibrariesManager extends ResourcesManager {
       )
     this.toDispose.push(
       registerInstallCommand(
-        'ardunno.installLibrary',
+        'boardlab.installLibrary',
         (_resource, version) => version ?? _resource.availableVersions[0]
       ),
       registerInstallCommand(
-        'ardunno.installLatestLibrary',
+        'boardlab.installLatestLibrary',
         (resource) => resource.availableVersions[0]
       ),
       registerInstallCommand(
-        'ardunno.updateLibrary',
+        'boardlab.updateLibrary',
         (_resource, version) => version ?? _resource.availableVersions[0]
       ),
-      registerUninstallCommand('ardunno.uninstallLibrary')
+      registerUninstallCommand('boardlab.uninstallLibrary')
     )
     if (messenger) {
       this.toDispose.push(
@@ -540,9 +540,9 @@ export class LibrariesManager extends ResourcesManager {
   ): Promise<QuickResource | undefined> {
     return this.lookupQuick(
       name,
-      async (ardunnoContext, s) => {
+      async (boardlabContext, s) => {
         if (!this._installedVersions) {
-          const { arduino } = await ardunnoContext.client
+          const { arduino } = await boardlabContext.client
           const installed = await arduino.listLibraries({}, s)
           const map = new Map<string, string>()
           for (const { library } of installed) {
@@ -552,7 +552,7 @@ export class LibrariesManager extends ResourcesManager {
           }
           this._installedVersions = map
         }
-        const { arduino } = await ardunnoContext.client
+        const { arduino } = await boardlabContext.client
         const results = await arduino.searchLibrary({ searchArgs: name }, s)
         const match = results.find((l: any) => l.name === name)
         if (!match) return undefined
@@ -675,11 +675,11 @@ export class PlatformsManager extends ResourcesManager<
   private quickPlatformsCache: Map<string, QuickResource> | undefined
 
   constructor(
-    ardunnoContext: ArdunnoContext,
+    boardlabContext: BoardLabContext,
     private readonly messenger?: Messenger,
     webviewType?: string
   ) {
-    super(ardunnoContext, webviewType)
+    super(boardlabContext, webviewType)
     // Invalidate shared quick cache on install/uninstall/index updates
     this.wireQuickCacheInvalidation()
     const registerInstallCommand = (
@@ -724,18 +724,18 @@ export class PlatformsManager extends ResourcesManager<
       )
     this.toDispose.push(
       registerInstallCommand(
-        'ardunno.installPlatform',
+        'boardlab.installPlatform',
         (_resource, version) => version ?? _resource.availableVersions[0]
       ),
       registerInstallCommand(
-        'ardunno.installLatestPlatform',
+        'boardlab.installLatestPlatform',
         (resource) => resource.availableVersions[0]
       ),
       registerInstallCommand(
-        'ardunno.updatePlatform',
+        'boardlab.updatePlatform',
         (_resource, version) => version ?? _resource.availableVersions[0]
       ),
-      registerUninstallCommand('ardunno.uninstallPlatform')
+      registerUninstallCommand('boardlab.uninstallPlatform')
     )
     if (messenger) {
       this.toDispose.push(

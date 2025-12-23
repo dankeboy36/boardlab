@@ -9,7 +9,7 @@ import type {
   Resource,
   Version,
   VscodeDataContextParams,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import {
   getExampleTree as getExampleTreeRequest,
   getMonitorSelection,
@@ -26,19 +26,19 @@ import {
   requestShowWebviewMessage,
   setLibrariesFilterContext as setLibrariesFilterContextReq,
   setPlatformsFilterContext as setPlatformsFilterContextReq,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import type { Mutable, PortIdentifier } from 'boards-list'
 import { createPortKey } from 'boards-list'
 import { FQBN, valid as isValidFQBN } from 'fqbn'
 import * as vscode from 'vscode'
 import { Messenger } from 'vscode-messenger'
 
-import { ArdunnoContextImpl, createArdunnoContext } from './ardunnoContext'
+import { BoardLabContextImpl, createBoardLabContext } from './boardlabContext'
 import { AddAdditionalPackageIndexUrlParams } from './cli/config'
 import { MonitorEditors, PlotterEditors } from './editors/monitorEditors'
 import { ProfilesEditorProvider } from './editors/profilesEditor'
 import {
-  ArdunnoExampleFs,
+  BoardLabExampleFs,
   buildExampleUri,
   EXAMPLE_SCHEME,
 } from './examples/exampleFs'
@@ -64,7 +64,7 @@ import {
   isFolder as isSketchbookFolder,
   isSketch as isSketchbookSketch,
 } from './sketch/types'
-import { ArdunnoTasks } from './tasks'
+import { BoardLabTasks } from './tasks'
 import {
   getTaskStatus,
   markTaskFinished,
@@ -103,24 +103,24 @@ export function activate(context: vscode.ExtensionContext) {
   const start = performance.now()
   const messenger = new Messenger({ ignoreHiddenViews: false, debugLog: true })
 
-  const ardunnoContext = createArdunnoContext(context, messenger)
+  const boardlabContext = createBoardLabContext(context, messenger)
   console.log('Central services ready', {
-    boardsListWatcher: ardunnoContext.boardsListWatcher.constructor.name,
-    monitorsRegistry: ardunnoContext.monitorsRegistry.constructor.name,
+    boardsListWatcher: boardlabContext.boardsListWatcher.constructor.name,
+    monitorsRegistry: boardlabContext.monitorsRegistry.constructor.name,
   })
 
-  const tasks = new ArdunnoTasks(ardunnoContext)
+  const tasks = new BoardLabTasks(boardlabContext)
   console.log('Registered tasks provider')
-  const currentSketchView = new CurrentSketchView(ardunnoContext)
+  const currentSketchView = new CurrentSketchView(boardlabContext)
   console.log('Registered sketches view')
-  const sketchbook = new SketchbookView(context, ardunnoContext.sketchbooks)
+  const sketchbook = new SketchbookView(context, boardlabContext.sketchbooks)
   console.log('Registered sketchbook view', sketchbook)
   registerSketchbookReadonlyFs(context)
 
   context.subscriptions.push(
     vscode.tasks.onDidStartTask((event) => {
       const def = event.execution.task.definition as any
-      if (!def || def.type !== 'ardunno' || typeof def.command !== 'string') {
+      if (!def || def.type !== 'boardlab' || typeof def.command !== 'string') {
         return
       }
       const kind = def.command as TaskKind
@@ -131,7 +131,7 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.tasks.onDidEndTask((event) => {
       const def = event.execution.task.definition as any
-      if (!def || def.type !== 'ardunno' || typeof def.command !== 'string') {
+      if (!def || def.type !== 'boardlab' || typeof def.command !== 'string') {
         return
       }
       const kind = def.command as TaskKind
@@ -144,19 +144,19 @@ export function activate(context: vscode.ExtensionContext) {
       }
       currentSketchView.refresh()
     }),
-    vscode.commands.registerCommand('ardunno.extensions.searchBoardlab', () =>
+    vscode.commands.registerCommand('boardlab.extensions.searchBoardLab', () =>
       vscode.commands.executeCommand(
         'workbench.extensions.search',
         '@tag:boardlab'
       )
     ),
-    vscode.commands.registerCommand('ardunno.configureCurrentSketch', () =>
+    vscode.commands.registerCommand('boardlab.configureCurrentSketch', () =>
       currentSketchView.revealCurrentSketch()
     ),
     vscode.commands.registerCommand(
-      'ardunno.compile',
+      'boardlab.compile',
       async (params: { sketchPath?: string; fqbn?: string } = {}) => {
-        const resolved = await resolveSketchTaskParams(ardunnoContext, params, {
+        const resolved = await resolveSketchTaskParams(boardlabContext, params, {
           needFqbn: true,
           reuseCurrentBoard: false,
         })
@@ -168,7 +168,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.task.runFromTree',
+      'boardlab.task.runFromTree',
       async (arg?: unknown) => {
         // Normalize arguments: either meta object or TreeItem with a command meta.
         let params:
@@ -226,7 +226,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.tool.runFromTree',
+      'boardlab.tool.runFromTree',
       async (arg?: unknown) => {
         if (!arg || typeof arg !== 'object') {
           return
@@ -241,7 +241,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.task.stopFromTree',
+      'boardlab.task.stopFromTree',
       async (arg?: unknown) => {
         let params:
           | {
@@ -286,11 +286,11 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.upload',
+      'boardlab.upload',
       async (
         params: { sketchPath?: string; fqbn?: string; port?: string } = {}
       ) => {
-        const resolved = await resolveSketchTaskParams(ardunnoContext, params, {
+        const resolved = await resolveSketchTaskParams(boardlabContext, params, {
           needFqbn: true,
           needPort: true,
         })
@@ -301,13 +301,13 @@ export function activate(context: vscode.ExtensionContext) {
         await tasks.upload({ sketchPath, fqbn, port })
       }
     ),
-    vscode.commands.registerCommand('ardunno.openMonitor', async () => {
-      await vscode.commands.executeCommand('ardunno.monitor.focus')
+    vscode.commands.registerCommand('boardlab.openMonitor', async () => {
+      await vscode.commands.executeCommand('boardlab.monitor.focus')
     }),
     vscode.commands.registerCommand(
-      'ardunno.exportBinary',
+      'boardlab.exportBinary',
       async (params: { sketchPath?: string; fqbn?: string } = {}) => {
-        const resolved = await resolveSketchTaskParams(ardunnoContext, params, {
+        const resolved = await resolveSketchTaskParams(boardlabContext, params, {
           needFqbn: true,
         })
         if (!resolved || !resolved.fqbn) {
@@ -318,7 +318,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.uploadUsingProgrammer',
+      'boardlab.uploadUsingProgrammer',
       async (
         params: {
           sketchPath?: string
@@ -327,7 +327,7 @@ export function activate(context: vscode.ExtensionContext) {
           programmer?: string
         } = {}
       ) => {
-        const resolved = await resolveSketchTaskParams(ardunnoContext, params, {
+        const resolved = await resolveSketchTaskParams(boardlabContext, params, {
           needFqbn: true,
           needPort: true,
           needProgrammer: true,
@@ -349,7 +349,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.burnBootloader',
+      'boardlab.burnBootloader',
       async (
         params: {
           sketchPath?: string
@@ -358,7 +358,7 @@ export function activate(context: vscode.ExtensionContext) {
           programmer?: string
         } = {}
       ) => {
-        const resolved = await resolveSketchTaskParams(ardunnoContext, params, {
+        const resolved = await resolveSketchTaskParams(boardlabContext, params, {
           needFqbn: true,
           needPort: true,
           needProgrammer: true,
@@ -381,9 +381,9 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.getBoardInfo',
+      'boardlab.getBoardInfo',
       async (params: { sketchPath?: string; port?: string } = {}) => {
-        const resolved = await resolveSketchTaskParams(ardunnoContext, params, {
+        const resolved = await resolveSketchTaskParams(boardlabContext, params, {
           needPort: true,
         })
         if (!resolved || !resolved.port) {
@@ -394,10 +394,10 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.archiveSketch',
+      'boardlab.archiveSketch',
       async (params: { sketchPath?: string } = {}) => {
         const resolved = await resolveSketchTaskParams(
-          ardunnoContext,
+          boardlabContext,
           params,
           {}
         )
@@ -416,7 +416,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         // Prefer the Arduino CLI user data directory as default location.
         const userDirPath =
-          ardunnoContext.cliContext.cliConfig.data?.userDirPath ?? sketchPath
+          boardlabContext.cliContext.cliConfig.data?.userDirPath ?? sketchPath
         const defaultUri = vscode.Uri.file(path.join(userDirPath, archiveName))
 
         const saveUri = await vscode.window.showSaveDialog({
@@ -458,13 +458,13 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.addSketchFolderToWorkspace',
+      'boardlab.addSketchFolderToWorkspace',
       async (input?: SketchResource | AddSketchFolderArgs) => {
         await addSketchFolderToWorkspace(input)
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.profiles.openTextEditor',
+      'boardlab.profiles.openTextEditor',
       async (arg?: string | vscode.Uri) => {
         let uriString: string | undefined
         if (typeof arg === 'string') {
@@ -476,7 +476,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.profiles.setActive',
+      'boardlab.profiles.setActive',
       async (params: VscodeDataContextParams) => {
         const [profileName, uriString] = params.args ?? []
         if (!uriString) return
@@ -488,13 +488,13 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.profiles.openSketchProfile',
+      'boardlab.profiles.openSketchProfile',
       async (params?: { sketchPath?: string }) => {
         let sketchPath = params?.sketchPath
         if (!sketchPath) {
           const sketch =
-            ardunnoContext.currentSketch ??
-            (await ardunnoContext.selectSketch())
+            boardlabContext.currentSketch ??
+            (await boardlabContext.selectSketch())
           sketchPath = sketch?.sketchPath
         }
         if (!sketchPath) {
@@ -512,17 +512,17 @@ export function activate(context: vscode.ExtensionContext) {
         await vscode.commands.executeCommand(
           'vscode.openWith',
           uri,
-          'ardunno.profilesEditor'
+          'boardlab.profilesEditor'
         )
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.profiles.createSketchProfile',
+      'boardlab.profiles.createSketchProfile',
       async (params?: { sketchPath?: string }) => {
         let sketchPath = params?.sketchPath
-        let currentSketch = ardunnoContext.currentSketch
+        let currentSketch = boardlabContext.currentSketch
         if (!sketchPath) {
-          const sketch = currentSketch ?? (await ardunnoContext.selectSketch())
+          const sketch = currentSketch ?? (await boardlabContext.selectSketch())
           sketchPath = sketch?.sketchPath
           currentSketch = sketch ?? undefined
         }
@@ -608,7 +608,7 @@ export function activate(context: vscode.ExtensionContext) {
           await vscode.commands.executeCommand(
             'vscode.openWith',
             uri,
-            'ardunno.profilesEditor'
+            'boardlab.profilesEditor'
           )
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
@@ -625,13 +625,13 @@ export function activate(context: vscode.ExtensionContext) {
     })
   )
 
-  const { cliContext } = ardunnoContext
+  const { cliContext } = boardlabContext
   context.subscriptions.push(
     tasks,
     currentSketchView,
     sketchbook,
     vscode.commands.registerCommand(
-      'ardunno.openArduinoCliConfig',
+      'boardlab.openArduinoCliConfig',
       async () => {
         await cliContext.cliConfig.ready()
         await cliContext.cliConfig.refresh({ allowPrompt: true })
@@ -654,7 +654,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.addAdditionalPackageIndexUrlToArduinoCliConfig',
+      'boardlab.addAdditionalPackageIndexUrlToArduinoCliConfig',
       async (params: Partial<AddAdditionalPackageIndexUrlParams>) => {
         let { url } = params
         if (!url) {
@@ -710,8 +710,8 @@ export function activate(context: vscode.ExtensionContext) {
     messenger
   )
 
-  const examplesIndex = new ExamplesIndex(ardunnoContext)
-  const examplesFs = new ArdunnoExampleFs(examplesIndex)
+  const examplesIndex = new ExamplesIndex(boardlabContext)
+  const examplesFs = new BoardLabExampleFs(examplesIndex)
 
   context.subscriptions.push(
     examplesIndex,
@@ -809,21 +809,21 @@ export function activate(context: vscode.ExtensionContext) {
         }
       }
     ),
-    ardunnoContext.platformsManager,
+    boardlabContext.platformsManager,
     vscode.window.registerWebviewViewProvider(
-      'ardunno.platformsManager',
+      'boardlab.platformsManager',
       platformsViewProvider
     ),
-    ardunnoContext.librariesManager,
+    boardlabContext.librariesManager,
     vscode.window.registerWebviewViewProvider(
-      'ardunno.librariesManager',
+      'boardlab.librariesManager',
       librariesViewProvider
     ),
     vscode.window.registerWebviewViewProvider(
-      'arduinoExamples',
+      'boardlabExamples',
       examplesViewProvider
     ),
-    vscode.commands.registerCommand('arduino.examples.refresh', async () => {
+    vscode.commands.registerCommand('boardlab.examples.refresh', async () => {
       try {
         await examplesIndex.refresh()
       } catch (refreshError) {
@@ -836,9 +836,9 @@ export function activate(context: vscode.ExtensionContext) {
   const computeSelection = (): MonitorSelectionNotification => {
     const selection: Mutable<MonitorSelectionNotification> = {}
 
-    const sketchWithPort = ardunnoContext.currentSketch?.port
-      ? ardunnoContext.currentSketch
-      : ardunnoContext.sketchbooks.resolvedSketchFolders.find(
+    const sketchWithPort = boardlabContext.currentSketch?.port
+      ? boardlabContext.currentSketch
+      : boardlabContext.sketchbooks.resolvedSketchFolders.find(
           (sketch) => sketch.port
         )
 
@@ -849,7 +849,7 @@ export function activate(context: vscode.ExtensionContext) {
       const portIdentifier = { protocol, address }
       selection.port = portIdentifier
       try {
-        const monitorState = ardunnoContext.monitorsRegistry.get(
+        const monitorState = boardlabContext.monitorsRegistry.get(
           createPortKey(portIdentifier)
         )
         if (monitorState?.lastKnownBaud !== undefined) {
@@ -863,7 +863,7 @@ export function activate(context: vscode.ExtensionContext) {
   }
 
   const monitorResourceStore = new MonitorResourceStore(
-    ardunnoContext.monitorManager
+    boardlabContext.monitorManager
   )
   const monitorFsProvider = new MonitorFileSystemProvider()
   context.subscriptions.push(
@@ -894,12 +894,12 @@ export function activate(context: vscode.ExtensionContext) {
     monitorSelectionCoordinator
   )
   const profilesDiagnostics =
-    vscode.languages.createDiagnosticCollection('ardunnoProfiles')
+    vscode.languages.createDiagnosticCollection('boardlabProfiles')
   context.subscriptions.push(profilesDiagnostics)
   const profilesEditor = new ProfilesEditorProvider(
     context.extensionUri,
     messenger,
-    ardunnoContext,
+    boardlabContext,
     profilesDiagnostics
   )
 
@@ -919,7 +919,7 @@ export function activate(context: vscode.ExtensionContext) {
       monitorSelectionCoordinator.resolveFor(sender) ?? computeSelection()
   )
 
-  ardunnoContext.monitorManager.setSelectionResolver(
+  boardlabContext.monitorManager.setSelectionResolver(
     (sender) =>
       monitorSelectionCoordinator.resolveFor(sender) ?? computeSelection()
   )
@@ -938,26 +938,26 @@ export function activate(context: vscode.ExtensionContext) {
     }
   }
 
-  const sketchChangeDisposable = ardunnoContext.onDidChangeSketch((event) => {
+  const sketchChangeDisposable = boardlabContext.onDidChangeSketch((event) => {
     if (!event.changedProperties || event.changedProperties.includes('port')) {
       pushSelection()
     }
   })
 
-  const currentSketchDisposable = ardunnoContext.onDidChangeCurrentSketch(
+  const currentSketchDisposable = boardlabContext.onDidChangeCurrentSketch(
     () => {
       pushSelection()
     }
   )
 
   const monitorsRegistryDisposable =
-    ardunnoContext.monitorsRegistry.onDidChange(() => {
+    boardlabContext.monitorsRegistry.onDidChange(() => {
       lastSelectionSignature = undefined
       pushSelection()
     })
 
   const resolvedSketchesDisposable =
-    ardunnoContext.sketchbooks.onDidChangeResolvedSketches(() => {
+    boardlabContext.sketchbooks.onDidChangeResolvedSketches(() => {
       lastSelectionSignature = undefined
       pushSelection()
     })
@@ -972,7 +972,7 @@ export function activate(context: vscode.ExtensionContext) {
       const text = doc.getText()
       const baseDiagnostics = validateProfilesYAML(text, doc)
       profilesDiagnostics.set(doc.uri, baseDiagnostics)
-      collectCliDiagnostics(ardunnoContext, doc, text)
+      collectCliDiagnostics(boardlabContext, doc, text)
         .then((cliDiags: vscode.Diagnostic[]) => {
           if (!cliDiags) return
           profilesDiagnostics.set(doc.uri, [...baseDiagnostics, ...cliDiags])
@@ -1006,13 +1006,13 @@ export function activate(context: vscode.ExtensionContext) {
       context,
       profilesEditor,
       profilesDiagnostics,
-      ardunnoContext
+      boardlabContext
     ),
     vscode.languages.registerCodeActionsProvider(
       { scheme: 'file', pattern: '**/sketch.yaml' },
       new ProfilesCodeActionProvider(
-        ardunnoContext.librariesManager,
-        ardunnoContext.platformsManager
+        boardlabContext.librariesManager,
+        boardlabContext.platformsManager
       ),
       {
         providedCodeActionKinds:
@@ -1020,11 +1020,11 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.profiles.selectPlatformVersionForProfile',
+      'boardlab.profiles.selectPlatformVersionForProfile',
       async (arg: { uri: string; range: vscode.Range; platform: string }) => {
         const uri = vscode.Uri.parse(arg.uri)
         const quickInfo =
-          await ardunnoContext.platformsManager.lookupPlatformQuick(
+          await boardlabContext.platformsManager.lookupPlatformQuick(
             arg.platform
           )
         const available = quickInfo?.availableVersions ?? []
@@ -1050,9 +1050,9 @@ export function activate(context: vscode.ExtensionContext) {
         await vscode.workspace.applyEdit(edit)
       }
     ),
-    ardunnoContext.monitorManager,
+    boardlabContext.monitorManager,
     vscode.window.registerCustomEditorProvider(
-      'ardunno.monitorEditor',
+      'boardlab.monitorEditor',
       monitorEditors,
       {
         webviewOptions: { retainContextWhenHidden: true },
@@ -1060,14 +1060,14 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     // Refresh profiles diagnostics when platforms/libraries change or indexes update
-    ardunnoContext.platformsManager.onDidUpdate(() =>
+    boardlabContext.platformsManager.onDidUpdate(() =>
       refreshProfilesDiagnostics()
     ),
-    ardunnoContext.librariesManager.onDidUpdate(() =>
+    boardlabContext.librariesManager.onDidUpdate(() =>
       refreshProfilesDiagnostics()
     ),
     vscode.window.registerCustomEditorProvider(
-      'ardunno.plotterEditor',
+      'boardlab.plotterEditor',
       plotterEditors,
       {
         webviewOptions: { retainContextWhenHidden: true },
@@ -1075,14 +1075,14 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.window.registerCustomEditorProvider(
-      'ardunno.profilesEditor',
+      'boardlab.profilesEditor',
       profilesEditor,
       {
         webviewOptions: { retainContextWhenHidden: true },
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.profiles.installPlatform',
+      'boardlab.profiles.installPlatform',
       async (params?: { id: string; version?: string }) => {
         const id: string | undefined = params?.id
         const requestedVersion: string | undefined = params?.version
@@ -1092,7 +1092,7 @@ export function activate(context: vscode.ExtensionContext) {
           let version = requestedVersion
           if (!version) {
             version = (
-              await ardunnoContext.platformsManager.lookupPlatformQuick(id)
+              await boardlabContext.platformsManager.lookupPlatformQuick(id)
             )?.availableVersions[0]
           }
 
@@ -1103,7 +1103,7 @@ export function activate(context: vscode.ExtensionContext) {
             return
           }
 
-          await ardunnoContext.platformsManager.install({
+          await boardlabContext.platformsManager.install({
             id,
             name: id,
             version,
@@ -1117,7 +1117,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.profiles.installLibrary',
+      'boardlab.profiles.installLibrary',
       async (params?: { id: string; version?: string }) => {
         const id: string | undefined = params?.id
         const requestedVersion: string | undefined = params?.version
@@ -1127,7 +1127,7 @@ export function activate(context: vscode.ExtensionContext) {
           let version = requestedVersion
           if (!version) {
             version = (
-              await ardunnoContext.librariesManager.lookupLibraryQuick(id)
+              await boardlabContext.librariesManager.lookupLibraryQuick(id)
             )?.availableVersions[0]
           }
 
@@ -1138,7 +1138,7 @@ export function activate(context: vscode.ExtensionContext) {
             return
           }
 
-          await ardunnoContext.librariesManager.install({
+          await boardlabContext.librariesManager.install({
             id,
             name: id,
             version,
@@ -1152,11 +1152,11 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.profiles.selectLibraryVersionForProfile',
+      'boardlab.profiles.selectLibraryVersionForProfile',
       async (arg: { uri: string; range: vscode.Range; library: string }) => {
         const uri = vscode.Uri.parse(arg.uri)
         const quickInfo =
-          await ardunnoContext.librariesManager.lookupLibraryQuick(arg.library)
+          await boardlabContext.librariesManager.lookupLibraryQuick(arg.library)
         const available = quickInfo?.availableVersions ?? []
         const installed = quickInfo?.installedVersion
         if (!available.length) {
@@ -1182,7 +1182,7 @@ export function activate(context: vscode.ExtensionContext) {
     ),
     // Profiles editor: commands invoked from webview context menus
     vscode.commands.registerCommand(
-      'ardunno.profiles.setDefault',
+      'boardlab.profiles.setDefault',
       async (params: VscodeDataContextParams) => {
         const [profileName, uriString] = params.args ?? []
         if (!profileName || !uriString) return
@@ -1193,7 +1193,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.profiles.delete',
+      'boardlab.profiles.delete',
       async (params: VscodeDataContextParams) => {
         const [profileName, uriString] = params.args ?? []
         if (!profileName || !uriString) return
@@ -1203,13 +1203,13 @@ export function activate(context: vscode.ExtensionContext) {
         })
       }
     ),
-    vscode.commands.registerCommand('ardunno.monitor.focus', async () => {
-      await openMonitorResource('ardunno.monitorEditor')
+    vscode.commands.registerCommand('boardlab.monitor.focus', async () => {
+      await openMonitorResource('boardlab.monitorEditor')
     }),
-    vscode.commands.registerCommand('ardunno.plotter.focus', async () => {
-      await openMonitorResource('ardunno.plotterEditor')
+    vscode.commands.registerCommand('boardlab.plotter.focus', async () => {
+      await openMonitorResource('boardlab.plotterEditor')
     }),
-    vscode.commands.registerCommand('ardunno.monitor.copyAll', async () => {
+    vscode.commands.registerCommand('boardlab.monitor.copyAll', async () => {
       const active = monitorEditors.getActiveDocument()
       if (!active) {
         vscode.window.showInformationMessage(
@@ -1219,7 +1219,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
       await monitorEditors.sendToolbarAction('copyAll', active)
     }),
-    vscode.commands.registerCommand('ardunno.monitor.saveToFile', async () => {
+    vscode.commands.registerCommand('boardlab.monitor.saveToFile', async () => {
       const active = monitorEditors.getActiveDocument()
       if (!active) {
         vscode.window.showInformationMessage(
@@ -1229,7 +1229,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
       await monitorEditors.sendToolbarAction('saveToFile', active)
     }),
-    vscode.commands.registerCommand('ardunno.monitor.clear', async () => {
+    vscode.commands.registerCommand('boardlab.monitor.clear', async () => {
       const active = monitorEditors.getActiveDocument()
       if (!active) {
         vscode.window.showInformationMessage(
@@ -1240,7 +1240,7 @@ export function activate(context: vscode.ExtensionContext) {
       await monitorEditors.sendToolbarAction('clear', active)
     }),
     vscode.commands.registerCommand(
-      'ardunno.monitor.toggleScrollLock',
+      'boardlab.monitor.toggleScrollLock',
       async () => {
         const active = monitorEditors.getActiveDocument()
         if (!active) {
@@ -1252,7 +1252,7 @@ export function activate(context: vscode.ExtensionContext) {
         await monitorEditors.sendToolbarAction('toggleScrollLock', active)
       }
     ),
-    vscode.commands.registerCommand('ardunno.plotter.clear', async () => {
+    vscode.commands.registerCommand('boardlab.plotter.clear', async () => {
       const active = plotterEditors.getActiveDocument()
       if (!active) {
         vscode.window.showInformationMessage(
@@ -1262,7 +1262,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
       await plotterEditors.sendToolbarAction('clear', active)
     }),
-    vscode.commands.registerCommand('ardunno.plotter.resetYScale', async () => {
+    vscode.commands.registerCommand('boardlab.plotter.resetYScale', async () => {
       const active = plotterEditors.getActiveDocument()
       if (!active) {
         vscode.window.showInformationMessage(
@@ -1272,14 +1272,14 @@ export function activate(context: vscode.ExtensionContext) {
       }
       await plotterEditors.sendToolbarAction('resetYScale', active)
     }),
-    vscode.commands.registerCommand('ardunno.monitor.configureLineEnding', () =>
+    vscode.commands.registerCommand('boardlab.monitor.configureLineEnding', () =>
       configureLineEnding('monitor')
     ),
     vscode.commands.registerCommand(
-      'ardunno.monitor.configureBaudrate',
+      'boardlab.monitor.configureBaudrate',
       configureMonitorBaudrate
     ),
-    vscode.commands.registerCommand('ardunno.plotter.configureLineEnding', () =>
+    vscode.commands.registerCommand('boardlab.plotter.configureLineEnding', () =>
       configureLineEnding('plotter')
     )
   )
@@ -1287,18 +1287,18 @@ export function activate(context: vscode.ExtensionContext) {
   pushSelection()
 
   async function openMonitorResource(
-    viewType: 'ardunno.monitorEditor' | 'ardunno.plotterEditor'
+    viewType: 'boardlab.monitorEditor' | 'boardlab.plotterEditor'
   ): Promise<void> {
     const targetLabel = viewType.includes('plotter')
       ? 'serial plotter'
       : 'serial monitor'
-    console.log('[ardunno] openMonitorResource', {
+    console.log('[boardlab] openMonitorResource', {
       viewType,
       targetLabel,
     })
     let selection = computeSelection()
     if (!selection.port) {
-      await vscode.commands.executeCommand('ardunno.selectPort')
+      await vscode.commands.executeCommand('boardlab.selectPort')
       selection = computeSelection()
       if (!selection.port) {
         vscode.window.showInformationMessage(
@@ -1318,7 +1318,7 @@ export function activate(context: vscode.ExtensionContext) {
         preview: false,
         viewColumn: vscode.ViewColumn.Active,
       })
-      console.log('[ardunno] openWith success', {
+      console.log('[boardlab] openWith success', {
         viewType,
         uri: uri.toString(),
       })
@@ -1336,7 +1336,7 @@ export function activate(context: vscode.ExtensionContext) {
     type: LibraryFilterType | ''
     topic: LibraryFilterTopic | ''
   }
-  const LIBRARIES_FILTER_STORAGE_KEY = 'ardunno.libraries.filter'
+  const LIBRARIES_FILTER_STORAGE_KEY = 'boardlab.libraries.filter'
   const storedLibrariesFilter = context.globalState.get<LibrariesFilterState>(
     LIBRARIES_FILTER_STORAGE_KEY,
     { type: '', topic: '' }
@@ -1357,17 +1357,17 @@ export function activate(context: vscode.ExtensionContext) {
       Boolean(librariesFilter.type) || Boolean(librariesFilter.topic)
     await vscode.commands.executeCommand(
       'setContext',
-      'ardunno.librariesFilter:type',
+      'boardlab.librariesFilter:type',
       librariesFilter.type || undefined
     )
     await vscode.commands.executeCommand(
       'setContext',
-      'ardunno.librariesFilter:topic',
+      'boardlab.librariesFilter:topic',
       librariesFilter.topic || undefined
     )
     await vscode.commands.executeCommand(
       'setContext',
-      'ardunno.librariesFilter:isActive',
+      'boardlab.librariesFilter:isActive',
       isActive
     )
   }
@@ -1376,7 +1376,7 @@ export function activate(context: vscode.ExtensionContext) {
     try {
       messenger.sendNotification(
         notifyLibrariesFilterChanged,
-        { type: 'webview', webviewType: 'ardunno.librariesManager' },
+        { type: 'webview', webviewType: 'boardlab.librariesManager' },
         { type: librariesFilter.type, topic: librariesFilter.topic }
       )
     } catch (error) {
@@ -1411,7 +1411,7 @@ export function activate(context: vscode.ExtensionContext) {
     kind: 'type' | 'topic',
     value: any
   ): vscode.Disposable[] => {
-    const prefix = `ardunno.libraries.filter.${kind}`
+    const prefix = `boardlab.libraries.filter.${kind}`
     const handler = async () => {
       const next: LibrariesFilterState = {
         type: kind === 'type' ? value : librariesFilter.type,
@@ -1450,7 +1450,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   // --- Platforms filter menu & context wiring ---
   type PlatformsFilterState = { type: string }
-  const PLATFORMS_FILTER_STORAGE_KEY = 'ardunno.platforms.filter'
+  const PLATFORMS_FILTER_STORAGE_KEY = 'boardlab.platforms.filter'
   const storedPlatformsFilter = context.globalState.get<PlatformsFilterState>(
     PLATFORMS_FILTER_STORAGE_KEY,
     { type: '' }
@@ -1467,12 +1467,12 @@ export function activate(context: vscode.ExtensionContext) {
     const isActive = Boolean(platformsFilter.type)
     await vscode.commands.executeCommand(
       'setContext',
-      'ardunno.platformsFilter:type',
+      'boardlab.platformsFilter:type',
       platformsFilter.type || undefined
     )
     await vscode.commands.executeCommand(
       'setContext',
-      'ardunno.platformsFilter:isActive',
+      'boardlab.platformsFilter:isActive',
       isActive
     )
   }
@@ -1481,7 +1481,7 @@ export function activate(context: vscode.ExtensionContext) {
     try {
       messenger.sendNotification(
         notifyPlatformsFilterChanged,
-        { type: 'webview', webviewType: 'ardunno.platformsManager' },
+        { type: 'webview', webviewType: 'boardlab.platformsManager' },
         // @ts-ignore
         { type: platformsFilter.type }
       )
@@ -1500,7 +1500,7 @@ export function activate(context: vscode.ExtensionContext) {
     PlatformFilterTypeLiterals as unknown as string[]
   ).filter((v) => v !== 'All')
   const toPlatformCommandId = (value: string, checked = false) =>
-    `ardunno.platforms.filter.type.${value.replace(/[^A-Za-z0-9]/g, '')}${
+    `boardlab.platforms.filter.type.${value.replace(/[^A-Za-z0-9]/g, '')}${
       checked ? '.checked' : ''
     }`
 
@@ -1527,7 +1527,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration('ardunno.monitor.lineEnding')) {
+      if (event.affectsConfiguration('boardlab.monitor.lineEnding')) {
         monitorEditors.pushLineEnding()
         plotterEditors.pushLineEnding()
       }
@@ -1548,7 +1548,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
-      'ardunno.moreInfo',
+      'boardlab.moreInfo',
       (params: ResourceManagerToolbarParam) => {
         const [item] = params.args
         if (item.website) {
@@ -1559,7 +1559,7 @@ export function activate(context: vscode.ExtensionContext) {
   )
 
   async function configureLineEnding(kind: 'monitor' | 'plotter') {
-    const configurationSection = `ardunno.${kind}`
+    const configurationSection = `boardlab.${kind}`
     const config = vscode.workspace.getConfiguration(configurationSection)
     const current = config.get<LineEnding>('lineEnding', 'crlf')
 
@@ -1614,7 +1614,7 @@ export function activate(context: vscode.ExtensionContext) {
   }
 
   async function configureMonitorBaudrate(): Promise<void> {
-    const running = ardunnoContext.monitorManager.getRunningMonitors()
+    const running = boardlabContext.monitorManager.getRunningMonitors()
     if (!running.length) {
       vscode.window.showInformationMessage(
         'No running serial monitors to configure.'
@@ -1640,7 +1640,7 @@ export function activate(context: vscode.ExtensionContext) {
       return
     }
 
-    const baudrateOptions = ardunnoContext.monitorManager.getBaudrateOptions(
+    const baudrateOptions = boardlabContext.monitorManager.getBaudrateOptions(
       monitorPick.entry.port
     )
     if (!baudrateOptions.length) {
@@ -1651,7 +1651,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     const currentBaudrate =
-      ardunnoContext.monitorManager.getCachedBaudrate(monitorPick.entry.port) ??
+      boardlabContext.monitorManager.getCachedBaudrate(monitorPick.entry.port) ??
       monitorPick.entry.baudrate
 
     const baudrateQuickPickEntries = baudrateOptions.map((option) => {
@@ -1675,7 +1675,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     try {
-      await ardunnoContext.monitorManager.updateBaudrate(
+      await boardlabContext.monitorManager.updateBaudrate(
         monitorPick.entry.port,
         baudratePick.value
       )
@@ -1695,11 +1695,11 @@ export function activate(context: vscode.ExtensionContext) {
     return `${port.protocol} ${port.address}`
   }
 
-  return ardunnoContext
+  return boardlabContext
 }
 
 async function resolveSketchTaskParams(
-  ardunnoContext: ArdunnoContextImpl,
+  boardlabContext: BoardLabContextImpl,
   params: SketchTaskParamsInput,
   options: SketchTaskParamsOptions
 ): Promise<
@@ -1718,17 +1718,17 @@ async function resolveSketchTaskParams(
   let { sketchPath, fqbn, port, programmer } = params
 
   if (!sketchPath) {
-    sketchPath = ardunnoContext.currentSketch?.sketchPath
+    sketchPath = boardlabContext.currentSketch?.sketchPath
   }
   if (!sketchPath) {
-    const sketchFolder = await ardunnoContext.selectSketch()
+    const sketchFolder = await boardlabContext.selectSketch()
     sketchPath = sketchFolder?.sketchPath
   }
   if (!sketchPath) {
     return undefined
   }
 
-  const current = ardunnoContext.currentSketch
+  const current = boardlabContext.currentSketch
   if (current && current.sketchPath === sketchPath) {
     if (resolvedOptions.reuseCurrentBoard && !fqbn) {
       fqbn = current.board?.fqbn
@@ -1739,7 +1739,7 @@ async function resolveSketchTaskParams(
   }
 
   if (resolvedOptions.needFqbn && !fqbn) {
-    const board = await ardunnoContext.selectBoard(current)
+    const board = await boardlabContext.selectBoard(current)
     if (typeof board === 'object' && 'fqbn' in board) {
       fqbn = board.fqbn
     } else if (typeof board === 'object' && 'board' in board) {
@@ -1748,14 +1748,14 @@ async function resolveSketchTaskParams(
   }
 
   if (resolvedOptions.needPort && !port) {
-    const selectedPort = await ardunnoContext.selectPort(current)
+    const selectedPort = await boardlabContext.selectPort(current)
     if (selectedPort) {
       port = createPortKey(selectedPort)
     }
   }
 
   if (resolvedOptions.needProgrammer && !programmer) {
-    const selectedProgrammer = await ardunnoContext.selectProgrammer(current)
+    const selectedProgrammer = await boardlabContext.selectProgrammer(current)
     if (selectedProgrammer) {
       programmer = selectedProgrammer.id
     }
@@ -1908,7 +1908,7 @@ async function openExampleSketch(
       ) ?? inoFiles[0]
     const relPosix = [...relSegments, preferred].filter(Boolean).join('/')
     const uri = buildExampleUri(exampleId, relPosix)
-    await vscode.commands.executeCommand('arduino.examples.openPreview', uri)
+    await vscode.commands.executeCommand('boardlab.examples.openPreview', uri)
     return true
   } catch (error) {
     vscode.window.showWarningMessage(

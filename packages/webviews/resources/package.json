@@ -1,5 +1,5 @@
 {
-  "name": "@vscode-ardunno/resources",
+  "name": "@boardlab/resources",
   "version": "0.0.0",
   "private": true,
   "description": "",
@@ -14,8 +14,8 @@
     "watch": "tsc -watch -p ./"
   },
   "dependencies": {
-    "@vscode-ardunno/base": "0.0.0",
-    "@vscode-ardunno/protocol": "0.0.0",
+    "@boardlab/base": "0.0.0",
+    "@boardlab/protocol": "0.0.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-virtuoso": "^4.14.1",

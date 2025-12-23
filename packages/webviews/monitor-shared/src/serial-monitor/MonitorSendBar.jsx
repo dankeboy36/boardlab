@@ -1,6 +1,6 @@
 // @ts-check
-import { vscode } from '@vscode-ardunno/base'
-import { notifyMonitorToolbarAction } from '@vscode-ardunno/protocol'
+import { vscode } from '@boardlab/base'
+import { notifyMonitorToolbarAction } from '@boardlab/protocol'
 import { createPortKey } from 'boards-list'
 import { useEffect, useState } from 'react'
 import { useSelector } from 'react-redux'
@@ -15,7 +15,7 @@ import { selectSerialMonitor } from './serialMonitorSelectors.js'
  * Combined play/stop and send row with connection summary.
  *
  * @param {{
- *   client?: import('./client.js').PortinoClient
+ *   client?: import('./client.js').MonitorClient
  *   lineEnding: 'none' | 'lf' | 'cr' | 'crlf'
  * }} props
  */

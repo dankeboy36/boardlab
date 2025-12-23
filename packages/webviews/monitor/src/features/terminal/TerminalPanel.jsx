@@ -9,7 +9,7 @@ import {
 } from 'react'
 import { useSelector } from 'react-redux'
 
-import { useMonitorStream } from '@vscode-ardunno/monitor-shared/serial-monitor'
+import { useMonitorStream } from '@boardlab/monitor-shared/serial-monitor'
 import { SerializeAddon } from '@xterm/addon-serialize'
 
 import {

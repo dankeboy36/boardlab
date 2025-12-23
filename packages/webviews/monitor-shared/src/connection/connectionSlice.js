@@ -4,7 +4,7 @@ import { createSlice } from '@reduxjs/toolkit'
 
 /**
  * @typedef {Omit<
- *   import('../serial-monitor/contexts/PortinoClientContext').PortinoClientContextType,
+ *   import('../serial-monitor/contexts/MonitorClientContext').MonitorClientContextType,
  *   'client'
  * > & { clientId?: string }} ConnectionState
  */

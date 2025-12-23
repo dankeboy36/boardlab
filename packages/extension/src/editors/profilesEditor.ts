@@ -105,7 +105,7 @@ import {
   type ProfileDiagnostic as ProtocolProfileDiagnostic,
   type SelectProfileParams,
   type UpdateProfileParams,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import { MonitorPortSettingDescriptor } from 'ardunno-cli/api'
 import { isBoardIdentifier, type Port } from 'boards-list'
 import { FQBN } from 'fqbn'
@@ -119,7 +119,7 @@ import { Messenger } from 'vscode-messenger'
 import type { WebviewIdMessageParticipant } from 'vscode-messenger-common'
 import { parse, parseDocument, stringify } from 'yaml'
 
-import type { ArdunnoContextImpl } from '../ardunnoContext'
+import type { BoardLabContextImpl } from '../boardlabContext'
 import { ensureBoardDetails, PlatformNotInstalledError } from '../boards'
 import { collectCliDiagnostics } from '../profile/cliDiagnostics'
 import {
@@ -380,12 +380,12 @@ export class ProfilesEditorProvider
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly messenger: Messenger,
-    private readonly ardunnoContext: ArdunnoContextImpl,
+    private readonly boardlabContext: BoardLabContextImpl,
     diagnostics?: vscode.DiagnosticCollection
   ) {
     this.diagnostics =
       diagnostics ??
-      vscode.languages.createDiagnosticCollection('ardunnoProfiles')
+      vscode.languages.createDiagnosticCollection('boardlabProfiles')
     this.disposables.push(this.diagnostics)
     this.disposables.push(
       messenger.onRequest(listProfiles, async (params) =>
@@ -536,7 +536,7 @@ export class ProfilesEditorProvider
       ),
       messenger.onRequest(
         profilesRequestDetectedPorts,
-        async () => this.ardunnoContext.boardsListWatcher.detectedPorts
+        async () => this.boardlabContext.boardsListWatcher.detectedPorts
       ),
       messenger.onRequest(
         profilesListQuickFixes,
@@ -567,7 +567,7 @@ export class ProfilesEditorProvider
     )
 
     this.disposables.push(
-      this.ardunnoContext.boardsListWatcher.onDidChangeDetectedPorts((ports) =>
+      this.boardlabContext.boardsListWatcher.onDidChangeDetectedPorts((ports) =>
         this.broadcastDetectedPorts(ports)
       ),
       vscode.workspace.onDidChangeTextDocument((event) => {
@@ -604,7 +604,7 @@ export class ProfilesEditorProvider
     params: ProfilesDocumentParams
   ): Promise<string | undefined> {
     try {
-      const name = this.ardunnoContext.getActiveProfileForUri(params.uri)
+      const name = this.boardlabContext.getActiveProfileForUri(params.uri)
       if (!name) return undefined
       // Validate against current document; treat missing as undefined
       const document = await this.ensureDocument(params.uri)
@@ -624,7 +624,7 @@ export class ProfilesEditorProvider
   ): Promise<void> {
     const uri = params.uri
     const name = params.name ?? undefined
-    await this.ardunnoContext.setActiveProfileForUri(uri, name)
+    await this.boardlabContext.setActiveProfileForUri(uri, name)
     try {
       this.broadcastActiveProfileChange(uri, name)
     } catch (err) {
@@ -896,7 +896,7 @@ export class ProfilesEditorProvider
   ): void {
     const diagnostics = validateProfilesYAML(text, document)
     // Enrich with CLI diagnostics to match plain-text validation behavior
-    collectCliDiagnostics(this.ardunnoContext, document, text)
+    collectCliDiagnostics(this.boardlabContext, document, text)
       .then((cli) => {
         const all = cli && cli.length ? [...diagnostics, ...cli] : diagnostics
         this.diagnostics.set(document.uri, all)
@@ -915,7 +915,7 @@ export class ProfilesEditorProvider
     const ast = validateProfilesYAML(text, document)
     let cli: vscode.Diagnostic[] = []
     try {
-      cli = await collectCliDiagnostics(this.ardunnoContext, document, text)
+      cli = await collectCliDiagnostics(this.boardlabContext, document, text)
     } catch {}
     const all = [...ast, ...cli]
     const wantProfile = params.profile?.trim()
@@ -957,7 +957,7 @@ export class ProfilesEditorProvider
     let cliDiagnostics: vscode.Diagnostic[] = []
     try {
       cliDiagnostics = await collectCliDiagnostics(
-        this.ardunnoContext,
+        this.boardlabContext,
         document,
         text
       )
@@ -984,8 +984,8 @@ export class ProfilesEditorProvider
       const plans = await computeProfilesQuickFixPlans(
         document,
         diagnostic,
-        this.ardunnoContext.librariesManager,
-        this.ardunnoContext.platformsManager
+        this.boardlabContext.librariesManager,
+        this.boardlabContext.platformsManager
       )
       if (!plans.length) continue
 
@@ -1148,7 +1148,7 @@ export class ProfilesEditorProvider
       return cached
     }
     try {
-      const { arduino } = await this.ardunnoContext.client
+      const { arduino } = await this.boardlabContext.client
       const details = await ensureBoardDetails(sanitizedFqbn, arduino)
       if (details) {
         this.boardDetailsCache.set(sanitizedFqbn, details)
@@ -1563,7 +1563,7 @@ export class ProfilesEditorProvider
           }
           input.busy = true
           try {
-            const client = await this.ardunnoContext.client
+            const client = await this.boardlabContext.client
             const results = await client.arduino.searchLibrary(
               { omitReleasesDetails: true, searchArgs: trimmed },
               abort.signal
@@ -1626,7 +1626,7 @@ export class ProfilesEditorProvider
       // Resolve available versions for the selected library
       let versions: string[] = []
       try {
-        const client = await this.ardunnoContext.client
+        const client = await this.boardlabContext.client
         const results = await client.arduino.searchLibrary(
           { searchArgs: selected },
           undefined
@@ -1718,7 +1718,7 @@ export class ProfilesEditorProvider
           }
           input.busy = true
           try {
-            const client = await this.ardunnoContext.client
+            const client = await this.boardlabContext.client
             const results = await client.arduino.searchLibrary(
               { searchArgs: trimmed, omitReleasesDetails: true },
               abort.signal
@@ -1766,7 +1766,7 @@ export class ProfilesEditorProvider
       // versions
       let versions: string[] = []
       try {
-        const client = await this.ardunnoContext.client
+        const client = await this.boardlabContext.client
         const results = await client.arduino.searchLibrary(
           { searchArgs: selected },
           undefined
@@ -1803,7 +1803,7 @@ export class ProfilesEditorProvider
     // Query available versions for the library and update the entry
     let versions: string[] = []
     try {
-      const client = await this.ardunnoContext.client
+      const client = await this.boardlabContext.client
       const results = await client.arduino.searchLibrary(
         { searchArgs: params.library },
         undefined
@@ -1999,7 +1999,7 @@ export class ProfilesEditorProvider
           }
           input.busy = true
           try {
-            const client = await this.ardunnoContext.client
+            const client = await this.boardlabContext.client
             const results = await client.arduino.searchPlatform(
               { searchArgs: trimmed },
               abort.signal
@@ -2073,7 +2073,7 @@ export class ProfilesEditorProvider
       let latest: string | undefined
       let versions: string[] = []
       try {
-        const client = await this.ardunnoContext.client
+        const client = await this.boardlabContext.client
         const results = await client.arduino.searchPlatform(
           { searchArgs: selected },
           undefined
@@ -2180,7 +2180,7 @@ export class ProfilesEditorProvider
           }
           input.busy = true
           try {
-            const client = await this.ardunnoContext.client
+            const client = await this.boardlabContext.client
             const results = await client.arduino.searchPlatform(
               { searchArgs: trimmed },
               abort.signal
@@ -2236,7 +2236,7 @@ export class ProfilesEditorProvider
       let latest: string | undefined
       let versions: string[] = []
       try {
-        const client = await this.ardunnoContext.client
+        const client = await this.boardlabContext.client
         const results = await client.arduino.searchPlatform(
           { searchArgs: selected },
           undefined
@@ -2289,7 +2289,7 @@ export class ProfilesEditorProvider
   ): Promise<string | undefined> {
     let versions: string[] = []
     try {
-      const client = await this.ardunnoContext.client
+      const client = await this.boardlabContext.client
       const results = await client.arduino.searchLibrary(
         { searchArgs: params.library },
         undefined
@@ -2321,7 +2321,7 @@ export class ProfilesEditorProvider
     let latest: string | undefined
     let versions: string[] = []
     try {
-      const client = await this.ardunnoContext.client
+      const client = await this.boardlabContext.client
       const results = await client.arduino.searchPlatform(
         { searchArgs: params.platform },
         undefined
@@ -2354,7 +2354,7 @@ export class ProfilesEditorProvider
     let latest: string | undefined
     let versions: string[] = []
     try {
-      const client = await this.ardunnoContext.client
+      const client = await this.boardlabContext.client
       const results = await client.arduino.searchPlatform(
         { searchArgs: params.platform },
         undefined
@@ -2431,7 +2431,7 @@ export class ProfilesEditorProvider
   ): Promise<PlatformNameInfo | undefined> {
     try {
       const platform =
-        await this.ardunnoContext.platformsManager.lookupPlatformQuick(
+        await this.boardlabContext.platformsManager.lookupPlatformQuick(
           params.platform
         )
       return { id: params.platform, name: platform?.label }
@@ -2616,7 +2616,7 @@ export class ProfilesEditorProvider
       )
       return { profiles: [], selectedProfile: undefined, hasDocument: false }
     }
-    const picked = await this.ardunnoContext.pickBoard()
+    const picked = await this.boardlabContext.pickBoard()
     if (!picked) {
       return this.computeDocumentState(document)
     }
@@ -2658,7 +2658,7 @@ export class ProfilesEditorProvider
   private async handlePickBoardForCreation(
     _params: PickBoardForCreationParams
   ): Promise<BoardDescriptor | undefined> {
-    const picked = await this.ardunnoContext.pickBoard()
+    const picked = await this.boardlabContext.pickBoard()
     if (!picked) {
       return undefined
     }
@@ -2999,7 +2999,7 @@ export class ProfilesEditorProvider
       )
       return { profiles: [], selectedProfile: undefined, hasDocument: false }
     }
-    const port = await this.ardunnoContext.pickPort()
+    const port = await this.boardlabContext.pickPort()
     if (!port) {
       return this.computeDocumentState(document)
     }
@@ -3027,7 +3027,7 @@ export class ProfilesEditorProvider
     protocol: string,
     fqbn?: string
   ): Promise<MonitorPortSettingDescriptor[]> {
-    return this.ardunnoContext.getPortSettingsForProtocol(protocol, fqbn)
+    return this.boardlabContext.getPortSettingsForProtocol(protocol, fqbn)
   }
 
   private async handleAddPortConfig(
@@ -3279,7 +3279,7 @@ export class ProfilesEditorProvider
   private async handlePickPortForCreation(
     _params?: ProfilesPickPortForCreationParams
   ): Promise<PickPortForCreationResult | undefined> {
-    const port = await this.ardunnoContext.pickPort()
+    const port = await this.boardlabContext.pickPort()
     if (!port) return undefined
     return { port: port.address, protocol: port.protocol as any }
   }

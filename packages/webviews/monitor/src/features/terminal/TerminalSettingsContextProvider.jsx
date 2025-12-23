@@ -10,7 +10,7 @@ import { TerminalSettingsContext } from './TerminalSettingsContext'
  * >} TerminalSettings
  */
 
-const LS_KEY = 'portino.terminal.settings'
+const LS_KEY = 'boardlab.monitor.terminal.settings'
 
 export function TerminalSettingsProvider({ children }) {
   const [settings, setSettings] = useState(() => {

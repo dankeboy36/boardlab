@@ -1,5 +1,5 @@
 {
-  "name": "@vscode-ardunno/base",
+  "name": "@boardlab/base",
   "version": "0.0.0",
   "private": true,
   "description": "",
@@ -14,7 +14,7 @@
     "watch": "tsc -watch -p ./"
   },
   "dependencies": {
-    "@vscode-ardunno/protocol": "0.0.0",
+    "@boardlab/protocol": "0.0.0",
     "@vscode/codicons": "^0.0.40",
     "react": "^19.1.1",
     "vscode-messenger-common": "^0.5.1",

@@ -1,5 +1,5 @@
 {
-  "name": "@vscode-ardunno/libraries",
+  "name": "@boardlab/libraries",
   "version": "0.0.0",
   "private": true,
   "description": "",
@@ -25,10 +25,10 @@
     ]
   },
   "dependencies": {
+    "@boardlab/base": "0.0.0",
+    "@boardlab/protocol": "0.0.0",
+    "@boardlab/resources": "0.0.0",
     "@c4312/evt": "^0.1.1",
-    "@vscode-ardunno/base": "0.0.0",
-    "@vscode-ardunno/protocol": "0.0.0",
-    "@vscode-ardunno/resources": "0.0.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "vscode-messenger-common": "^0.5.1",

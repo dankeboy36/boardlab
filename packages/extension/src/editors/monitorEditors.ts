@@ -8,7 +8,7 @@ import {
   type MonitorSelectionNotification,
   type MonitorToolbarAction,
   type PlotterToolbarAction,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import { type PortIdentifier } from 'boards-list'
 import * as vscode from 'vscode'
 import { Messenger } from 'vscode-messenger'
@@ -479,8 +479,8 @@ export class MonitorEditors extends MonitorBaseEditorProvider<
       'monitor',
       {
         titlePrefix: 'Monitor',
-        viewType: 'ardunno.monitorEditor',
-        lineEndingSection: 'ardunno.monitor',
+        viewType: 'boardlab.monitorEditor',
+        lineEndingSection: 'boardlab.monitor',
         notifyToolbarAction: notifyMonitorToolbarAction,
         notifyLineEndingChanged: notifyMonitorLineEndingChanged,
       }
@@ -528,8 +528,8 @@ export class PlotterEditors extends MonitorBaseEditorProvider<
       'plotter',
       {
         titlePrefix: 'Plotter',
-        viewType: 'ardunno.plotterEditor',
-        lineEndingSection: 'ardunno.monitor',
+        viewType: 'boardlab.plotterEditor',
+        lineEndingSection: 'boardlab.monitor',
         notifyToolbarAction: notifyPlotterToolbarAction,
         notifyLineEndingChanged: notifyPlotterLineEndingChanged,
       }

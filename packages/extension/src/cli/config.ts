@@ -54,7 +54,7 @@ export class CliConfig implements vscode.Disposable {
   ) {
     this.toDispose.push(
       vscode.workspace.onDidChangeConfiguration((event) => {
-        if (event.affectsConfiguration('ardunno.cli.configPath')) {
+        if (event.affectsConfiguration('boardlab.cli.configPath')) {
           this.refresh({ allowPrompt: false })
         }
       })
@@ -289,7 +289,7 @@ export class CliConfig implements vscode.Disposable {
     if (envPathRaw) {
       this.showEnvWarningOnce(
         'arduinoConfigFileEnv',
-        `Environment variable ARDUINO_CONFIG_FILE is set (${envPathRaw}); ardunno settings will be ignored.`
+        `Environment variable ARDUINO_CONFIG_FILE is set (${envPathRaw}); BoardLab settings will be ignored.`
       )
       return undefined
     }
@@ -317,7 +317,7 @@ export class CliConfig implements vscode.Disposable {
     const idePath = await this.resolveIdeConfigPath()
     if (idePath) {
       const choice = await vscode.window.showInformationMessage(
-        `An Arduino CLI configuration file used by the Arduino IDE 2.x was found at "${idePath}". Do you want ardunno to reuse it?`,
+        `An Arduino CLI configuration file used by the Arduino IDE 2.x was found at "${idePath}". Do you want BoardLab to reuse it?`,
         'Use Arduino IDE 2.x existing config'
       )
       if (choice === 'Use Arduino IDE 2.x existing config') {
@@ -372,7 +372,7 @@ export class CliConfig implements vscode.Disposable {
         error
       )
       vscode.window.showErrorMessage(
-        'Failed to provision Arduino CLI configuration. ardunno will continue without a custom configuration file.'
+        'Failed to provision Arduino CLI configuration. BoardLab will continue without a custom configuration file.'
       )
       return undefined
     }
@@ -396,7 +396,7 @@ export class CliConfig implements vscode.Disposable {
           vscode.ConfigurationTarget.Global
         )
       } catch (error) {
-        console.error('Failed to update ardunno.cli.configPath', error)
+        console.error('Failed to update boardlab.cli.configPath', error)
       }
     }
   }
@@ -410,12 +410,12 @@ export class CliConfig implements vscode.Disposable {
   }
 
   private get settings(): vscode.WorkspaceConfiguration {
-    return vscode.workspace.getConfiguration('ardunno')
+    return vscode.workspace.getConfiguration('boardlab')
   }
 
   private async promptReload(): Promise<void> {
     const choice = await vscode.window.showInformationMessage(
-      'Ardunno needs to reload the window to apply the Arduino CLI configuration change.',
+      'BoardLab needs to reload the window to apply the Arduino CLI configuration change.',
       'Reload now',
       'Later'
     )

@@ -47,21 +47,21 @@ export const RequestClientConnect = new JsonRpcRequestType<
   ConnectClientParams,
   ConnectClientResult,
   void
->('portino/requestClientConnect')
+>('boardlab/monitor/requestClientConnect')
 
 export const NotifyDidChangeDetectedPorts =
   new JsonRpcNotificationType<DetectedPorts>(
-    'portino/notifyDidChangeDetectedPorts'
+    'boardlab/monitor/notifyDidChangeDetectedPorts'
   )
 
 export const RequestDetectedPorts = new JsonRpcRequestType0<
   DetectedPorts,
   void
->('portino/requestDetectedPorts')
+>('boardlab/monitor/requestDetectedPorts')
 
 export const NotifyDidChangeMonitorSettings =
   new JsonRpcNotificationType<MonitorSettingsByProtocol>(
-    'portino/notifyDidChangeMonitorSettings'
+    'boardlab/monitor/notifyDidChangeMonitorSettings'
   )
 
 export interface DidChangeBaudrateNotification {
@@ -71,7 +71,7 @@ export interface DidChangeBaudrateNotification {
 
 export const NotifyDidChangeBaudrate =
   new JsonRpcNotificationType<DidChangeBaudrateNotification>(
-    'portino/notifyDidChangeBaudrate'
+    'boardlab/monitor/notifyDidChangeBaudrate'
   )
 
 export interface DidPauseMonitorNotification {
@@ -80,7 +80,7 @@ export interface DidPauseMonitorNotification {
 
 export const NotifyMonitorDidPause =
   new JsonRpcNotificationType<DidPauseMonitorNotification>(
-    'portino/notifyMonitorDidPause'
+    'boardlab/monitor/notifyMonitorDidPause'
   )
 
 export interface DidResumeMonitorNotification {
@@ -90,7 +90,7 @@ export interface DidResumeMonitorNotification {
 
 export const NotifyMonitorDidResume =
   new JsonRpcNotificationType<DidResumeMonitorNotification>(
-    'portino/notifyMonitorDidResume'
+    'boardlab/monitor/notifyMonitorDidResume'
   )
 
 export interface DidStartMonitorNotification {
@@ -100,7 +100,7 @@ export interface DidStartMonitorNotification {
 
 export const NotifyMonitorDidStart =
   new JsonRpcNotificationType<DidStartMonitorNotification>(
-    'portino/notifyMonitorDidStart'
+    'boardlab/monitor/notifyMonitorDidStart'
   )
 
 export interface DidStopMonitorNotification {
@@ -109,7 +109,7 @@ export interface DidStopMonitorNotification {
 
 export const NotifyMonitorDidStop =
   new JsonRpcNotificationType<DidStopMonitorNotification>(
-    'portino/notifyMonitorDidStop'
+    'boardlab/monitor/notifyMonitorDidStop'
   )
 
 export interface RequestPauseResumeMonitorParams {
@@ -120,13 +120,13 @@ export const RequestPauseMonitor = new JsonRpcRequestType<
   RequestPauseResumeMonitorParams,
   boolean,
   void
->('portino/requestPauseMonitor')
+>('boardlab/monitor/requestPauseMonitor')
 
 export const RequestResumeMonitor = new JsonRpcRequestType<
   RequestPauseResumeMonitorParams,
   boolean,
   void
->('portino/requestResumeMonitor')
+>('boardlab/monitor/requestResumeMonitor')
 
 export interface RequestUpdateBaudrateParams {
   readonly port: PortIdentifier
@@ -137,7 +137,7 @@ export const RequestUpdateBaudrate = new JsonRpcRequestType<
   RequestUpdateBaudrateParams,
   void,
   void
->('portino/requestUpdateBaudrate')
+>('boardlab/monitor/requestUpdateBaudrate')
 
 export interface RequestSendMonitorMessageParams {
   readonly port: PortIdentifier
@@ -148,7 +148,7 @@ export const RequestSendMonitorMessage = new JsonRpcRequestType<
   RequestSendMonitorMessageParams,
   void,
   void
->('portino/requestSendMonitorMessage')
+>('boardlab/monitor/requestSendMonitorMessage')
 
 export interface MonitorSelectionNotification {
   readonly port?: PortIdentifier
@@ -157,14 +157,14 @@ export interface MonitorSelectionNotification {
 
 export const notifyMonitorSelectionChanged: MessengerNotificationType<MonitorSelectionNotification> =
   {
-    method: 'monitor/selectionChanged',
+    method: 'boardlab/monitor/selectionChanged',
   }
 
 export const getMonitorSelection: MessengerRequestType<
   void,
   MonitorSelectionNotification
 > = {
-  method: 'monitor/get-selection',
+  method: 'boardlab/monitor/get-selection',
 }
 
 export interface MonitorBridgeInfo {
@@ -176,24 +176,24 @@ export const getMonitorBridgeInfo: MessengerRequestType<
   void,
   MonitorBridgeInfo
 > = {
-  method: 'monitor/get-bridge-info',
+  method: 'boardlab/monitor/get-bridge-info',
 }
 
 export const notifyMonitorBridgeError: MessengerNotificationType<{
   readonly message: string
 }> = {
-  method: 'monitor/bridge-error',
+  method: 'boardlab/monitor/bridge-error',
 }
 
 export const notifyMonitorThemeChanged: MessengerNotificationType<void> = {
-  method: 'monitor/theme-changed',
+  method: 'boardlab/monitor/theme-changed',
 }
 
 export const connectMonitorClient: MessengerRequestType<
   ConnectClientParams,
   HostConnectClientResult
 > = {
-  method: 'monitor/connect-client',
+  method: 'boardlab/monitor/connect-client',
 }
 
 export interface DisconnectMonitorClientParams {
@@ -202,65 +202,65 @@ export interface DisconnectMonitorClientParams {
 
 export const disconnectMonitorClient: MessengerNotificationType<DisconnectMonitorClientParams> =
   {
-    method: 'monitor/disconnect-client',
+    method: 'boardlab/monitor/disconnect-client',
   }
 
 export const requestMonitorDetectedPorts: MessengerRequestType<
   void,
   DetectedPorts
 > = {
-  method: 'monitor/request-detected-ports',
+  method: 'boardlab/monitor/request-detected-ports',
 }
 
 export const requestMonitorUpdateBaudrate: MessengerRequestType<
   RequestUpdateBaudrateParams,
   void
 > = {
-  method: 'monitor/request-update-baudrate',
+  method: 'boardlab/monitor/request-update-baudrate',
 }
 
 export const requestMonitorSendMessage: MessengerRequestType<
   RequestSendMonitorMessageParams,
   void
 > = {
-  method: 'monitor/request-send-message',
+  method: 'boardlab/monitor/request-send-message',
 }
 
 export const requestMonitorPause: MessengerRequestType<
   RequestPauseResumeMonitorParams,
   boolean
 > = {
-  method: 'monitor/request-pause',
+  method: 'boardlab/monitor/request-pause',
 }
 
 export const requestMonitorResume: MessengerRequestType<
   RequestPauseResumeMonitorParams,
   boolean
 > = {
-  method: 'monitor/request-resume',
+  method: 'boardlab/monitor/request-resume',
 }
 
 export const notifyMonitorViewDidChangeDetectedPorts: MessengerNotificationType<DetectedPorts> =
   {
-    method: 'monitor/view/did-change-detected-ports',
+    method: 'boardlab/monitor/view/did-change-detected-ports',
   }
 
 export const notifyMonitorViewDidChangeMonitorSettings: MessengerNotificationType<MonitorSettingsByProtocol> =
   {
-    method: 'monitor/view/did-change-monitor-settings',
+    method: 'boardlab/monitor/view/did-change-monitor-settings',
   }
 
 export const notifyMonitorViewDidChangeBaudrate: MessengerNotificationType<DidChangeBaudrateNotification> =
   {
-    method: 'monitor/view/did-change-baudrate',
+    method: 'boardlab/monitor/view/did-change-baudrate',
   }
 
 export const notifyMonitorViewDidPause: MessengerNotificationType<DidPauseMonitorNotification> =
   {
-    method: 'monitor/view/did-pause',
+    method: 'boardlab/monitor/view/did-pause',
   }
 
 export const notifyMonitorViewDidResume: MessengerNotificationType<DidResumeMonitorNotification> =
   {
-    method: 'monitor/view/did-resume',
+    method: 'boardlab/monitor/view/did-resume',
   }

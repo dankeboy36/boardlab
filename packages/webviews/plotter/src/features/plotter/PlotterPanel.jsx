@@ -1,6 +1,6 @@
 // @ts-check
 import { useResizeObserver } from '@react-hookz/web'
-import { useMonitorStream } from '@vscode-ardunno/monitor-shared/serial-monitor'
+import { useMonitorStream } from '@boardlab/monitor-shared/serial-monitor'
 import {
   forwardRef,
   useCallback,
@@ -11,7 +11,7 @@ import {
 } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 
-import PortinoPlotter from './PortinoPlotter.jsx'
+import MonitorPlotter from './MonitorPlotter.jsx'
 import { parseSamples } from './parseSamples.js'
 import { plotterDebug } from './plotterDebug.js'
 import {
@@ -38,7 +38,7 @@ const PlotterPanel = forwardRef(function PlotterPanel(
   ref
 ) {
   /**
-   * Shape of the imperative PortinoPlotter API. Multiple series note: when
+   * Shape of the imperative MonitorPlotter API. Multiple series note: when
    * adding y2/y3, extend append to accept { x, y1, y2, ... } or parallel
    * arrays, while keeping a common x[].
    *
@@ -53,9 +53,9 @@ const PlotterPanel = forwardRef(function PlotterPanel(
    *   ensureSize: () => void
    *   refresh: () => void
    *   uplot?: uPlot
-   * }} PortinoPlotterHandle
+   * }} MonitorPlotterHandle
    */
-  const plotRef = useRef(/** @type {PortinoPlotterHandle | null} */ (null))
+  const plotRef = useRef(/** @type {MonitorPlotterHandle | null} */ (null))
   const [plotKey, setPlotKey] = useState(0)
   const savedSizeRef = useRef(/** @type */ (null))
   const containerRef = useRef(/** @type {HTMLDivElement | null} */ (null))
@@ -524,7 +524,7 @@ const PlotterPanel = forwardRef(function PlotterPanel(
         margin: 4,
       }}
     >
-      <PortinoPlotter
+      <MonitorPlotter
         key={plotKey}
         ref={plotRef}
         maxPoints={5000}

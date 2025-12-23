@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises'
 
 import * as vscode from 'vscode'
 
-export const SKETCHBOOK_SCHEME = 'ardunno-sketchbook'
+export const SKETCHBOOK_SCHEME = 'boardlab-sketchbook'
 
 class SketchbookReadonlyFsProvider implements vscode.FileSystemProvider {
   private readonly changeEmitter = new vscode.EventEmitter<

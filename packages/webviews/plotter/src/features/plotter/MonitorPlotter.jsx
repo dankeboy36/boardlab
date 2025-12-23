@@ -27,7 +27,7 @@ import {
 import { plotterDebug } from './plotterDebug.js'
 
 /**
- * Minimal, fast uPlot wrapper for Portino. uPlot expects columnar data: [x[],
+ * Minimal, fast uPlot wrapper for Monitor. uPlot expects columnar data: [x[],
  * y[]], with x strictly increasing. We keep plain number arrays and call
  * setData with full columns.
  *
@@ -43,7 +43,7 @@ import { plotterDebug } from './plotterDebug.js'
  *   height?: number
  * }} props
  */
-const PortinoPlotter = forwardRef(function PortinoPlotter(
+const MonitorPlotter = forwardRef(function MonitorPlotter(
   {
     maxPoints = 10000,
     autoscale = true,
@@ -1576,4 +1576,4 @@ const PortinoPlotter = forwardRef(function PortinoPlotter(
   )
 })
 
-export default PortinoPlotter
+export default MonitorPlotter

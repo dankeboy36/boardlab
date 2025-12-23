@@ -7,7 +7,7 @@ import { ClientError, Status } from 'nice-grpc-common'
 import * as vscode from 'vscode'
 import { SketchFolder } from 'vscode-arduino-api'
 
-import { ArdunnoContextImpl } from './ardunnoContext'
+import { BoardLabContextImpl } from './boardlabContext'
 import {
   Arduino,
   CompileProgressUpdate,
@@ -28,7 +28,7 @@ import { onDidChangeTaskStates, tryStopTask } from './taskTracker'
 import { presentTaskStatus } from './taskUiState'
 import { disposeAll } from './utils'
 
-export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
+export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
   private readonly statusBarItem: vscode.StatusBarItem
   private readonly didChangeStatusBarEmitter: vscode.EventEmitter<void>
 
@@ -43,36 +43,36 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
     | (CompileProgressUpdate & { sketchPath: string })
     | undefined
 
-  constructor(private readonly ardunnoContext: ArdunnoContextImpl) {
+  constructor(private readonly boardlabContext: BoardLabContextImpl) {
     this._disposables = []
     this.statusBarItem = vscode.window.createStatusBarItem(
-      'ardunno.contextStatusBar'
+      'boardlab.contextStatusBar'
     )
     this.didChangeStatusBarEmitter = new vscode.EventEmitter<void>()
     this._disposables.push(
       this.statusBarItem,
       this.didChangeStatusBarEmitter,
-      ardunnoContext.onDidChangeSketch(() => this.updateStatusBarItem()),
-      ardunnoContext.onDidChangeCurrentSketch(() => this.updateStatusBarItem()),
-      ardunnoContext.sketchbooks.onDidChangeResolvedSketches(() =>
+      boardlabContext.onDidChangeSketch(() => this.updateStatusBarItem()),
+      boardlabContext.onDidChangeCurrentSketch(() => this.updateStatusBarItem()),
+      boardlabContext.sketchbooks.onDidChangeResolvedSketches(() =>
         this.updateStatusBarItem()
       ),
-      vscode.commands.registerCommand('ardunno.openCommandCenter', () =>
+      vscode.commands.registerCommand('boardlab.openCommandCenter', () =>
         this.openCommandCenter()
       ),
-      ardunnoContext.sketchbooks.onDidChangeSketchFolders(
+      boardlabContext.sketchbooks.onDidChangeSketchFolders(
         () => (this._tasks = undefined)
       ),
-      vscode.tasks.registerTaskProvider(ardunnoTaskType, this),
-      ardunnoContext.boardsListWatcher.onDidChangeDetectedPorts(() =>
+      vscode.tasks.registerTaskProvider(boardlabTaskType, this),
+      boardlabContext.boardsListWatcher.onDidChangeDetectedPorts(() =>
         this.updateStatusBarItem()
       ),
-      ardunnoContext.monitorManager.onDidChangeRunningMonitors(() =>
+      boardlabContext.monitorManager.onDidChangeRunningMonitors(() =>
         this.updateStatusBarItem()
       ),
-      ardunnoContext.onDidChangeActiveProfile(() => this.updateStatusBarItem())
+      boardlabContext.onDidChangeActiveProfile(() => this.updateStatusBarItem())
     )
-    this.statusBarItem.command = 'ardunno.openCommandCenter'
+    this.statusBarItem.command = 'boardlab.openCommandCenter'
     this.statusBarItem.show()
     this.updateStatusBarItem()
   }
@@ -116,7 +116,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
   }): Promise<vscode.TaskExecution> {
     return vscode.tasks.executeTask(
       this.compileTask({
-        type: ardunnoTaskType,
+        type: boardlabTaskType,
         command: 'compile',
         sketchPath: params.sketchPath,
         fqbn: params.fqbn,
@@ -131,7 +131,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
   }): Promise<vscode.TaskExecution> {
     return vscode.tasks.executeTask(
       this.uploadTask({
-        type: ardunnoTaskType,
+        type: boardlabTaskType,
         command: 'upload',
         sketchPath: params.sketchPath,
         fqbn: params.fqbn,
@@ -146,7 +146,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
   }): Promise<vscode.TaskExecution> {
     return vscode.tasks.executeTask(
       this.exportBinariesTask({
-        type: ardunnoTaskType,
+        type: boardlabTaskType,
         command: 'export-binary',
         sketchPath: params.sketchPath,
         fqbn: params.fqbn,
@@ -162,7 +162,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
   }): Promise<vscode.TaskExecution> {
     return vscode.tasks.executeTask(
       this.uploadUsingProgrammerTask({
-        type: ardunnoTaskType,
+        type: boardlabTaskType,
         command: 'upload-using-programmer',
         sketchPath: params.sketchPath,
         fqbn: params.fqbn,
@@ -180,7 +180,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
   }): Promise<vscode.TaskExecution> {
     return vscode.tasks.executeTask(
       this.burnBootloaderTask({
-        type: ardunnoTaskType,
+        type: boardlabTaskType,
         command: 'burn-bootloader',
         sketchPath: params.sketchPath,
         fqbn: params.fqbn,
@@ -196,7 +196,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
   }): Promise<vscode.TaskExecution> {
     return vscode.tasks.executeTask(
       this.getBoardInfoTask({
-        type: ardunnoTaskType,
+        type: boardlabTaskType,
         command: 'get-board-info',
         sketchPath: params.sketchPath,
         port: params.port,
@@ -211,7 +211,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
   }): Promise<vscode.TaskExecution> {
     return vscode.tasks.executeTask(
       this.archiveSketchTask({
-        type: ardunnoTaskType,
+        type: boardlabTaskType,
         command: 'archive-sketch',
         sketchPath: params.sketchPath,
         archivePath: params.archivePath,
@@ -267,7 +267,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
       definition,
       vscode.TaskScope.Workspace,
       `${definition.command} ${path.basename(definition.sketchPath)}`,
-      ardunnoTaskType,
+      boardlabTaskType,
       new vscode.CustomExecution(async (resolvedTask) => {
         const emitter = new vscode.EventEmitter<string>()
         const closeEmitter = new vscode.EventEmitter<void | number>()
@@ -284,7 +284,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
         }
 
         async function runArchive(): Promise<void> {
-          const { arduino } = await tasks.ardunnoContext.client
+          const { arduino } = await tasks.boardlabContext.client
           const { sketchPath, archivePath, overwrite } = definition
 
           try {
@@ -320,7 +320,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
 
         return pty
       }),
-      ardunnoProblemMatcher
+      boardlabProblemMatcher
     )
   }
 
@@ -331,7 +331,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
       definition,
       vscode.TaskScope.Workspace,
       `${definition.command} ${definition.port}`,
-      ardunnoTaskType,
+      boardlabTaskType,
       new vscode.CustomExecution(async () => {
         const emitter = new vscode.EventEmitter<string>()
         const closeEmitter = new vscode.EventEmitter<void | number>()
@@ -351,7 +351,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
         async function detectBoard(): Promise<void> {
           try {
             const detectedPorts =
-              tasks.ardunnoContext.boardsListWatcher.detectedPorts
+              tasks.boardlabContext.boardsListWatcher.detectedPorts
             const detectedPort = detectedPorts[definition.port]
 
             if (!detectedPort) {
@@ -433,9 +433,9 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
       definition,
       vscode.TaskScope.Workspace,
       `${definition.command} ${definition.fqbn}`,
-      ardunnoTaskType,
+      boardlabTaskType,
       this.createCompileCustomExecution(true),
-      ardunnoProblemMatcher
+      boardlabProblemMatcher
     )
   }
 
@@ -446,15 +446,15 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
       definition,
       vscode.TaskScope.Workspace,
       `${definition.command} ${definition.port}`,
-      ardunnoTaskType,
+      boardlabTaskType,
       new vscode.CustomExecution(async (resolvedTask) => {
-        const { arduino } = await this.ardunnoContext.client
+        const { arduino } = await this.boardlabContext.client
         const ok = await this.validateSketchProfile(resolvedTask.sketchPath)
         if (!ok) {
           throw new Error('Profile validation failed')
         }
         const detectedPorts =
-          this.ardunnoContext.boardsListWatcher.detectedPorts
+          this.boardlabContext.boardsListWatcher.detectedPorts
         const port: any =
           resolvePort(resolvedTask.port, arduino, detectedPorts) ??
           revivePort(resolvedTask.port)
@@ -482,15 +482,15 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
       definition,
       vscode.TaskScope.Workspace,
       `${definition.command} ${definition.port}`,
-      ardunnoTaskType,
+      boardlabTaskType,
       new vscode.CustomExecution(async (resolvedTask) => {
-        const { arduino } = await this.ardunnoContext.client
+        const { arduino } = await this.boardlabContext.client
         const ok = await this.validateSketchProfile(resolvedTask.sketchPath)
         if (!ok) {
           throw new Error('Profile validation failed')
         }
         const detectedPorts =
-          this.ardunnoContext.boardsListWatcher.detectedPorts
+          this.boardlabContext.boardsListWatcher.detectedPorts
         const port: any =
           resolvePort(resolvedTask.port, arduino, detectedPorts) ??
           revivePort(resolvedTask.port)
@@ -512,9 +512,9 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
       definition,
       vscode.TaskScope.Workspace,
       `${definition.command} ${definition.fqbn}`,
-      ardunnoTaskType,
+      boardlabTaskType,
       this.createCompileCustomExecution(),
-      ardunnoProblemMatcher
+      boardlabProblemMatcher
     )
   }
 
@@ -522,13 +522,13 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
     exportBinaries = false
   ): vscode.CustomExecution {
     return new vscode.CustomExecution(async (resolvedTask) => {
-      const { arduino } = await this.ardunnoContext.client
+      const { arduino } = await this.boardlabContext.client
       // Pre-validate sketch profile (if present)
       const ok = await this.validateSketchProfile(resolvedTask.sketchPath)
       if (!ok) {
         throw new Error('Profile validation failed')
       }
-      const compileConfig = vscode.workspace.getConfiguration('ardunno.compile')
+      const compileConfig = vscode.workspace.getConfiguration('boardlab.compile')
       const verbose = compileConfig.get<boolean>('verbose') ?? false
       const warnings = (
         compileConfig.get<string>('warnings') ?? 'none'
@@ -549,7 +549,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
         .then((compileResult) => {
           // do not unset compile summary
           if (compileResult) {
-            this.ardunnoContext.updateCompileSummary(
+            this.boardlabContext.updateCompileSummary(
               resolvedTask.sketchPath,
               compileResult
             )
@@ -577,21 +577,21 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
       definition,
       vscode.TaskScope.Workspace,
       `${definition.command} ${definition.port}`,
-      ardunnoTaskType,
+      boardlabTaskType,
       new vscode.CustomExecution(async (resolvedTask) => {
-        const { arduino } = await this.ardunnoContext.client
+        const { arduino } = await this.boardlabContext.client
         const ok = await this.validateSketchProfile(resolvedTask.sketchPath)
         if (!ok) {
           throw new Error('Profile validation failed')
         }
         const detectedPorts =
-          this.ardunnoContext.boardsListWatcher.detectedPorts
+          this.boardlabContext.boardsListWatcher.detectedPorts
         const port: any =
           resolvePort(resolvedTask.port, arduino, detectedPorts) ??
           revivePort(resolvedTask.port) // if cannot resolve the port, try to revive it so that clients see port not found instead port not set
 
         const compileConfig =
-          vscode.workspace.getConfiguration('ardunno.upload')
+          vscode.workspace.getConfiguration('boardlab.upload')
         const verbose = compileConfig.get<boolean>('verbose') ?? false
 
         return this.withMonitorSuspended(port, async () =>
@@ -621,7 +621,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
       const ast = validateProfilesYAML(text, doc)
       let cli: vscode.Diagnostic[] = []
       try {
-        cli = await collectCliDiagnostics(this.ardunnoContext as any, doc, text)
+        cli = await collectCliDiagnostics(this.boardlabContext as any, doc, text)
       } catch {}
       const all = [...ast, ...cli]
       const hasError = all.some(
@@ -696,8 +696,8 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
       })
 
       const currentSketch =
-        this.ardunnoContext.currentSketch ??
-        (await this.ardunnoContext.selectSketch())
+        this.boardlabContext.currentSketch ??
+        (await this.boardlabContext.selectSketch())
       if (!currentSketch) {
         return
       }
@@ -705,7 +705,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
       const { board, port, sketchPath } = currentSketch
       const fqbn = board?.fqbn
       const portKey = port ? createPortKey(port) : pickPort
-      const type = ardunnoTaskType
+      const type = boardlabTaskType
       if (command === 'compile') {
         return {
           type,
@@ -752,7 +752,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
     if (selected?.id) {
       return selected.id
     }
-    const programmer = await this.ardunnoContext.selectProgrammer(currentSketch)
+    const programmer = await this.boardlabContext.selectProgrammer(currentSketch)
     if (!programmer) {
       return undefined
     }
@@ -761,7 +761,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
 
   private taskDefinitionQuickPickItems(): vscode.QuickPickItem[] {
     const items: vscode.QuickPickItem[] = []
-    const currentSketch = this.ardunnoContext.currentSketch
+    const currentSketch = this.boardlabContext.currentSketch
     const sketchLabel = this.sketchLabel(false)
     const sketchDescription =
       sketchLabel || this.sketchLabel() || 'No sketch selected'
@@ -819,7 +819,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
       items.push(
         new CommandQuickPickItem(
           configureLabel,
-          'ardunno.configureCurrentSketch',
+          'boardlab.configureCurrentSketch',
           configureDescription
         )
       )
@@ -870,7 +870,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
       items.push(
         new CommandQuickPickItem(
           '$(terminal) Open Monitor',
-          'ardunno.openMonitor',
+          'boardlab.openMonitor',
           this.formatContextLine({
             includeSketchPath: false,
             includeBoard: false,
@@ -878,7 +878,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
         ),
         new CommandQuickPickItem(
           '$(graph-line) Open Plotter',
-          'ardunno.plotter.focus',
+          'boardlab.plotter.focus',
           this.formatContextLine({
             includeSketchPath: false,
             includeBoard: false,
@@ -898,14 +898,14 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
       items.push(
         new CommandQuickPickItem(
           `${taskCommandIcon('burn-bootloader')} Burn Bootloader`,
-          'ardunno.burnBootloader',
+          'boardlab.burnBootloader',
           this.formatContextLine({
             includeSketchPath: false,
           })
         ),
         new CommandQuickPickItem(
           '$(info) Get Board Info',
-          'ardunno.getBoardInfo',
+          'boardlab.getBoardInfo',
           this.formatContextLine({
             includeSketchPath: false,
             includeBoard: false,
@@ -913,7 +913,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
         ),
         new CommandQuickPickItem(
           '$(file-zip) Archive Sketch',
-          'ardunno.archiveSketch',
+          'boardlab.archiveSketch',
           this.formatContextLine({
             includeBoard: false,
             includePort: false,
@@ -927,17 +927,17 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
     items.push(
       new CommandQuickPickItem(
         '$(file-submodule) Select Sketch',
-        'ardunno.selectSketch',
+        'boardlab.selectSketch',
         sketchDescription
       ),
       new CommandQuickPickItem(
         '$(circuit-board) Select Board',
-        'ardunno.selectBoard',
+        'boardlab.selectBoard',
         boardDescription
       ),
       new CommandQuickPickItem(
         '$(plug) Select Port',
-        'ardunno.selectPort',
+        'boardlab.selectPort',
         portDescription
       )
     )
@@ -952,14 +952,14 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
       return undefined
     }
     const hasProfile = this.hasSketchProfile(sketch.sketchPath)
-    const activeProfile = this.ardunnoContext.getActiveProfileForUri(sketch)
+    const activeProfile = this.boardlabContext.getActiveProfileForUri(sketch)
     const label = hasProfile
       ? '$(account) Open Profiles'
       : '$(account) Create Profile'
     const description = hasProfile ? activeProfile : undefined
     const command = hasProfile
-      ? 'ardunno.profiles.openSketchProfile'
-      : 'ardunno.profiles.createSketchProfile'
+      ? 'boardlab.profiles.openSketchProfile'
+      : 'boardlab.profiles.createSketchProfile'
     return new CommandQuickPickItem(label, command, description)
   }
 
@@ -1000,7 +1000,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
         : options.port || this.portLabel(false) || ''
     const programmer = options.includeProgrammer
       ? options.programmer ||
-        this.programmerLabel(this.ardunnoContext.currentSketch) ||
+        this.programmerLabel(this.boardlabContext.currentSketch) ||
         ''
       : ''
 
@@ -1024,7 +1024,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
   }
 
   private programmerLabel(
-    sketch: SketchFolder | undefined = this.ardunnoContext.currentSketch
+    sketch: SketchFolder | undefined = this.boardlabContext.currentSketch
   ): string | undefined {
     return (
       sketch?.selectedProgrammer &&
@@ -1068,17 +1068,17 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
   }
 
   private async statusText(): Promise<string> {
-    const icon = '$(dashboard)'
-    const currentSketch = this.ardunnoContext.currentSketch
+    const icon = '$(dashboard) BoardLab'
+    const currentSketch = this.boardlabContext.currentSketch
     if (!currentSketch) {
       return icon
     }
     const { sketchPath, board, port } = currentSketch
     // Active profile, if set for this sketch
     const activeProfile =
-      await this.ardunnoContext.getValidatedActiveProfileForSketch(sketchPath)
-    const { arduino } = await this.ardunnoContext.client
-    const detectedPorts = this.ardunnoContext.boardsListWatcher.detectedPorts
+      await this.boardlabContext.getValidatedActiveProfileForSketch(sketchPath)
+    const { arduino } = await this.boardlabContext.client
+    const detectedPorts = this.boardlabContext.boardsListWatcher.detectedPorts
     const [resolvedSketch, resolvedBoard, resolvedPort] = await Promise.all([
       this.resolveSketch(vscode.Uri.file(sketchPath)),
       this.resolveBoard(board?.fqbn, arduino),
@@ -1094,7 +1094,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
     this.resolvedPort = resolvedPort
 
     return buildStatusText({
-      icon: '$(dashboard)',
+      icon,
       board: this.boardLabel(false),
       port: this.portLabel(false),
       sketch: this.sketchLabel(false),
@@ -1113,7 +1113,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
 
   private resolveSketch(sketch: vscode.Uri | undefined): Sketch | undefined {
     if (sketch) {
-      return this.ardunnoContext.sketchbooks.find(sketch.toString())
+      return this.boardlabContext.sketchbooks.find(sketch.toString())
     }
     return undefined
   }
@@ -1121,7 +1121,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
   private sketchLabel(long = true): string {
     if (this.resolvedSketch) {
       if (long) {
-        const sketchbook = this.ardunnoContext.sketchbooks.findSketchbook(
+        const sketchbook = this.boardlabContext.sketchbooks.findSketchbook(
           this.resolvedSketch
         )
         if (sketchbook) {
@@ -1148,9 +1148,9 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
       }
       return this.resolvedSketch.label
     }
-    const label = this.ardunnoContext.currentSketch
-      ? `${dirname(this.ardunnoContext.currentSketch.sketchPath)}/${basename(
-          this.ardunnoContext.currentSketch.sketchPath
+    const label = this.boardlabContext.currentSketch
+      ? `${dirname(this.boardlabContext.currentSketch.sketchPath)}/${basename(
+          this.boardlabContext.currentSketch.sketchPath
         )}`
       : ''
     if (long) {
@@ -1193,7 +1193,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
       }
       return this.resolvedBoard.name
     }
-    const label = this.ardunnoContext.currentSketch?.board?.name ?? ''
+    const label = this.boardlabContext.currentSketch?.board?.name ?? ''
     if (!label && long) {
       return 'No board selected'
     }
@@ -1205,7 +1205,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
       const resolvePort = this.resolvedPort
       const resolveLabel = portProtocolIcon(resolvePort) + resolvePort.label
       const runningMonitors =
-        this.ardunnoContext.monitorManager.getRunningMonitors()
+        this.boardlabContext.monitorManager.getRunningMonitors()
       if (
         runningMonitors.some(
           ({ port }) => createPortKey(port) === createPortKey(resolvePort)
@@ -1215,7 +1215,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
       }
       return resolveLabel
     }
-    const label = this.ardunnoContext.currentSketch?.port?.address ?? ''
+    const label = this.boardlabContext.currentSketch?.port?.address ?? ''
     if (!label && long) {
       return 'No port selected'
     }
@@ -1239,7 +1239,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
 
     const portIdentifier = { protocol: port.protocol, address: port.address }
     const paused =
-      await this.ardunnoContext.monitorManager.pauseMonitor(portIdentifier)
+      await this.boardlabContext.monitorManager.pauseMonitor(portIdentifier)
 
     const resume = async () => {
       if (!paused) {
@@ -1252,7 +1252,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
 
       const attemptResume = async (remaining: number): Promise<void> => {
         try {
-          await this.ardunnoContext.monitorManager.resumeMonitor(portIdentifier)
+          await this.boardlabContext.monitorManager.resumeMonitor(portIdentifier)
         } catch (error) {
           if (remaining <= 0) {
             console.error('Failed to resume monitor', error)
@@ -1261,7 +1261,7 @@ export class ArdunnoTasks implements vscode.TaskProvider, vscode.Disposable {
         }
 
         const state =
-          this.ardunnoContext.monitorManager.getMonitorState(portIdentifier)
+          this.boardlabContext.monitorManager.getMonitorState(portIdentifier)
         if (state === 'running' || remaining <= 0) {
           return
         }
@@ -1346,9 +1346,9 @@ function taskCommandIcon(taskCommand: string | undefined): string {
   }
 }
 
-const ardunnoTaskType = 'ardunno' as const
-const ardunnoProblemMatcher = `$${ardunnoTaskType}` as const
-const pickPort = '${' + 'command:ardunno.pickPort' + '}'
+const boardlabTaskType = 'boardlab' as const
+const boardlabProblemMatcher = `$${boardlabTaskType}` as const
+const pickPort = '${' + 'command:boardlab.pickPort' + '}'
 
 const taskCommandLiterals = [
   'compile',
@@ -1368,7 +1368,7 @@ function isTaskCommand(arg: unknown): arg is TaskCommand {
 }
 
 interface CommandTaskDefinition extends vscode.TaskDefinition {
-  type: typeof ardunnoTaskType
+  type: typeof boardlabTaskType
   command: TaskCommand
 }
 function isCommandTaskDefinition(arg: unknown): arg is CommandTaskDefinition
@@ -1382,7 +1382,7 @@ function isCommandTaskDefinition<T extends TaskCommand>(
 ): arg is CommandTaskDefinition {
   if (
     (<CommandTaskDefinition>arg).type !== undefined &&
-    (<CommandTaskDefinition>arg).type === 'ardunno' &&
+    (<CommandTaskDefinition>arg).type === 'boardlab' &&
     (<CommandTaskDefinition>arg).command !== undefined &&
     typeof (<CommandTaskDefinition>arg).command === 'string'
   ) {

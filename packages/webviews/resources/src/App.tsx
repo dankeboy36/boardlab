@@ -4,7 +4,7 @@ import {
   preventDefaultContextMenuItems,
   useCodiconStylesheet,
   vscode,
-} from '@vscode-ardunno/base'
+} from '@boardlab/base'
 import {
   notifyLibrariesFilterChanged,
   notifyPlatformsFilterChanged,
@@ -14,7 +14,7 @@ import {
   setLibrariesFilterContext,
   setPlatformsFilterContext,
   Version,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import debounce from 'lodash.debounce'
 import React, {
   FormEvent as ReactFormEvent,
@@ -286,7 +286,7 @@ function Search(props: SearchProps) {
       return
     }
     const host = document.querySelector<HTMLElement>(
-      '[data-ardunno-search-input]'
+      '[data-boardlab-search-input]'
     )
     if (!host) {
       return
@@ -484,7 +484,7 @@ function Search(props: SearchProps) {
         value={query}
         placeholder="Search"
         onInput={onInput}
-        data-ardunno-search-input
+        data-boardlab-search-input
       >
         {isFiltered ? (
           <VscodeIcon

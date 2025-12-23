@@ -13,8 +13,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@vscode-ardunno/base': path.resolve(__dirname, '../base/src/index.ts'),
-      '@vscode-ardunno/protocol': path.resolve(
+      '@boardlab/base': path.resolve(__dirname, '../base/src/index.ts'),
+      '@boardlab/protocol': path.resolve(
         __dirname,
         '../../protocol/src/index.ts'
       ),

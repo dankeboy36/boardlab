@@ -1,6 +1,6 @@
 // @ts-check
 
-import { notifyError, notifyInfo } from '@vscode-ardunno/base'
+import { notifyError, notifyInfo } from '@boardlab/base'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 /**
@@ -18,11 +18,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 /**
  * @typedef {Object} UseSerialMonitorConnection
- * @property {import('./client.js').PortinoClient} client
+ * @property {import('./client.js').MonitorClient} client
  * @property {import('boards-list').PortIdentifier | undefined} selectedPort
  * @property {import('boards-list').DetectedPorts} detectedPorts
  * @property {string | undefined} selectedBaudrate
- * @property {import('@vscode-ardunno/protocol').MonitorSettingsByProtocol} monitorSettingsByProtocol
+ * @property {import('@boardlab/protocol').MonitorSettingsByProtocol} monitorSettingsByProtocol
  * @property {(text: string) => void} onText
  * @property {() => void} onStart
  * @property {() => void} onStop

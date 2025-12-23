@@ -8,10 +8,10 @@ import {
   setConnectionStatus,
   setWsUrl,
 } from '../connection/connectionSlice.js'
-import { usePortinoClient } from './usePortinoClient.js'
+import { useMonitorClient } from './useMonitorClient.js'
 
-export function usePortinoClientSync() {
-  const { client, connectionStatus, wsUrl } = usePortinoClient()
+export function useMonitorClientSync() {
+  const { client, connectionStatus, wsUrl } = useMonitorClient()
   const dispatch = useDispatch()
 
   useEffect(() => {

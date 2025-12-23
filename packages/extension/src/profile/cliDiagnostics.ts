@@ -6,7 +6,7 @@ import { FQBN } from 'fqbn'
 import { ClientError } from 'nice-grpc-common'
 import * as vscode from 'vscode'
 
-import type { ArdunnoContextImpl } from '../ardunnoContext'
+import type { BoardLabContextImpl } from '../boardlabContext'
 import { LibrariesManager, PlatformsManager } from '../resourcesManager'
 import {
   findPairByPath,
@@ -20,7 +20,7 @@ import {
  * for all profiles in the given YAML text. Returns an empty array on errors.
  */
 export async function collectCliDiagnostics(
-  ardunnoContext: ArdunnoContextImpl,
+  boardlabContext: BoardLabContextImpl,
   doc: vscode.TextDocument,
   text: string
 ): Promise<vscode.Diagnostic[]> {
@@ -39,20 +39,20 @@ export async function collectCliDiagnostics(
 
       const [fqbnIssues, platformIssues, librariesIssues, portConfigIssues] =
         await Promise.all([
-          validateProfileFqbn(ardunnoContext, doc, ydoc, profileName),
+          validateProfileFqbn(boardlabContext, doc, ydoc, profileName),
           validateProfilePlatforms(
-            ardunnoContext.platformsManager,
+            boardlabContext.platformsManager,
             doc,
             ydoc,
             profileName
           ),
           validateProfileLibraries(
-            ardunnoContext.librariesManager,
+            boardlabContext.librariesManager,
             doc,
             ydoc,
             profileName
           ),
-          validateProfilePortConfig(ardunnoContext, doc, ydoc, profileName),
+          validateProfilePortConfig(boardlabContext, doc, ydoc, profileName),
         ])
 
       diagnostics.push(
@@ -83,7 +83,7 @@ export async function collectCliDiagnostics(
 }
 
 async function validateProfileFqbn(
-  ardunnoContext: ArdunnoContextImpl,
+  boardlabContext: BoardLabContextImpl,
   doc: vscode.TextDocument,
   ydoc: any,
   profileName: string
@@ -106,7 +106,7 @@ async function validateProfileFqbn(
     return diags
   }
   try {
-    const details = await ardunnoContext.getBoardDetails(parsed)
+    const details = await boardlabContext.getBoardDetails(parsed)
     const options = parsed.options ?? {}
     for (const [k, v] of Object.entries(options)) {
       const opt = details.configOptions.find((o: any) => o.option === k)
@@ -148,7 +148,7 @@ async function validateProfileFqbn(
 }
 
 async function validateProfilePortConfig(
-  ardunnoContext: ArdunnoContextImpl,
+  boardlabContext: BoardLabContextImpl,
   doc: vscode.TextDocument,
   ydoc: any,
   profileName: string
@@ -181,7 +181,7 @@ async function validateProfilePortConfig(
 
   let settings: MonitorPortSettingDescriptor[] = []
   try {
-    settings = await ardunnoContext.getPortSettingsForProtocol(protocol, fqbn)
+    settings = await boardlabContext.getPortSettingsForProtocol(protocol, fqbn)
   } catch (err) {
     // If enumeration fails, surface a generic warning and skip details
     diags.push(
@@ -302,7 +302,7 @@ async function validateProfilePlatforms(
             : `Platform '${id}' not found in any known index`,
           vscode.DiagnosticSeverity.Error
         )
-        diag.source = 'ardunno'
+        diag.source = 'boardlab'
         if (indexUrl) {
           // If the profile provides a custom index URL, surface a quick fix
           // that opens the Arduino CLI configuration so the user can add it
@@ -317,7 +317,7 @@ async function validateProfilePlatforms(
             `Platform '${id}' has no release '${version}'`,
             vscode.DiagnosticSeverity.Error
           )
-          diag.source = 'ardunno'
+          diag.source = 'boardlab'
           // Quick fixes: use installed/latest/select version for this platform.
           diag.code = 'invalidPlatformVersion'
           diags.push(diag)
@@ -330,7 +330,7 @@ async function validateProfilePlatforms(
               `Platform '${label}' [${id}] version '${version}' is not installed`,
               vscode.DiagnosticSeverity.Warning
             )
-            diag.source = 'ardunno'
+            diag.source = 'boardlab'
             diag.code = 'missingPlatformVersion'
             diags.push(diag)
           } else {
@@ -339,7 +339,7 @@ async function validateProfilePlatforms(
               `Platform '${label}' [${id}] installed '${installed}' but profile requires '${version}'`,
               vscode.DiagnosticSeverity.Warning
             )
-            diag.source = 'ardunno'
+            diag.source = 'boardlab'
             diag.code = 'missingPlatformVersion'
             diags.push(diag)
           }
@@ -351,7 +351,7 @@ async function validateProfilePlatforms(
             `Platform '${label}' [${id}] is not installed`,
             vscode.DiagnosticSeverity.Warning
           )
-          diag.source = 'ardunno'
+          diag.source = 'boardlab'
           diag.code = 'missingPlatform'
           diags.push(diag)
         }
@@ -366,7 +366,7 @@ async function validateProfilePlatforms(
           `Invalid platform_index_url scheme: ${indexUrl}`,
           vscode.DiagnosticSeverity.Error
         )
-        diag.source = 'ardunno'
+        diag.source = 'boardlab'
         diags.push(diag)
       }
     }
@@ -408,7 +408,7 @@ async function validateProfileLibraries(
             `Library dir is not a directory: ${raw}`,
             vscode.DiagnosticSeverity.Warning
           )
-          diag.source = 'ardunno'
+          diag.source = 'boardlab'
           diags.push(diag)
         }
       } catch {
@@ -417,7 +417,7 @@ async function validateProfileLibraries(
           `Library dir not found: ${raw}`,
           vscode.DiagnosticSeverity.Warning
         )
-        diag.source = 'ardunno'
+        diag.source = 'boardlab'
         diags.push(diag)
       }
     } else if (item && Object.prototype.hasOwnProperty.call(item, 'value')) {
@@ -431,7 +431,7 @@ async function validateProfileLibraries(
           `Invalid library directive: ${str}`,
           vscode.DiagnosticSeverity.Error
         )
-        diag.source = 'ardunno'
+        diag.source = 'boardlab'
         // Quick fixes: normalize to "Name (version)" using installed/latest/picked version.
         diag.code = 'invalidLibraryDirective'
         diags.push(diag)
@@ -446,7 +446,7 @@ async function validateProfileLibraries(
               `Library '${name}' not found`,
               vscode.DiagnosticSeverity.Error
             )
-            diag.source = 'ardunno'
+            diag.source = 'boardlab'
             diags.push(diag)
           } else {
             const versions = match.availableVersions
@@ -456,7 +456,7 @@ async function validateProfileLibraries(
                 `Library '${name}' has no release '${ver}'`,
                 vscode.DiagnosticSeverity.Error
               )
-              diag.source = 'ardunno'
+              diag.source = 'boardlab'
               // Quick fixes: use installed/latest/select version
               diag.code = 'invalidLibraryVersion'
               diags.push(diag)
@@ -467,7 +467,7 @@ async function validateProfileLibraries(
                 `Library '${label}' version '${ver}' is not installed`,
                 vscode.DiagnosticSeverity.Warning
               )
-              diag.source = 'ardunno'
+              diag.source = 'boardlab'
               diag.code = 'missingLibrary'
               diags.push(diag)
             } else if (match.installedVersion !== ver) {
@@ -477,7 +477,7 @@ async function validateProfileLibraries(
                 `Library '${label}' installed '${match.installedVersion}' but profile requires '${ver}'`,
                 vscode.DiagnosticSeverity.Warning
               )
-              diag.source = 'ardunno'
+              diag.source = 'boardlab'
               diag.code = 'missingLibrary'
               diags.push(diag)
             }

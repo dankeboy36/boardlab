@@ -1,5 +1,5 @@
 // @ts-check
-import { vscode } from '@vscode-ardunno/base'
+import { vscode } from '@boardlab/base'
 
 const initialState = (() => {
   try {

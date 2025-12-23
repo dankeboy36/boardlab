@@ -1,7 +1,7 @@
 import {
   requestShowWebviewMessage,
   type WebviewMessageLevel,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import { HOST_EXTENSION } from 'vscode-messenger-common'
 
 import { vscode } from './vscode'

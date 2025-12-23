@@ -6,7 +6,7 @@ import { FQBN } from 'fqbn'
 import vscode from 'vscode'
 import { SketchFolder } from 'vscode-arduino-api'
 
-import { ArdunnoContextImpl } from '../ardunnoContext'
+import { BoardLabContextImpl } from '../boardlabContext'
 import { getSelectedConfigValue, isBoardDetails } from '../boards'
 import { portProtocolIcon } from '../ports'
 import { type TaskKind } from '../taskTracker'
@@ -25,23 +25,23 @@ export class CurrentSketchView implements vscode.Disposable {
   private readonly treeDataProvider: CurrentSketchViewDataProvider
   private readonly treeView: vscode.TreeView<vscode.TreeItem>
 
-  constructor(ardunnoContext: ArdunnoContextImpl) {
+  constructor(boardlabContext: BoardLabContextImpl) {
     this._disposable = []
-    this.treeDataProvider = new CurrentSketchViewDataProvider(ardunnoContext)
-    this.treeView = vscode.window.createTreeView('ardunno.currentSketch', {
+    this.treeDataProvider = new CurrentSketchViewDataProvider(boardlabContext)
+    this.treeView = vscode.window.createTreeView('boardlab.currentSketch', {
       treeDataProvider: this.treeDataProvider,
       showCollapseAll: true,
     })
     const updateDescription = () => {
-      const activeProfileName = ardunnoContext.getActiveProfileForUri(
-        ardunnoContext.currentSketch
+      const activeProfileName = boardlabContext.getActiveProfileForUri(
+        boardlabContext.currentSketch
       )
       this.treeView.description = activeProfileName ?? ''
     }
     const updateTitle = () => {
       this.treeView.title = `Current Sketch • ${
-        ardunnoContext.currentSketch?.sketchPath
-          ? path.basename(ardunnoContext.currentSketch?.sketchPath)
+        boardlabContext.currentSketch?.sketchPath
+          ? path.basename(boardlabContext.currentSketch?.sketchPath)
           : 'No sketch selected'
       }`
     }
@@ -49,11 +49,11 @@ export class CurrentSketchView implements vscode.Disposable {
     this._disposable.push(
       this.treeView,
       this.treeDataProvider,
-      ardunnoContext.onDidChangeCurrentSketch(() => {
+      boardlabContext.onDidChangeCurrentSketch(() => {
         updateTitle()
         updateDescription()
       }),
-      ardunnoContext.onDidChangeActiveProfile(() => {
+      boardlabContext.onDidChangeActiveProfile(() => {
         updateDescription()
       })
     )
@@ -91,19 +91,19 @@ class CurrentSketchViewDataProvider
   private readonly toDispose: vscode.Disposable[]
   private profileWatcher: vscode.Disposable | undefined
 
-  constructor(private readonly ardunnoContext: ArdunnoContextImpl) {
+  constructor(private readonly boardlabContext: BoardLabContextImpl) {
     this._onDidChange = new vscode.EventEmitter()
     this.toDispose = [
       this._onDidChange,
-      ardunnoContext.sketchbooks.onDidChangeResolvedSketches(() =>
+      boardlabContext.sketchbooks.onDidChangeResolvedSketches(() =>
         this._onDidChange.fire()
       ),
-      ardunnoContext.onDidChangeCurrentSketch(() => {
+      boardlabContext.onDidChangeCurrentSketch(() => {
         this.updateProfileWatcher()
         this._onDidChange.fire()
       }),
-      ardunnoContext.onDidChangeSketch(() => this._onDidChange.fire()),
-      ardunnoContext.onDidChangeActiveProfile(() => this._onDidChange.fire()),
+      boardlabContext.onDidChangeSketch(() => this._onDidChange.fire()),
+      boardlabContext.onDidChangeActiveProfile(() => this._onDidChange.fire()),
       vscode.workspace.onDidCreateFiles((event) =>
         this.onFilesChanged(event.files)
       ),
@@ -136,7 +136,7 @@ class CurrentSketchViewDataProvider
 
   getChildren(element?: TreeItem | undefined): TreeItem[] | undefined {
     if (!element) {
-      const currentSketch = this.ardunnoContext.currentSketch
+      const currentSketch = this.boardlabContext.currentSketch
       if (currentSketch) {
         const items: TreeItem[] = [
           new BoardTreeItem(currentSketch, currentSketch.board),
@@ -157,7 +157,7 @@ class CurrentSketchViewDataProvider
           new BuildAndUploadTasksRootItem(currentSketch),
           new ToolsRootItem(
             currentSketch,
-            this.ardunnoContext.getActiveProfileForUri(currentSketch)
+            this.boardlabContext.getActiveProfileForUri(currentSketch)
           ),
           new MaintenanceTasksRootItem(currentSketch)
         )
@@ -179,7 +179,7 @@ class CurrentSketchViewDataProvider
     this.profileWatcher?.dispose()
     this.profileWatcher = undefined
 
-    const currentSketch = this.ardunnoContext.currentSketch
+    const currentSketch = this.boardlabContext.currentSketch
     if (!currentSketch) {
       return
     }
@@ -197,7 +197,7 @@ class CurrentSketchViewDataProvider
   }
 
   private onFilesChanged(uris: readonly vscode.Uri[]): void {
-    const currentSketch = this.ardunnoContext.currentSketch
+    const currentSketch = this.boardlabContext.currentSketch
     if (!currentSketch) {
       return
     }
@@ -241,7 +241,7 @@ class ToolsRootItem extends TreeItem {
       new TaskItem(
         sketch,
         'Open Monitor',
-        'ardunno.openMonitor',
+        'boardlab.openMonitor',
         'terminal',
         'Open the serial monitor for the selected port.',
         'tool'
@@ -249,7 +249,7 @@ class ToolsRootItem extends TreeItem {
       new TaskItem(
         sketch,
         'Open Plotter',
-        'ardunno.plotter.focus',
+        'boardlab.plotter.focus',
         'graph-line',
         'Open the plotter for the selected port.',
         'tool'
@@ -260,8 +260,8 @@ class ToolsRootItem extends TreeItem {
       sketch,
       profileExists ? 'Open Profiles' : 'Create Profile',
       profileExists
-        ? 'ardunno.profiles.openSketchProfile'
-        : 'ardunno.profiles.createSketchProfile',
+        ? 'boardlab.profiles.openSketchProfile'
+        : 'boardlab.profiles.createSketchProfile',
       'account',
       profileExists
         ? 'Open the sketch.yaml profile for this sketch.'
@@ -288,7 +288,7 @@ class BuildAndUploadTasksRootItem extends TreeItem {
       new TaskItem(
         sketch,
         'Compile',
-        'ardunno.compile',
+        'boardlab.compile',
         'check',
         'Compile the current sketch.',
         'task'
@@ -296,7 +296,7 @@ class BuildAndUploadTasksRootItem extends TreeItem {
       new TaskItem(
         sketch,
         'Upload',
-        'ardunno.upload',
+        'boardlab.upload',
         'arrow-right',
         'Upload the current sketch to the selected board and port.',
         'task'
@@ -304,7 +304,7 @@ class BuildAndUploadTasksRootItem extends TreeItem {
       new TaskItem(
         sketch,
         'Upload Using Programmer',
-        'ardunno.uploadUsingProgrammer',
+        'boardlab.uploadUsingProgrammer',
         'server-process',
         'Upload the current sketch using the selected programmer.',
         'task'
@@ -312,7 +312,7 @@ class BuildAndUploadTasksRootItem extends TreeItem {
       new TaskItem(
         sketch,
         'Export Compiled Binary',
-        'ardunno.exportBinary',
+        'boardlab.exportBinary',
         'file-binary',
         'Build and export the compiled binary for this sketch.',
         'task'
@@ -334,7 +334,7 @@ class MaintenanceTasksRootItem extends TreeItem {
       new TaskItem(
         sketch,
         'Burn Bootloader',
-        'ardunno.burnBootloader',
+        'boardlab.burnBootloader',
         'flame',
         'Burn the bootloader on the selected board.',
         'task'
@@ -342,7 +342,7 @@ class MaintenanceTasksRootItem extends TreeItem {
       new TaskItem(
         sketch,
         'Get Board Info',
-        'ardunno.getBoardInfo',
+        'boardlab.getBoardInfo',
         'info',
         'Show detailed information about the selected board.',
         'task'
@@ -350,7 +350,7 @@ class MaintenanceTasksRootItem extends TreeItem {
       new TaskItem(
         sketch,
         'Archive Sketch',
-        'ardunno.archiveSketch',
+        'boardlab.archiveSketch',
         'file-zip',
         'Archive the current sketch folder.',
         'task'
@@ -401,8 +401,8 @@ class TaskItem extends TreeItem {
       this.portKey = portKey
     }
     if (
-      commandId === 'ardunno.uploadUsingProgrammer' ||
-      commandId === 'ardunno.burnBootloader'
+      commandId === 'boardlab.uploadUsingProgrammer' ||
+      commandId === 'boardlab.burnBootloader'
     ) {
       const selectedProgrammer = sketch.selectedProgrammer
       const programmerId =
@@ -426,7 +426,7 @@ class TaskItem extends TreeItem {
 
     // Task: wire via meta-command so we can enforce concurrency and track status.
     this.command = {
-      command: 'ardunno.task.runFromTree',
+      command: 'boardlab.task.runFromTree',
       title: label,
       arguments: [
         {
@@ -477,19 +477,19 @@ class TaskItem extends TreeItem {
 
 function toTaskKind(commandId: string): TaskKind | undefined {
   switch (commandId) {
-    case 'ardunno.compile':
+    case 'boardlab.compile':
       return 'compile'
-    case 'ardunno.upload':
+    case 'boardlab.upload':
       return 'upload'
-    case 'ardunno.uploadUsingProgrammer':
+    case 'boardlab.uploadUsingProgrammer':
       return 'upload-using-programmer'
-    case 'ardunno.exportBinary':
+    case 'boardlab.exportBinary':
       return 'export-binary'
-    case 'ardunno.burnBootloader':
+    case 'boardlab.burnBootloader':
       return 'burn-bootloader'
-    case 'ardunno.getBoardInfo':
+    case 'boardlab.getBoardInfo':
       return 'get-board-info'
-    case 'ardunno.archiveSketch':
+    case 'boardlab.archiveSketch':
       return 'archive-sketch'
     default:
       return undefined
@@ -579,7 +579,7 @@ export class ConfigOptionItem extends TreeItem {
         ? 'dirtyConfigOption'
         : 'configOption'
     this.command = {
-      command: 'ardunno.selectConfigOption',
+      command: 'boardlab.selectConfigOption',
       title: `Select Config Value for ${optionLabel}`,
       arguments: [this],
       tooltip: `Select Config Value for ${optionLabel}`,

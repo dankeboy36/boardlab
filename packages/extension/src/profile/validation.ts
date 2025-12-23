@@ -25,7 +25,7 @@ export function validateProfilesYAML(
       err.message,
       vscode.DiagnosticSeverity.Error
     )
-    diag.source = 'ardunno'
+    diag.source = 'boardlab'
     diagnostics.push(diag)
   }
   try {
@@ -47,7 +47,7 @@ export function validateProfilesYAML(
       if (options?.code !== undefined) {
         diag.code = options.code
       }
-      diag.source = 'ardunno'
+      diag.source = 'boardlab'
       collected.push(diag)
     }
     const activeRules = rules && rules.length ? rules : defaultProfilesRules
@@ -278,7 +278,7 @@ function platformsVersionConsistencyVisitor(
   }
   if (hasVersion && hasNoVersion) {
     const profileName = typeof ev.path[1] === 'string' ? ev.path[1] : undefined
-    const baseCode = 'ardunno.profiles.clearPlatformVersions'
+    const baseCode = 'boardlab.profiles.clearPlatformVersions'
     const code =
       profileName && profileName.length
         ? `${baseCode}:${profileName}`

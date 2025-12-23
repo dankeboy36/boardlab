@@ -1,17 +1,17 @@
 // @ts-check
 import { useEffect, useRef, useState } from 'react'
 
-import { useCodiconStylesheet, vscode } from '@vscode-ardunno/base'
-import { usePortinoClientSync } from '@vscode-ardunno/monitor-shared/hooks'
+import { useCodiconStylesheet, vscode } from '@boardlab/base'
+import { useMonitorClientSync } from '@boardlab/monitor-shared/hooks'
 import {
   MonitorProvider,
   MonitorSendBar,
-} from '@vscode-ardunno/monitor-shared/serial-monitor'
+} from '@boardlab/monitor-shared/serial-monitor'
 import {
   notifyMonitorLineEndingChanged,
   notifyMonitorThemeChanged,
   notifyMonitorToolbarAction,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import { applyNonce } from '../../utils/csp.js'
 import TerminalPanel from '../terminal/TerminalPanel.jsx'
 import Shell from './Shell.jsx'
@@ -34,7 +34,7 @@ function App() {
     }
   }, [])
 
-  const { client } = usePortinoClientSync()
+  const { client } = useMonitorClientSync()
   const terminalPanelRef = useRef(
     /**
      * @type {import('../terminal/TerminalPanel.jsx').TerminalPanelHandle

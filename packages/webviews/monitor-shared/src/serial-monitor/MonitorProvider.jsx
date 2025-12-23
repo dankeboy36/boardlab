@@ -1,9 +1,9 @@
 // @ts-check
-import { vscode } from '@vscode-ardunno/base'
+import { vscode } from '@boardlab/base'
 import {
   getMonitorSelection,
   notifyMonitorSelectionChanged,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import { createPortKey } from 'boards-list'
 import {
   createContext,
@@ -61,7 +61,7 @@ const MonitorContext = createContext(
  * Provides the monitor connection lifecycle and shared stream events.
  *
  * @param {{
- *   client: import('./client.js').PortinoClient
+ *   client: import('./client.js').MonitorClient
  *   children: import('react').ReactNode
  * }} props
  */

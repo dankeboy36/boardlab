@@ -1,9 +1,9 @@
-import type { Store } from '@vscode-ardunno/base'
+import type { Store } from '@boardlab/base'
 import type {
   Resource,
   Resources,
   SearchFilterParams,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import React, { createContext } from 'react'
 import type { Messenger } from 'vscode-messenger-webview'
 

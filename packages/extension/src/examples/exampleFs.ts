@@ -4,7 +4,7 @@ import * as vscode from 'vscode'
 
 import type { ExampleLocator } from './examplesIndex'
 
-export const EXAMPLE_SCHEME = 'ardunno-example'
+export const EXAMPLE_SCHEME = 'boardlab-example'
 
 export function buildExampleUri(
   exampleId: string,
@@ -17,7 +17,7 @@ export function buildExampleUri(
   })
 }
 
-export class ArdunnoExampleFs implements vscode.FileSystemProvider {
+export class BoardLabExampleFs implements vscode.FileSystemProvider {
   private readonly _onDidChangeFile = new vscode.EventEmitter<
     vscode.FileChangeEvent[]
   >()

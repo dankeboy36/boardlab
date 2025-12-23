@@ -11,7 +11,7 @@ export class SketchbookView implements vscode.Disposable {
     this._disposable = []
     this.treeDataProvider = new SketchbookDataProvider(context, sketchbooks)
     this._disposable.push(
-      vscode.window.createTreeView('ardunno.sketchbook', {
+      vscode.window.createTreeView('boardlab.sketchbook', {
         treeDataProvider: this.treeDataProvider,
         showCollapseAll: true,
       })

@@ -3,7 +3,7 @@ import * as path from 'node:path'
 import {
   getSelectedBoard,
   notifyDidChangeSelectedBoard,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import {
   IndexUpdateReport,
   // eslint-disable-next-line camelcase
@@ -110,7 +110,7 @@ const arduinoCliConfigMapping: Record<
   locale: 'locale',
 }
 
-export interface ArdunnoContext extends ArduinoContext {
+export interface BoardLabContext extends ArduinoContext {
   readonly cliContext: CliContext
   readonly sketchbooks: Sketchbooks
   readonly client: Promise<Client>
@@ -122,19 +122,19 @@ export interface ArdunnoContext extends ArduinoContext {
   readonly extensionUri: vscode.Uri
 }
 
-export function createArdunnoContext(
+export function createBoardLabContext(
   context: vscode.ExtensionContext,
   messenger: Messenger,
   start = true
-): ArdunnoContextImpl {
-  const ardunnoContext = new ArdunnoContextImpl(context, messenger)
+): BoardLabContextImpl {
+  const boardlabContext = new BoardLabContextImpl(context, messenger)
   if (start) {
-    ardunnoContext.cliContext.daemon.start()
+    boardlabContext.cliContext.daemon.start()
   }
-  return ardunnoContext
+  return boardlabContext
 }
 
-export class ArdunnoContextImpl implements ArdunnoContext {
+export class BoardLabContextImpl implements BoardLabContext {
   readonly cliContext: CliContext
   readonly sketchbooks: Sketchbooks
   revealSketch: (sketch: Sketch | SketchFolder) => Promise<void> = async () => {
@@ -258,12 +258,12 @@ export class ArdunnoContextImpl implements ArdunnoContext {
     this.platformsManager = new PlatformsManager(
       this,
       messenger,
-      'ardunno.platformsManager'
+      'boardlab.platformsManager'
     )
     this.librariesManager = new LibrariesManager(
       this,
       messenger,
-      'ardunno.librariesManager'
+      'boardlab.librariesManager'
     )
     this.monitorManager = new MonitorManager(
       context,
@@ -335,11 +335,11 @@ export class ArdunnoContextImpl implements ArdunnoContext {
       this.monitorsRegistry,
       this.boardsListWatcher,
       this._onDidChangeActiveProfile,
-      vscode.commands.registerCommand('ardunno.selectSketch', () =>
+      vscode.commands.registerCommand('boardlab.selectSketch', () =>
         this.selectSketch()
       ),
       vscode.commands.registerCommand(
-        'ardunno.openMainSketchFile',
+        'boardlab.openMainSketchFile',
         async () => {
           const sketchFolder = this.currentSketch ?? (await this.selectSketch())
           if (!sketchFolder) {
@@ -352,24 +352,24 @@ export class ArdunnoContextImpl implements ArdunnoContext {
           return vscode.window.showTextDocument(mainSketchFileUri)
         }
       ),
-      vscode.commands.registerCommand('ardunno.selectBoard', (params) => {
+      vscode.commands.registerCommand('boardlab.selectBoard', (params) => {
         const sketch = hasSketchFolder(params) ? params.sketch : undefined
         return this.selectBoard(sketch)
       }),
-      vscode.commands.registerCommand('ardunno.selectPort', (params) => {
+      vscode.commands.registerCommand('boardlab.selectPort', (params) => {
         const sketch = hasSketchFolder(params) ? params.sketch : undefined
         return this.selectPort(sketch)
       }),
-      vscode.commands.registerCommand('ardunno.configureBoard', (params) => {
+      vscode.commands.registerCommand('boardlab.configureBoard', (params) => {
         const sketch = hasSketchFolder(params) ? params.sketch : undefined
         return this.configureBoard(sketch)
       }),
-      vscode.commands.registerCommand('ardunno.selectProgrammer', (params) => {
+      vscode.commands.registerCommand('boardlab.selectProgrammer', (params) => {
         const sketch = hasSketchFolder(params) ? params.sketch : undefined
         return this.selectProgrammer(sketch)
       }),
       vscode.commands.registerCommand(
-        'ardunno.selectConfigOption',
+        'boardlab.selectConfigOption',
         (params) => {
           if (typeof params === 'string') {
             return this.selectConfigOption(params)
@@ -384,7 +384,7 @@ export class ArdunnoContextImpl implements ArdunnoContext {
           }
         }
       ),
-      vscode.commands.registerCommand('ardunno.resetConfigOption', (params) => {
+      vscode.commands.registerCommand('boardlab.resetConfigOption', (params) => {
         if (
           params instanceof ConfigOptionItem &&
           params.sketch instanceof SketchFolderImpl &&
@@ -398,13 +398,13 @@ export class ArdunnoContextImpl implements ArdunnoContext {
           )
         }
       }),
-      vscode.commands.registerCommand('ardunno.pickSketch', () =>
+      vscode.commands.registerCommand('boardlab.pickSketch', () =>
         pickSketch(this.sketchbooks, this.pinnedSketches, this.recentSketches)
       ),
-      vscode.commands.registerCommand('ardunno.pickBoard', () =>
+      vscode.commands.registerCommand('boardlab.pickBoard', () =>
         this.pickBoard()
       ),
-      vscode.commands.registerCommand('ardunno.pickPort', () =>
+      vscode.commands.registerCommand('boardlab.pickPort', () =>
         this.pickPort()
       ),
       vscode.window.onDidChangeActiveTextEditor((editor) =>
@@ -1127,7 +1127,7 @@ export class ArdunnoContextImpl implements ArdunnoContext {
     // TODO: move this somewhere else
     this.messenger.sendNotification(
       notifyDidChangeSelectedBoard,
-      { type: 'webview', webviewType: 'ardunno.examples' },
+      { type: 'webview', webviewType: 'boardlab.examples' },
       board
     )
 

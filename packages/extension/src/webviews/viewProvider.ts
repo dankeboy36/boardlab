@@ -9,7 +9,7 @@ import {
   type LineEnding,
   type MonitorToolbarAction,
   type PlotterToolbarAction,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import * as vscode from 'vscode'
 import type { Messenger } from 'vscode-messenger'
 
@@ -207,7 +207,7 @@ export class ExamplesViewProvider extends WebviewViewProvider {
     try {
       this.messenger.sendNotification(
         notifyExamplesToolbarAction,
-        { type: 'webview', webviewType: 'arduinoExamples' },
+        { type: 'webview', webviewType: 'boardlabExamples' },
         { action }
       )
     } catch (error) {
@@ -244,7 +244,7 @@ export class MonitorViewProvider extends WebviewViewProvider {
   async reveal(preserveFocus = false): Promise<void> {
     if (!this.currentView) {
       await vscode.commands.executeCommand(
-        'workbench.view.extension.ardunnoMonitor'
+        'workbench.view.extension.boardlabMonitor'
       )
       if (!this.currentView) {
         await new Promise<void>((resolve) => {
@@ -273,7 +273,7 @@ export class MonitorViewProvider extends WebviewViewProvider {
     try {
       this.messenger.sendNotification(
         notifyMonitorToolbarAction,
-        { type: 'webview', webviewType: 'ardunno.monitor' },
+        { type: 'webview', webviewType: 'boardlab.monitor' },
         { action }
       )
     } catch (error) {
@@ -282,7 +282,7 @@ export class MonitorViewProvider extends WebviewViewProvider {
   }
 
   pushLineEnding(): void {
-    const config = vscode.workspace.getConfiguration('ardunno.monitor')
+    const config = vscode.workspace.getConfiguration('boardlab.monitor')
     const lineEnding = config.get<LineEnding>('lineEnding', 'crlf')
     if (!this.messenger || !this.currentView) {
       return
@@ -290,7 +290,7 @@ export class MonitorViewProvider extends WebviewViewProvider {
     try {
       this.messenger.sendNotification(
         notifyMonitorLineEndingChanged,
-        { type: 'webview', webviewType: 'ardunno.monitor' },
+        { type: 'webview', webviewType: 'boardlab.monitor' },
         { lineEnding }
       )
     } catch (error) {
@@ -305,7 +305,7 @@ export class MonitorViewProvider extends WebviewViewProvider {
     try {
       this.messenger.sendNotification(
         notifyMonitorThemeChanged,
-        { type: 'webview', webviewType: 'ardunno.monitor' },
+        { type: 'webview', webviewType: 'boardlab.monitor' },
         undefined
       )
     } catch (error) {
@@ -341,7 +341,7 @@ export class PlotterViewProvider extends WebviewViewProvider {
   async reveal(preserveFocus = false): Promise<void> {
     if (!this.currentView) {
       await vscode.commands.executeCommand(
-        'workbench.view.extension.ardunnoPlotter'
+        'workbench.view.extension.boardlabPlotter'
       )
       if (!this.currentView) {
         await new Promise<void>((resolve) => {
@@ -370,7 +370,7 @@ export class PlotterViewProvider extends WebviewViewProvider {
     try {
       this.messenger.sendNotification(
         notifyPlotterToolbarAction,
-        { type: 'webview', webviewType: 'ardunno.plotter' },
+        { type: 'webview', webviewType: 'boardlab.plotter' },
         { action }
       )
     } catch (error) {
@@ -379,7 +379,7 @@ export class PlotterViewProvider extends WebviewViewProvider {
   }
 
   pushLineEnding(): void {
-    const config = vscode.workspace.getConfiguration('ardunno.monitor')
+    const config = vscode.workspace.getConfiguration('boardlab.monitor')
     const lineEnding = config.get<LineEnding>('lineEnding', 'crlf')
     if (!this.messenger || !this.currentView) {
       return
@@ -387,7 +387,7 @@ export class PlotterViewProvider extends WebviewViewProvider {
     try {
       this.messenger.sendNotification(
         notifyPlotterLineEndingChanged,
-        { type: 'webview', webviewType: 'ardunno.plotter' },
+        { type: 'webview', webviewType: 'boardlab.plotter' },
         { lineEnding }
       )
     } catch (error) {

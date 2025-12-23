@@ -5,7 +5,7 @@ import {
   Libraries,
   Library,
   UninstallEventParams,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 
 export function createLibrariesMock(): Libraries {
   const _busyResources = new Set<string>()

@@ -30,7 +30,7 @@ import { startDaemon } from './startDaemon.js'
  *   fqbn?: import('fqbn').FQBN
  * }} params
  * @param {(
- *   event: import('@vscode-ardunno/protocol').DidChangeBaudrateNotification
+ *   event: import('@boardlab/protocol').DidChangeBaudrateNotification
  * ) => void} onDidChangeBaudrate
  * @returns {Promise<import('./monitor.js').PortinoMonitor>}
  */
@@ -53,7 +53,7 @@ import { startDaemon } from './startDaemon.js'
  * @param {import('boards-list').PortIdentifier} port
  * @param {string} baudrate
  * @param {(
- *   event: import('@vscode-ardunno/protocol').DidChangeBaudrateNotification
+ *   event: import('@boardlab/protocol').DidChangeBaudrateNotification
  * ) => void} onDidChangeBaudrate
  * @returns {Promise<void>}
  */
@@ -69,10 +69,10 @@ import { startDaemon } from './startDaemon.js'
  * @param {import('boards-list').PortIdentifier} port
  * @param {() => Promise<import('boards-list').PortIdentifier | undefined>} task
  * @param {(
- *   event: import('@vscode-ardunno/protocol').DidPauseMonitorNotification
+ *   event: import('@boardlab/protocol').DidPauseMonitorNotification
  * ) => void} onDidPauseMonitor
  * @param {(
- *   event: import('@vscode-ardunno/protocol').DidResumeMonitorNotification
+ *   event: import('@boardlab/protocol').DidResumeMonitorNotification
  * ) => void} onDidResumeMonitor
  * @returns {Promise<void>}
  */
@@ -371,7 +371,7 @@ export class DaemonCliBridge {
    * @param {import('boards-list').PortIdentifier} port
    * @param {string} baudrate
    * @param {(
-   *   event: import('@vscode-ardunno/protocol').DidChangeBaudrateNotification
+   *   event: import('@boardlab/protocol').DidChangeBaudrateNotification
    * ) => void} onDidChangeBaudrate
    */
   async _maybeUpdateBaudrate(monitorRef, port, baudrate, onDidChangeBaudrate) {

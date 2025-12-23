@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 
-import type { ArdunnoContextImpl } from '../ardunnoContext'
+import type { BoardLabContextImpl } from '../boardlabContext'
 import { ProfilesEditorProvider } from '../editors/profilesEditor'
 import { collectCliDiagnostics } from './cliDiagnostics'
 import { validateProfilesYAML } from './validation'
@@ -18,7 +18,7 @@ export function registerProfilesYamlValidation(
   context: vscode.ExtensionContext,
   profilesEditor: ProfilesEditorProvider,
   collection: vscode.DiagnosticCollection,
-  ardunnoContext?: ArdunnoContextImpl
+  boardlabContext?: BoardLabContextImpl
 ): vscode.Disposable {
   const validateDoc = (doc: vscode.TextDocument): void => {
     if (!isSketchYaml(doc)) return
@@ -27,8 +27,8 @@ export function registerProfilesYamlValidation(
     const text = doc.getText()
     const baseDiagnostics = validateProfilesYAML(text, doc)
     collection.set(doc.uri, baseDiagnostics)
-    if (ardunnoContext) {
-      collectCliDiagnostics(ardunnoContext, doc, text).then(
+    if (boardlabContext) {
+      collectCliDiagnostics(boardlabContext, doc, text).then(
         (cliDiags) => {
           if (!cliDiags) return
           collection.set(doc.uri, [...baseDiagnostics, ...cliDiags])

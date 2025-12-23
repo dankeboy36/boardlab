@@ -1,16 +1,16 @@
 // @ts-check
 import { useEffect, useRef, useState } from 'react'
 
-import { useCodiconStylesheet, vscode } from '@vscode-ardunno/base'
-import { usePortinoClientSync } from '@vscode-ardunno/monitor-shared/hooks'
+import { useCodiconStylesheet, vscode } from '@boardlab/base'
+import { useMonitorClientSync } from '@boardlab/monitor-shared/hooks'
 import {
   MonitorProvider,
   MonitorSendBar,
-} from '@vscode-ardunno/monitor-shared/serial-monitor'
+} from '@boardlab/monitor-shared/serial-monitor'
 import {
   notifyPlotterLineEndingChanged,
   notifyPlotterToolbarAction,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import { applyNonce } from '../../utils/csp.js'
 import PlotterPanel from '../plotter/PlotterPanel.jsx'
 import Shell from './Shell.jsx'
@@ -31,7 +31,7 @@ function App() {
     }
   }, [])
 
-  const { client } = usePortinoClientSync()
+  const { client } = useMonitorClientSync()
   const plotterPanelRef = useRef(
     /**
      * @type {import('../plotter/PlotterPanel.jsx').PlotterPanelHandle

@@ -26,7 +26,7 @@ import {
   type HostConnectClientResult,
   type MonitorBridgeInfo,
   type MonitorSettingsByProtocol,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import type { DetectedPorts, PortIdentifier } from 'boards-list'
 import { createPortKey } from 'boards-list'
 import * as vscode from 'vscode'
@@ -41,10 +41,10 @@ interface BridgeClientOptions {
 }
 
 /**
- * Maintains a JSON-RPC connection to the Portino bridge on behalf of the
+ * Maintains a JSON-RPC connection to the BoardLab monitor bridge on behalf of the
  * extension host.
  */
-export class PortinoBridgeClient implements vscode.Disposable {
+export class MonitorBridgeClient implements vscode.Disposable {
   private connection: MessageConnection | undefined
   private connectionPromise: Promise<void> | undefined
   private connectionDisposables: Disposable[] = []
@@ -128,7 +128,7 @@ export class PortinoBridgeClient implements vscode.Disposable {
   ): Promise<HostConnectClientResult> {
     await this.ensureConnection()
     if (!this.lastConnectResult) {
-      throw new Error('Portino bridge snapshot unavailable')
+      throw new Error('BoardLab monitor bridge snapshot unavailable')
     }
     return {
       detectedPorts: this.currentDetectedPorts,
@@ -196,7 +196,7 @@ export class PortinoBridgeClient implements vscode.Disposable {
     if (this.connectionPromise) {
       await this.connectionPromise
       if (!this.connection) {
-        throw new Error('Failed to establish Portino bridge connection')
+        throw new Error('Failed to establish BoardLab monitor bridge connection')
       }
       return this.connection
     }
@@ -208,7 +208,7 @@ export class PortinoBridgeClient implements vscode.Disposable {
       this.connectionPromise = undefined
     }
     if (!this.connection) {
-      throw new Error('Failed to establish Portino bridge connection')
+      throw new Error('Failed to establish BoardLab monitor bridge connection')
     }
     return this.connection
   }
@@ -309,9 +309,9 @@ export class PortinoBridgeClient implements vscode.Disposable {
 
   private handleConnectionLost(error?: unknown) {
     if (error) {
-      console.warn('[PortinoBridgeClient] connection lost', error)
+      console.warn('[MonitorBridgeClient] connection lost', error)
     } else {
-      console.warn('[PortinoBridgeClient] connection closed')
+      console.warn('[MonitorBridgeClient] connection closed')
     }
     this.disposeConnection()
     if (this.reconnectTimer) {
@@ -320,7 +320,7 @@ export class PortinoBridgeClient implements vscode.Disposable {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = undefined
       this.ensureConnection().catch((err) => {
-        console.error('[PortinoBridgeClient] reconnect failed', err)
+        console.error('[MonitorBridgeClient] reconnect failed', err)
       })
     }, 1_000)
   }

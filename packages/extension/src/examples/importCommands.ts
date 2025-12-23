@@ -15,7 +15,7 @@ export function registerExampleCommands(
 ): void {
   ctx.subscriptions.push(
     vscode.commands.registerCommand(
-      'arduino.examples.openPreview',
+      'boardlab.examples.openPreview',
       async (uri: vscode.Uri) => {
         await vscode.window.showTextDocument(uri, {
           preview: true,
@@ -29,7 +29,7 @@ export function registerExampleCommands(
     ),
 
     vscode.commands.registerCommand(
-      'arduino.examples.importToWorkspace',
+      'boardlab.examples.importToWorkspace',
       async (target?: vscode.Uri) => {
         const context = resolveContext(target, locateExampleById)
         if (!context) {
@@ -63,7 +63,7 @@ export function registerExampleCommands(
     ),
 
     vscode.commands.registerCommand(
-      'arduino.examples.openTemp',
+      'boardlab.examples.openTemp',
       async (target?: vscode.Uri) => {
         const context = resolveContext(target, locateExampleById)
         if (!context) {

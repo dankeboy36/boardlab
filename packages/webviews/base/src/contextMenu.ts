@@ -1,4 +1,4 @@
-import type { VscodeDataContextParams } from '@vscode-ardunno/protocol'
+import type { VscodeDataContextParams } from '@boardlab/protocol'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 
 export const preventDefaultContextMenuItems = {

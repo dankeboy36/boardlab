@@ -89,7 +89,7 @@ export const profilesListDiagnostics: RequestType<
   ProfilesListDiagnosticsParams,
   readonly ProfileDiagnostic[]
 > = {
-  method: 'ardunno.profiles.diagnostics.list',
+  method: 'boardlab.profiles.diagnostics.list',
 }
 
 export interface ProfilesRevealRangeParams extends ProfilesDocumentParams {
@@ -101,7 +101,7 @@ export interface ProfilesRevealRangeParams extends ProfilesDocumentParams {
 
 export const profilesRevealRange: RequestType<ProfilesRevealRangeParams, void> =
   {
-    method: 'ardunno.profiles.revealRange',
+    method: 'boardlab.profiles.revealRange',
   }
 
 // --- Quick fixes (webview + text editor) ---
@@ -135,7 +135,7 @@ export const profilesListQuickFixes: RequestType<
   ProfilesListQuickFixesParams,
   readonly ProfilesQuickFixDescriptor[]
 > = {
-  method: 'ardunno.profiles.quickFixes.list',
+  method: 'boardlab.profiles.quickFixes.list',
 }
 
 export interface ProfilesApplyQuickFixByIdParams
@@ -148,7 +148,7 @@ export const profilesApplyQuickFixById: RequestType<
   ProfilesApplyQuickFixByIdParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.quickFixes.apply',
+  method: 'boardlab.profiles.quickFixes.apply',
 }
 
 // --- Quick fixes ---
@@ -269,77 +269,77 @@ export const listProfiles: RequestType<
   ProfilesDocumentParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.list',
+  method: 'boardlab.profiles.list',
 }
 
 export const createProfile: RequestType<
   CreateProfileParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.create',
+  method: 'boardlab.profiles.create',
 }
 
 export const updateProfile: RequestType<
   UpdateProfileParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.update',
+  method: 'boardlab.profiles.update',
 }
 
 export const deleteProfile: RequestType<
   DeleteProfileParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.delete',
+  method: 'boardlab.profiles.delete',
 }
 
 export const selectProfile: RequestType<
   SelectProfileParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.select',
+  method: 'boardlab.profiles.select',
 }
 
 export const addLibrary: RequestType<
   ModifyLibraryParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.library.add',
+  method: 'boardlab.profiles.library.add',
 }
 
 export const removeLibrary: RequestType<
   ModifyLibraryParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.library.remove',
+  method: 'boardlab.profiles.library.remove',
 }
 
 export const addPlatform: RequestType<
   ModifyPlatformParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.platform.add',
+  method: 'boardlab.profiles.platform.add',
 }
 
 export const removePlatform: RequestType<
   ModifyPlatformParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.platform.remove',
+  method: 'boardlab.profiles.platform.remove',
 }
 
 export const profilesResolveBoardDetails: RequestType<
   ProfilesResolveBoardDetailsParams,
   BoardDescriptor | undefined
 > = {
-  method: 'ardunno.profiles.board.resolve',
+  method: 'boardlab.profiles.board.resolve',
 }
 
 export const profilesPickBoard: RequestType<
   ProfilesPickBoardParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.board.pick',
+  method: 'boardlab.profiles.board.pick',
 }
 
 // Draft (creation) pickers that do not mutate the document
@@ -360,74 +360,74 @@ export const profilesPickPlatformForCreation: RequestType<
   ProfilesPickPlatformForCreationParams,
   ProfilePlatformDescriptor | undefined
 > = {
-  method: 'ardunno.profiles.platform.pickForCreation',
+  method: 'boardlab.profiles.platform.pickForCreation',
 }
 export const profilesPickLibraryForCreation: RequestType<
   ProfilesPickLibraryForCreationParams,
   ProfileLibraryDescriptor | undefined
 > = {
-  method: 'ardunno.profiles.library.pickForCreation',
+  method: 'boardlab.profiles.library.pickForCreation',
 }
 export const profilesPickPlatformVersionForCreation: RequestType<
   ProfilesPickPlatformVersionForCreationParams,
   string | undefined
 > = {
-  method: 'ardunno.profiles.platform.pickVersionForCreation',
+  method: 'boardlab.profiles.platform.pickVersionForCreation',
 }
 export const profilesPickLibraryVersionForCreation: RequestType<
   ProfilesPickLibraryVersionForCreationParams,
   string | undefined
 > = {
-  method: 'ardunno.profiles.library.pickVersionForCreation',
+  method: 'boardlab.profiles.library.pickVersionForCreation',
 }
 
 export const profilesSelectBoardConfigOption: RequestType<
   ProfilesSelectBoardConfigOptionParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.board.config.select',
+  method: 'boardlab.profiles.board.config.select',
 }
 
 export const profilesResetBoardConfigOption: RequestType<
   ProfilesResetBoardConfigOptionParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.board.config.reset',
+  method: 'boardlab.profiles.board.config.reset',
 }
 
 export const profilesAddPortConfig: RequestType<
   ProfilesAddPortConfigParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.port.config.add',
+  method: 'boardlab.profiles.port.config.add',
 }
 
 export const profilesPickPortConfigForCreation: RequestType<
   ProfilesPickPortConfigForCreationParams,
   PickPortConfigForCreationResult | undefined
 > = {
-  method: 'ardunno.profiles.port.config.pickForCreation',
+  method: 'boardlab.profiles.port.config.pickForCreation',
 }
 
 export const profilesRemovePortConfig: RequestType<
   ProfilesRemovePortConfigParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.port.config.remove',
+  method: 'boardlab.profiles.port.config.remove',
 }
 
 export const profilesPickPortConfigValue: RequestType<
   ProfilesPickPortConfigValueParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.port.config.pickValue',
+  method: 'boardlab.profiles.port.config.pickValue',
 }
 
 export const profilesPickPortConfigValueForCreation: RequestType<
   ProfilesPickPortConfigValueForCreationParams,
   string | undefined
 > = {
-  method: 'ardunno.profiles.port.config.pickValueForCreation',
+  method: 'boardlab.profiles.port.config.pickValueForCreation',
 }
 
 // Resolve human-friendly labels for port config keys (by profile)
@@ -441,28 +441,28 @@ export const profilesResolvePortConfigLabels: RequestType<
   ProfilesResolvePortConfigLabelsParams,
   PortConfigLabels
 > = {
-  method: 'ardunno.profiles.port.config.resolveLabels',
+  method: 'boardlab.profiles.port.config.resolveLabels',
 }
 
 export const profilesSelectProgrammer: RequestType<
   ProfilesSelectProgrammerParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.programmer.select',
+  method: 'boardlab.profiles.programmer.select',
 }
 
 export const profilesSelectPort: RequestType<
   ProfilesSelectPortParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.port.select',
+  method: 'boardlab.profiles.port.select',
 }
 
 export const profilesCreateProfileInteractive: RequestType<
   ProfilesCreateProfileInteractiveParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.createInteractive',
+  method: 'boardlab.profiles.createInteractive',
 }
 
 export interface ProfilesPickPlatformParams extends ProfilesDocumentParams {
@@ -481,21 +481,21 @@ export const profilesPickPlatform: RequestType<
   ProfilesPickPlatformParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.platform.pick',
+  method: 'boardlab.profiles.platform.pick',
 }
 
 export const profilesPickLibrary: RequestType<
   ProfilesPickLibraryParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.library.pick',
+  method: 'boardlab.profiles.library.pick',
 }
 
 export const profilesRenameProfile: RequestType<
   ProfilesRenameProfileParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.rename',
+  method: 'boardlab.profiles.rename',
 }
 
 // Pick and update version for existing entries
@@ -523,7 +523,7 @@ export const profilesPickLibraryVersion: RequestType<
   ProfilesPickLibraryVersionParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.library.pickVersion',
+  method: 'boardlab.profiles.library.pickVersion',
 }
 
 // --- Draft (creation) config/programmer/port pickers ---
@@ -560,42 +560,42 @@ export const profilesPickBoardConfigOptionForCreation: RequestType<
   ProfilesPickBoardConfigOptionForCreationParams,
   PickBoardConfigForCreationResult | undefined
 > = {
-  method: 'ardunno.profiles.board.config.pickForCreation',
+  method: 'boardlab.profiles.board.config.pickForCreation',
 }
 
 export const profilesResetBoardConfigOptionForCreation: RequestType<
   ProfilesResetBoardConfigOptionForCreationParams,
   PickBoardConfigForCreationResult | undefined
 > = {
-  method: 'ardunno.profiles.board.config.resetForCreation',
+  method: 'boardlab.profiles.board.config.resetForCreation',
 }
 
 export const profilesPickProgrammerForCreation: RequestType<
   ProfilesPickProgrammerForCreationParams,
   PickProgrammerForCreationResult | undefined
 > = {
-  method: 'ardunno.profiles.programmer.pickForCreation',
+  method: 'boardlab.profiles.programmer.pickForCreation',
 }
 
 export const profilesPickPortForCreation: RequestType<
   ProfilesPickPortForCreationParams,
   PickPortForCreationResult | undefined
 > = {
-  method: 'ardunno.profiles.port.pickForCreation',
+  method: 'boardlab.profiles.port.pickForCreation',
 }
 
 export const profilesPickPlatformVersion: RequestType<
   ProfilesPickPlatformVersionParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.platform.pickVersion',
+  method: 'boardlab.profiles.platform.pickVersion',
 }
 
 export const profilesPickPlatformIndexUrl: RequestType<
   ProfilesPickPlatformIndexUrlParams,
   ProfilesDocumentState
 > = {
-  method: 'ardunno.profiles.platform.pickIndexUrl',
+  method: 'boardlab.profiles.platform.pickIndexUrl',
 }
 
 // Resolve human-friendly platform name for a platform id (vendor:arch)
@@ -611,7 +611,7 @@ export const profilesResolvePlatformName: RequestType<
   ProfilesResolvePlatformNameParams,
   PlatformNameInfo | undefined
 > = {
-  method: 'ardunno.profiles.platform.resolveName',
+  method: 'boardlab.profiles.platform.resolveName',
 }
 
 export interface PickBoardForCreationParams extends ProfilesDocumentParams {}
@@ -620,21 +620,21 @@ export const pickBoardForCreation: RequestType<
   PickBoardForCreationParams,
   BoardDescriptor | undefined
 > = {
-  method: 'ardunno.profiles.board.pickForCreation',
+  method: 'boardlab.profiles.board.pickForCreation',
 }
 
 export const notifyProfilesChanged: NotificationType<ProfilesDocumentState> = {
-  method: 'ardunno.profiles.changed',
+  method: 'boardlab.profiles.changed',
 }
 
 // --- Profiles detected ports (from boards list watcher) ---
 export const profilesRequestDetectedPorts: RequestType<void, DetectedPorts> = {
-  method: 'ardunno.profiles.detectedPorts',
+  method: 'boardlab.profiles.detectedPorts',
 }
 
 export const notifyProfilesDetectedPortsChanged: NotificationType<DetectedPorts> =
   {
-    method: 'ardunno.profiles.detectedPorts.changed',
+    method: 'boardlab.profiles.detectedPorts.changed',
   }
 
 // Request/notify active profile
@@ -642,18 +642,18 @@ export const profilesGetActiveProfile: RequestType<
   ProfilesGetActiveParams,
   string | undefined
 > = {
-  method: 'ardunno.profiles.active.get',
+  method: 'boardlab.profiles.active.get',
 }
 
 export const profilesSetActiveProfile: RequestType<
   ProfilesSetActiveParams,
   void
 > = {
-  method: 'ardunno.profiles.active.set',
+  method: 'boardlab.profiles.active.set',
 }
 
 export const notifyProfilesActiveProfileChanged: NotificationType<
   Readonly<{ uri: string; name?: string }>
 > = {
-  method: 'ardunno.profiles.active.changed',
+  method: 'boardlab.profiles.active.changed',
 }

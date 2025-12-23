@@ -1,7 +1,7 @@
 import {
   notifyMonitorSelectionChanged,
   type MonitorSelectionNotification,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import { createPortKey, type PortIdentifier } from 'boards-list'
 import * as vscode from 'vscode'
 import { Messenger } from 'vscode-messenger'

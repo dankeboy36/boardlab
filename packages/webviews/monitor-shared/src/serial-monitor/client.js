@@ -11,7 +11,7 @@ import {
   requestMonitorDetectedPorts,
   requestMonitorSendMessage,
   requestMonitorUpdateBaudrate,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import { nanoid } from 'nanoid'
 import defer from 'p-defer'
 import { CancellationTokenImpl, HOST_EXTENSION } from 'vscode-messenger-common'
@@ -61,7 +61,7 @@ class MessengerControlTransport {
 
   /**
    * @returns {import('@c4312/evt').Event<
-   *   import('@vscode-ardunno/protocol').MonitorSettingsByProtocol
+   *   import('@boardlab/protocol').MonitorSettingsByProtocol
    * >}
    */
   get onDidChangeMonitorSettings() {
@@ -70,7 +70,7 @@ class MessengerControlTransport {
 
   /**
    * @returns {import('@c4312/evt').Event<
-   *   import('@vscode-ardunno/protocol').DidChangeBaudrateNotification
+   *   import('@boardlab/protocol').DidChangeBaudrateNotification
    * >}
    */
   get onDidChangeBaudrate() {
@@ -79,7 +79,7 @@ class MessengerControlTransport {
 
   /**
    * @returns {import('@c4312/evt').Event<
-   *   import('@vscode-ardunno/protocol').DidPauseMonitorNotification
+   *   import('@boardlab/protocol').DidPauseMonitorNotification
    * >}
    */
   get onDidPauseMonitor() {
@@ -88,7 +88,7 @@ class MessengerControlTransport {
 
   /**
    * @returns {import('@c4312/evt').Event<
-   *   import('@vscode-ardunno/protocol').DidResumeMonitorNotification
+   *   import('@boardlab/protocol').DidResumeMonitorNotification
    * >}
    */
   get onDidResumeMonitor() {
@@ -141,7 +141,7 @@ class MessengerControlTransport {
   }
 
   /**
-   * @param {import('@vscode-ardunno/protocol').RequestUpdateBaudrateParams} params
+   * @param {import('@boardlab/protocol').RequestUpdateBaudrateParams} params
    * @param {{ signal?: AbortSignal }} [options]
    */
   async updateBaudrate(params, options = {}) {
@@ -164,7 +164,7 @@ class MessengerControlTransport {
   }
 
   /**
-   * @param {import('@vscode-ardunno/protocol').RequestSendMonitorMessageParams} params
+   * @param {import('@boardlab/protocol').RequestSendMonitorMessageParams} params
    * @param {{ signal?: AbortSignal }} [options]
    */
   async sendMonitorMessage(params, options = {}) {
@@ -191,7 +191,7 @@ class MessengerControlTransport {
         this._disposables.pop()?.dispose()
       } catch (error) {
         console.error(
-          '[PortinoClient] dispose messenger transport failed',
+          '[MonitorClient] dispose messenger transport failed',
           error
         )
       }
@@ -199,7 +199,7 @@ class MessengerControlTransport {
   }
 }
 
-export class PortinoClient {
+export class MonitorClient {
   /**
    * @param {{
    *   messenger: import('vscode-messenger-webview').Messenger
@@ -243,7 +243,7 @@ export class PortinoClient {
 
     /**
      * @type {import('p-defer').DeferredPromise<
-     *       import('@vscode-ardunno/protocol').HostConnectClientResult
+     *       import('@boardlab/protocol').HostConnectClientResult
      *     >
      *   | undefined}
      */
@@ -269,7 +269,7 @@ export class PortinoClient {
 
   /**
    * @returns {import('@c4312/evt').Event<
-   *   import('@vscode-ardunno/protocol').DidPauseMonitorNotification
+   *   import('@boardlab/protocol').DidPauseMonitorNotification
    * >}
    */
   get onDidPauseMonitor() {
@@ -278,7 +278,7 @@ export class PortinoClient {
 
   /**
    * @returns {import('@c4312/evt').Event<
-   *   import('@vscode-ardunno/protocol').DidResumeMonitorNotification
+   *   import('@boardlab/protocol').DidResumeMonitorNotification
    * >}
    */
   get onDidResumeMonitor() {
@@ -287,7 +287,7 @@ export class PortinoClient {
 
   /**
    * @returns {import('@c4312/evt').Event<
-   *   import('@vscode-ardunno/protocol').MonitorSettingsByProtocol
+   *   import('@boardlab/protocol').MonitorSettingsByProtocol
    * >}
    */
   get onDidChangeMonitorSettings() {
@@ -301,7 +301,7 @@ export class PortinoClient {
 
   /**
    * @returns {import('@c4312/evt').Event<
-   *   import('@vscode-ardunno/protocol').DidChangeBaudrateNotification
+   *   import('@boardlab/protocol').DidChangeBaudrateNotification
    * >}
    */
   get onDidChangeBaudrate() {
@@ -309,7 +309,7 @@ export class PortinoClient {
   }
 
   /**
-   * @param {import('@vscode-ardunno/protocol').RequestUpdateBaudrateParams} params
+   * @param {import('@boardlab/protocol').RequestUpdateBaudrateParams} params
    * @param {{ signal?: AbortSignal }} [options]
    */
   async updateBaudrate(params, options = {}) {
@@ -317,7 +317,7 @@ export class PortinoClient {
   }
 
   /**
-   * @param {import('@vscode-ardunno/protocol').RequestSendMonitorMessageParams} params
+   * @param {import('@boardlab/protocol').RequestSendMonitorMessageParams} params
    * @param {{ signal?: AbortSignal }} [options]
    */
   async sendMonitorMessage(params, options) {
@@ -341,7 +341,7 @@ export class PortinoClient {
       try {
         this._transportDisposables.pop()?.dispose()
       } catch (error) {
-        console.error('Failed to dispose Portino client listener', error)
+        console.error('Failed to dispose monitor client listener', error)
       }
     }
     this._transport.dispose()
@@ -458,22 +458,22 @@ export class PortinoClient {
     this._didChangeDetectedPorts.fire(detectedPorts)
   }
 
-  /** @param {import('@vscode-ardunno/protocol').MonitorSettingsByProtocol} payload */
+  /** @param {import('@boardlab/protocol').MonitorSettingsByProtocol} payload */
   _fireDidChangeMonitorSettings(payload) {
     this._didChangeMonitorSettings.fire(payload)
   }
 
-  /** @param {import('@vscode-ardunno/protocol').DidChangeBaudrateNotification} payload */
+  /** @param {import('@boardlab/protocol').DidChangeBaudrateNotification} payload */
   _fireDidChangeBaudrate(payload) {
     this._didChangeBaudrate.fire(payload)
   }
 
-  /** @param {import('@vscode-ardunno/protocol').DidPauseMonitorNotification} payload */
+  /** @param {import('@boardlab/protocol').DidPauseMonitorNotification} payload */
   _fireDidPauseMonitor(payload) {
     this._didPauseMonitor.fire(payload)
   }
 
-  /** @param {import('@vscode-ardunno/protocol').DidResumeMonitorNotification} payload */
+  /** @param {import('@boardlab/protocol').DidResumeMonitorNotification} payload */
   _fireDidResumeMonitor(payload) {
     this._didResumeMonitor.fire(payload)
   }

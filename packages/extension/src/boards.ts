@@ -51,7 +51,7 @@ const removeButton = inputButton('discard', 'Remove from history')
 type PickBoardResult = BoardIdentifier | BoardsListItemWithBoard
 
 function isPlatform(arg: unknown): arg is Required<Platform> {
-  // TODO: https://github.com/dankeboy36/ardunno-cli/issues/4
+  // TODO: https://github.com/dankeboy36/boardlab-cli/issues/4
   return (
     typeof arg === 'object' &&
     arg !== null &&

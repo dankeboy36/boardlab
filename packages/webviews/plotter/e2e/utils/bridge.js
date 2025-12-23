@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
 
-export const { createServer } = require('@vscode-ardunno/portino-bridge/server')
+export const { createServer } = require('@boardlab/portino-bridge/server')
 export const {
   MockCliBridge,
-} = require('@vscode-ardunno/portino-bridge/mockCliBridge')
+} = require('@boardlab/portino-bridge/mockCliBridge')

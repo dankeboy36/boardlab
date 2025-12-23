@@ -16,7 +16,7 @@ import {
   RequestResumeMonitor,
   RequestSendMonitorMessage,
   RequestUpdateBaudrate,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import { Port } from 'ardunno-cli'
 import { createPortKey } from 'boards-list'
 import cors from 'cors'
@@ -155,9 +155,7 @@ export async function createServer(options = {}) {
   /**
    * Builds a snapshot of monitor settings for all known protocols.
    *
-   * @returns {Promise<
-   *   import('@vscode-ardunno/protocol').MonitorSettingsByProtocol
-   * >}
+   * @returns {Promise<import('@boardlab/protocol').MonitorSettingsByProtocol>}
    */
   async function buildMonitorSettingsSnapshot() {
     const protocols = Array.from(knownProtocols)
@@ -427,7 +425,7 @@ export async function createServer(options = {}) {
    * @type {(
    *   predicate?: (portinoConnection: PortinoConnection) => boolean
    * ) => (
-   *   event: import('@vscode-ardunno/protocol').DidChangeBaudrateNotification
+   *   event: import('@boardlab/protocol').DidChangeBaudrateNotification
    * ) => void}
    */
   const createNotifyDidChangeBaudrateCallback = (predicate) => {
@@ -997,7 +995,7 @@ export async function createServer(options = {}) {
         const detectedPorts = watcher.state
         const runningMonitors = Array.from(runningMonitorsByKey.values())
 
-        /** @type {import('@vscode-ardunno/protocol').HostConnectClientResult} */
+        /** @type {import('@boardlab/protocol').HostConnectClientResult} */
         const result = {
           detectedPorts,
           monitorSettingsByProtocol,

@@ -1,5 +1,5 @@
 {
-  "name": "@vscode-ardunno/portino-bridge",
+  "name": "@boardlab/portino-bridge",
   "version": "0.0.0",
   "type": "commonjs",
   "exports": {
@@ -36,7 +36,7 @@
     "clean": "rimraf out"
   },
   "dependencies": {
-    "@vscode-ardunno/protocol": "file:../../protocol",
+    "@boardlab/protocol": "file:../../protocol",
     "ardunno-cli": "^0.1.12",
     "boards-list": "^1.1.0",
     "cors": "^2.8.5",

@@ -7,7 +7,7 @@ import type {
 } from '../resourcesManager'
 import { buildClearPlatformVersionsEdit } from './quickFixes'
 
-const CLEAR_PLATFORMS_CODE = 'ardunno.profiles.clearPlatformVersions'
+const CLEAR_PLATFORMS_CODE = 'boardlab.profiles.clearPlatformVersions'
 const MISSING_PLATFORM_CODE = 'missingPlatform'
 const MISSING_PLATFORM_VERSION_CODE = 'missingPlatformVersion'
 const MISSING_PLATFORM_INDEX_CODE = 'missingPlatformIndexUrl'
@@ -69,7 +69,7 @@ export async function computeProfilesQuickFixPlans(
     plans.push({
       kind: 'command',
       title,
-      command: 'ardunno.profiles.installPlatform',
+      command: 'boardlab.profiles.installPlatform',
       args: [{ id }],
     })
     return plans
@@ -102,7 +102,7 @@ export async function computeProfilesQuickFixPlans(
     plans.push({
       kind: 'command',
       title: installTitle,
-      command: 'ardunno.profiles.installPlatform',
+      command: 'boardlab.profiles.installPlatform',
       args: [{ id, version: requested }],
     })
 
@@ -128,7 +128,7 @@ export async function computeProfilesQuickFixPlans(
     plans.push({
       kind: 'command',
       title,
-      command: 'ardunno.addAdditionalPackageIndexUrlToArduinoCliConfig',
+      command: 'boardlab.addAdditionalPackageIndexUrlToArduinoCliConfig',
       args: [{ url }],
     })
     return plans
@@ -168,7 +168,7 @@ export async function computeProfilesQuickFixPlans(
     plans.push({
       kind: 'command',
       title,
-      command: 'ardunno.profiles.installLibrary',
+      command: 'boardlab.profiles.installLibrary',
       args: [{ id: name, version }],
     })
 
@@ -232,7 +232,7 @@ export async function computeProfilesQuickFixPlans(
     plans.push({
       kind: 'command',
       title: pickTitle,
-      command: 'ardunno.profiles.selectPlatformVersionForProfile',
+      command: 'boardlab.profiles.selectPlatformVersionForProfile',
       args: [
         {
           uri: document.uri.toString(),
@@ -290,7 +290,7 @@ export async function computeProfilesQuickFixPlans(
     plans.push({
       kind: 'command',
       title: pickTitle,
-      command: 'ardunno.profiles.selectLibraryVersionForProfile',
+      command: 'boardlab.profiles.selectLibraryVersionForProfile',
       args: [
         {
           uri: document.uri.toString(),
@@ -349,7 +349,7 @@ export async function computeProfilesQuickFixPlans(
     plans.push({
       kind: 'command',
       title: pickTitle,
-      command: 'ardunno.profiles.selectLibraryVersionForProfile',
+      command: 'boardlab.profiles.selectLibraryVersionForProfile',
       args: [
         {
           uri: document.uri.toString(),
@@ -447,7 +447,7 @@ export class ProfilesCodeActionProvider implements vscode.CodeActionProvider {
           vscode.CodeActionKind.QuickFix
         )
         action.command = {
-          command: 'ardunno.profiles.installPlatform',
+          command: 'boardlab.profiles.installPlatform',
           title,
           arguments: [{ id }],
         }
@@ -486,7 +486,7 @@ export class ProfilesCodeActionProvider implements vscode.CodeActionProvider {
           vscode.CodeActionKind.QuickFix
         )
         installAction.command = {
-          command: 'ardunno.profiles.installPlatform',
+          command: 'boardlab.profiles.installPlatform',
           title: installTitle,
           arguments: [{ id, version: requested }],
         }
@@ -523,7 +523,7 @@ export class ProfilesCodeActionProvider implements vscode.CodeActionProvider {
           continue
         }
         action.command = {
-          command: 'ardunno.addAdditionalPackageIndexUrlToArduinoCliConfig',
+          command: 'boardlab.addAdditionalPackageIndexUrlToArduinoCliConfig',
           title,
           arguments: [{ url }],
         }
@@ -589,7 +589,7 @@ export class ProfilesCodeActionProvider implements vscode.CodeActionProvider {
           vscode.CodeActionKind.QuickFix
         )
         pickAction.command = {
-          command: 'ardunno.profiles.selectPlatformVersionForProfile',
+          command: 'boardlab.profiles.selectPlatformVersionForProfile',
           title: pickTitle,
           arguments: [
             {
@@ -642,7 +642,7 @@ export class ProfilesCodeActionProvider implements vscode.CodeActionProvider {
           vscode.CodeActionKind.QuickFix
         )
         installAction.command = {
-          command: 'ardunno.profiles.installLibrary',
+          command: 'boardlab.profiles.installLibrary',
           title,
           arguments: [{ id: name, version }],
         }
@@ -720,7 +720,7 @@ export class ProfilesCodeActionProvider implements vscode.CodeActionProvider {
           vscode.CodeActionKind.QuickFix
         )
         pickAction.command = {
-          command: 'ardunno.profiles.selectLibraryVersionForProfile',
+          command: 'boardlab.profiles.selectLibraryVersionForProfile',
           title: pickTitle,
           arguments: [
             {
@@ -791,7 +791,7 @@ export class ProfilesCodeActionProvider implements vscode.CodeActionProvider {
           vscode.CodeActionKind.QuickFix
         )
         pickAction.command = {
-          command: 'ardunno.profiles.selectLibraryVersionForProfile',
+          command: 'boardlab.profiles.selectLibraryVersionForProfile',
           title: pickTitle,
           arguments: [
             {

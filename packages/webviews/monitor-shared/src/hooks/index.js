@@ -1,2 +1,2 @@
-export { usePortinoClient } from './usePortinoClient.js'
-export { usePortinoClientSync } from './usePortinoClientSync.js'
+export { useMonitorClient } from './useMonitorClient.js'
+export { useMonitorClientSync } from './useMonitorClientSync.js'

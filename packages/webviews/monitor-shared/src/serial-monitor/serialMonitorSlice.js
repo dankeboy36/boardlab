@@ -18,7 +18,7 @@ import { createBoardsList, createPortKey } from 'boards-list'
 /**
  * @typedef {Object} SharedSerialMonitorState
  * @property {string[]} supportedBaudrates
- * @property {import('@vscode-ardunno/protocol').MonitorSettingsByProtocol} monitorSettingsByProtocol
+ * @property {import('@boardlab/protocol').MonitorSettingsByProtocol} monitorSettingsByProtocol
  * @property {[port: import('boards-list').PortIdentifier, baudrate: string][]} selectedBaudrates
  * @property {import('boards-list').DetectedPorts} detectedPorts
  * @property {ReadonlyArray<
@@ -35,7 +35,7 @@ import { createBoardsList, createPortKey } from 'boards-list'
 /**
  * @typedef {Object} ConnectAction
  * @property {'CONNECT'} type
- * @property {import('@vscode-ardunno/protocol').HostConnectClientResult} payload
+ * @property {import('@boardlab/protocol').HostConnectClientResult} payload
  */
 
 /**
@@ -301,7 +301,7 @@ const serialMonitorSlice = createSlice({
     /**
      * @param {SerialMonitorState} state
      * @param {{
-     *   payload: import('@vscode-ardunno/protocol').DidPauseMonitorNotification
+     *   payload: import('@boardlab/protocol').DidPauseMonitorNotification
      * }} action
      */
     pauseMonitor(state, action) {
@@ -334,7 +334,7 @@ const serialMonitorSlice = createSlice({
     /**
      * @param {SerialMonitorState} state
      * @param {{
-     *   payload: import('@vscode-ardunno/protocol').DidResumeMonitorNotification
+     *   payload: import('@boardlab/protocol').DidResumeMonitorNotification
      * }} action
      */
     resumeMonitor(state, action) {
@@ -445,7 +445,7 @@ function computeSupportedBaudrates(state) {
 }
 
 /**
- * @param {import('@vscode-ardunno/protocol').MonitorSettingsByProtocol} monitorSettingsByProtocol
+ * @param {import('@boardlab/protocol').MonitorSettingsByProtocol} monitorSettingsByProtocol
  * @param {string} protocol
  * @returns {{ values: string[]; default?: string } | undefined}
  */

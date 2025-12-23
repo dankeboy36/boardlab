@@ -1,8 +1,8 @@
 {
-  "name": "@vscode-ardunno/profiles",
+  "name": "@boardlab/profiles",
   "version": "0.0.0",
   "private": true,
-  "description": "Profiles editor webview for ardunno",
+  "description": "Profiles editor webview for BoardLab",
   "license": "MIT",
   "author": "dankeboy36",
   "scripts": {
@@ -12,8 +12,8 @@
     "reset": "rimraf build node_modules"
   },
   "dependencies": {
-    "@vscode-ardunno/base": "0.0.0",
-    "@vscode-ardunno/protocol": "0.0.0",
+    "@boardlab/base": "0.0.0",
+    "@boardlab/protocol": "0.0.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "vscode-elements-x": "^0.1.3",

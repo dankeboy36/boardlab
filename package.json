@@ -1,17 +1,29 @@
 {
-  "name": "vscode-ardunno",
-  "displayName": "ardunno",
+  "name": "boardlab",
+  "displayName": "BoardLab",
   "version": "0.0.1-beta.1",
-  "description": "Unofficial Arduino extension for VS Code",
+  "description": "Vendor-independent board development in VS Code, powered by the Arduino CLI.",
   "categories": [
+    "Programming Languages",
     "Other"
   ],
+  "keywords": [
+    "arduino",
+    "embedded",
+    "microcontroller",
+    "boards",
+    "firmware",
+    "serial",
+    "monitor"
+  ],
+  "publisher": "dankeboy36",
   "bugs": {
-    "url": "https://github.com/dankeboy36/vscode-ardunno/issues"
+    "url": "https://github.com/dankeboy36/boardlab/issues"
   },
+  "homepage": "https://github.com/dankeboy36/boardlab",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dankeboy36/vscode-ardunno.git"
+    "url": "git+https://github.com/dankeboy36/boardlab.git"
   },
   "license": "MIT",
   "author": "dankeboy36",
@@ -49,530 +61,530 @@
   "contributes": {
     "commands": [
       {
-        "command": "ardunno.openArduinoCliConfig",
+        "command": "boardlab.openArduinoCliConfig",
         "title": "Open Arduino CLI Configuration",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.addAdditionalPackageIndexUrlToArduinoCliConfig",
+        "command": "boardlab.addAdditionalPackageIndexUrlToArduinoCliConfig",
         "title": "Add Additional Package Index URL to Arduino CLI config",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.selectSketch",
+        "command": "boardlab.selectSketch",
         "title": "Select Sketch",
         "icon": "$(file-submodule)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.openMainSketchFile",
+        "command": "boardlab.openMainSketchFile",
         "title": "Open Main Sketch File",
         "icon": "$(go-to-file)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.configureCurrentSketch",
+        "command": "boardlab.configureCurrentSketch",
         "title": "Configure Current Sketch",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.compile",
+        "command": "boardlab.compile",
         "title": "Compile Sketch",
         "icon": "$(check)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.upload",
+        "command": "boardlab.upload",
         "title": "Upload Sketch",
         "icon": "$(arrow-right)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.uploadUsingProgrammer",
+        "command": "boardlab.uploadUsingProgrammer",
         "title": "Upload Using Programmer",
         "icon": "$(server-process)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.exportBinary",
+        "command": "boardlab.exportBinary",
         "title": "Export Compiled Binary",
         "icon": "$(file-binary)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.openMonitor",
+        "command": "boardlab.openMonitor",
         "title": "Open Monitor",
         "icon": "$(terminal)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.burnBootloader",
+        "command": "boardlab.burnBootloader",
         "title": "Burn Bootloader",
         "icon": "$(flame)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.getBoardInfo",
+        "command": "boardlab.getBoardInfo",
         "title": "Get Board Info",
         "icon": "$(info)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.archiveSketch",
+        "command": "boardlab.archiveSketch",
         "title": "Archive Sketch",
         "icon": "$(file-zip)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.extensions.searchBoardLab",
+        "command": "boardlab.extensions.searchBoardLab",
         "title": "Search Marketplace for BoardLab Extensions",
         "icon": "$(extensions)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.tool.runFromTree",
+        "command": "boardlab.tool.runFromTree",
         "title": "Open Resource",
         "icon": "$(go-to-file)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.task.runFromTree",
+        "command": "boardlab.task.runFromTree",
         "title": "Run Sketch Task",
         "icon": "$(play)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.task.stopFromTree",
+        "command": "boardlab.task.stopFromTree",
         "title": "Stop Sketch Task",
         "icon": "$(debug-stop)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.tool.runFromTree",
+        "command": "boardlab.tool.runFromTree",
         "title": "Open Resource",
         "icon": "$(go-to-file)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.addSketchFolderToWorkspace",
+        "command": "boardlab.addSketchFolderToWorkspace",
         "title": "Add Sketch Folder to Workspace",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.selectBoard",
+        "command": "boardlab.selectBoard",
         "title": "Select Board",
         "icon": "$(pencil)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.selectPort",
+        "command": "boardlab.selectPort",
         "title": "Select Port",
         "icon": "$(pencil)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.configureBoard",
+        "command": "boardlab.configureBoard",
         "title": "Configure Board",
         "icon": "$(pencil)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.selectProgrammer",
+        "command": "boardlab.selectProgrammer",
         "title": "Select Programmer",
         "icon": "$(pencil)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.selectConfigOption",
+        "command": "boardlab.selectConfigOption",
         "title": "Select Config Option",
         "icon": "$(pencil)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.resetConfigOption",
+        "command": "boardlab.resetConfigOption",
         "title": "Reset Config Option to Default",
         "icon": "$(discard)",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.openCommandCenter",
+        "command": "boardlab.openCommandCenter",
         "title": "Open Command Center",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.monitor.focus",
+        "command": "boardlab.monitor.focus",
         "title": "Open Monitor",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.monitor.copyAll",
+        "command": "boardlab.monitor.copyAll",
         "title": "Copy Output",
-        "category": "ardunno",
+        "category": "BoardLab",
         "icon": "$(clippy)"
       },
       {
-        "command": "ardunno.monitor.saveToFile",
+        "command": "boardlab.monitor.saveToFile",
         "title": "Save Output",
-        "category": "ardunno",
+        "category": "BoardLab",
         "icon": "$(save)"
       },
       {
-        "command": "ardunno.monitor.clear",
+        "command": "boardlab.monitor.clear",
         "title": "Clear Output",
-        "category": "ardunno",
+        "category": "BoardLab",
         "icon": "$(clear-all)"
       },
       {
-        "command": "ardunno.monitor.toggleScrollLock",
+        "command": "boardlab.monitor.toggleScrollLock",
         "title": "Toggle Scroll Lock",
-        "category": "ardunno",
+        "category": "BoardLab",
         "icon": "$(lock)"
       },
       {
-        "command": "ardunno.monitor.configureLineEnding",
+        "command": "boardlab.monitor.configureLineEnding",
         "title": "Select Line Ending",
-        "category": "ardunno",
+        "category": "BoardLab",
         "icon": "$(whitespace)"
       },
       {
-        "command": "ardunno.monitor.configureBaudrate",
+        "command": "boardlab.monitor.configureBaudrate",
         "title": "Configure Baudrate",
-        "category": "ardunno",
+        "category": "BoardLab",
         "icon": "$(pulse)"
       },
       {
-        "command": "ardunno.plotter.focus",
+        "command": "boardlab.plotter.focus",
         "title": "Open Plotter",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.plotter.clear",
+        "command": "boardlab.plotter.clear",
         "title": "Clear Plot",
-        "category": "ardunno",
+        "category": "BoardLab",
         "icon": "$(clear-all)"
       },
       {
-        "command": "ardunno.plotter.resetYScale",
+        "command": "boardlab.plotter.resetYScale",
         "title": "Reset Y Scale",
-        "category": "ardunno",
+        "category": "BoardLab",
         "icon": "$(refresh)"
       },
       {
-        "command": "ardunno.plotter.configureLineEnding",
+        "command": "boardlab.plotter.configureLineEnding",
         "title": "Select Line Ending",
-        "category": "ardunno",
+        "category": "BoardLab",
         "icon": "$(whitespace)"
       },
       {
-        "command": "arduino.examples.refresh",
+        "command": "boardlab.examples.refresh",
         "title": "Refresh Examples",
-        "category": "ardunno",
+        "category": "BoardLab",
         "icon": "$(refresh)"
       },
       {
-        "command": "arduino.examples.importToWorkspace",
+        "command": "boardlab.examples.importToWorkspace",
         "title": "Import Example to Folder…",
-        "category": "ardunno",
+        "category": "BoardLab",
         "icon": "$(cloud-download)"
       },
       {
-        "command": "arduino.examples.openTemp",
+        "command": "boardlab.examples.openTemp",
         "title": "Open Example in New Window",
-        "category": "ardunno",
+        "category": "BoardLab",
         "icon": "$(new-window)"
       },
       {
-        "command": "arduino.examples.openPreview",
+        "command": "boardlab.examples.openPreview",
         "title": "Open Example Preview",
-        "category": "ardunno",
+        "category": "BoardLab",
         "icon": "$(preview)"
       },
       {
-        "command": "arduino.examples.openReadme",
+        "command": "boardlab.examples.openReadme",
         "title": "Open Library README",
-        "category": "ardunno",
+        "category": "BoardLab",
         "icon": "$(book)"
       },
       {
-        "command": "ardunno.pickSketch",
+        "command": "boardlab.pickSketch",
         "title": "Pick Sketch",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.pickBoard",
+        "command": "boardlab.pickBoard",
         "title": "Pick Board",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.pickPort",
+        "command": "boardlab.pickPort",
         "title": "Pick Port",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.installPlatform",
+        "command": "boardlab.installPlatform",
         "title": "Install",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.installLatestPlatform",
+        "command": "boardlab.installLatestPlatform",
         "title": "Install Latest",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.updatePlatform",
+        "command": "boardlab.updatePlatform",
         "title": "Update",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.uninstallPlatform",
+        "command": "boardlab.uninstallPlatform",
         "title": "Remove",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.installLibrary",
+        "command": "boardlab.installLibrary",
         "title": "Install",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.installLatestLibrary",
+        "command": "boardlab.installLatestLibrary",
         "title": "Install Latest",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.updateLibrary",
+        "command": "boardlab.updateLibrary",
         "title": "Update",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.uninstallLibrary",
+        "command": "boardlab.uninstallLibrary",
         "title": "Remove",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.moreInfo",
+        "command": "boardlab.moreInfo",
         "title": "More Info",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.profiles.setDefault",
+        "command": "boardlab.profiles.setDefault",
         "title": "Set as Default",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.profiles.delete",
+        "command": "boardlab.profiles.delete",
         "title": "Delete Profile",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.profiles.setActive",
+        "command": "boardlab.profiles.setActive",
         "title": "Set as Active",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.profiles.openSketchProfile",
+        "command": "boardlab.profiles.openSketchProfile",
         "title": "Open Sketch Profile",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.profiles.createSketchProfile",
+        "command": "boardlab.profiles.createSketchProfile",
         "title": "Create Sketch Profile",
-        "category": "ardunno"
+        "category": "BoardLab"
       },
       {
-        "command": "ardunno.profiles.openTextEditor",
+        "command": "boardlab.profiles.openTextEditor",
         "title": "Open Sketch Profile (YAML)",
-        "category": "ardunno",
+        "category": "BoardLab",
         "icon": "$(go-to-file)"
       },
       {
-        "command": "ardunno.libraries.filter.type.Updatable",
+        "command": "boardlab.libraries.filter.type.Updatable",
         "title": "Updatable"
       },
       {
-        "command": "ardunno.libraries.filter.type.Updatable.checked",
+        "command": "boardlab.libraries.filter.type.Updatable.checked",
         "title": "✓ Updatable"
       },
       {
-        "command": "ardunno.libraries.filter.type.Installed",
+        "command": "boardlab.libraries.filter.type.Installed",
         "title": "Installed"
       },
       {
-        "command": "ardunno.libraries.filter.type.Installed.checked",
+        "command": "boardlab.libraries.filter.type.Installed.checked",
         "title": "✓ Installed"
       },
       {
-        "command": "ardunno.libraries.filter.type.Arduino",
+        "command": "boardlab.libraries.filter.type.Arduino",
         "title": "Arduino"
       },
       {
-        "command": "ardunno.libraries.filter.type.Arduino.checked",
+        "command": "boardlab.libraries.filter.type.Arduino.checked",
         "title": "✓ Arduino"
       },
       {
-        "command": "ardunno.libraries.filter.type.Partner",
+        "command": "boardlab.libraries.filter.type.Partner",
         "title": "Partner"
       },
       {
-        "command": "ardunno.libraries.filter.type.Partner.checked",
+        "command": "boardlab.libraries.filter.type.Partner.checked",
         "title": "✓ Partner"
       },
       {
-        "command": "ardunno.libraries.filter.type.Recommended",
+        "command": "boardlab.libraries.filter.type.Recommended",
         "title": "Recommended"
       },
       {
-        "command": "ardunno.libraries.filter.type.Recommended.checked",
+        "command": "boardlab.libraries.filter.type.Recommended.checked",
         "title": "✓ Recommended"
       },
       {
-        "command": "ardunno.libraries.filter.type.Contributed",
+        "command": "boardlab.libraries.filter.type.Contributed",
         "title": "Contributed"
       },
       {
-        "command": "ardunno.libraries.filter.type.Contributed.checked",
+        "command": "boardlab.libraries.filter.type.Contributed.checked",
         "title": "✓ Contributed"
       },
       {
-        "command": "ardunno.libraries.filter.type.Retired",
+        "command": "boardlab.libraries.filter.type.Retired",
         "title": "Retired"
       },
       {
-        "command": "ardunno.libraries.filter.type.Retired.checked",
+        "command": "boardlab.libraries.filter.type.Retired.checked",
         "title": "✓ Retired"
       },
       {
-        "command": "ardunno.libraries.filter.topic.Communication",
+        "command": "boardlab.libraries.filter.topic.Communication",
         "title": "Communication"
       },
       {
-        "command": "ardunno.libraries.filter.topic.Communication.checked",
+        "command": "boardlab.libraries.filter.topic.Communication.checked",
         "title": "✓ Communication"
       },
       {
-        "command": "ardunno.libraries.filter.topic.DataProcessing",
+        "command": "boardlab.libraries.filter.topic.DataProcessing",
         "title": "Data Processing"
       },
       {
-        "command": "ardunno.libraries.filter.topic.DataProcessing.checked",
+        "command": "boardlab.libraries.filter.topic.DataProcessing.checked",
         "title": "✓ Data Processing"
       },
       {
-        "command": "ardunno.libraries.filter.topic.DataStorage",
+        "command": "boardlab.libraries.filter.topic.DataStorage",
         "title": "Data Storage"
       },
       {
-        "command": "ardunno.libraries.filter.topic.DataStorage.checked",
+        "command": "boardlab.libraries.filter.topic.DataStorage.checked",
         "title": "✓ Data Storage"
       },
       {
-        "command": "ardunno.libraries.filter.topic.DeviceControl",
+        "command": "boardlab.libraries.filter.topic.DeviceControl",
         "title": "Device Control"
       },
       {
-        "command": "ardunno.libraries.filter.topic.DeviceControl.checked",
+        "command": "boardlab.libraries.filter.topic.DeviceControl.checked",
         "title": "✓ Device Control"
       },
       {
-        "command": "ardunno.libraries.filter.topic.Display",
+        "command": "boardlab.libraries.filter.topic.Display",
         "title": "Display"
       },
       {
-        "command": "ardunno.libraries.filter.topic.Display.checked",
+        "command": "boardlab.libraries.filter.topic.Display.checked",
         "title": "✓ Display"
       },
       {
-        "command": "ardunno.libraries.filter.topic.Other",
+        "command": "boardlab.libraries.filter.topic.Other",
         "title": "Other"
       },
       {
-        "command": "ardunno.libraries.filter.topic.Other.checked",
+        "command": "boardlab.libraries.filter.topic.Other.checked",
         "title": "✓ Other"
       },
       {
-        "command": "ardunno.libraries.filter.topic.Sensors",
+        "command": "boardlab.libraries.filter.topic.Sensors",
         "title": "Sensors"
       },
       {
-        "command": "ardunno.libraries.filter.topic.Sensors.checked",
+        "command": "boardlab.libraries.filter.topic.Sensors.checked",
         "title": "✓ Sensors"
       },
       {
-        "command": "ardunno.libraries.filter.topic.SignalInputOutput",
+        "command": "boardlab.libraries.filter.topic.SignalInputOutput",
         "title": "Signal Input/Output"
       },
       {
-        "command": "ardunno.libraries.filter.topic.SignalInputOutput.checked",
+        "command": "boardlab.libraries.filter.topic.SignalInputOutput.checked",
         "title": "✓ Signal Input/Output"
       },
       {
-        "command": "ardunno.libraries.filter.topic.Timing",
+        "command": "boardlab.libraries.filter.topic.Timing",
         "title": "Timing"
       },
       {
-        "command": "ardunno.libraries.filter.topic.Timing.checked",
+        "command": "boardlab.libraries.filter.topic.Timing.checked",
         "title": "✓ Timing"
       },
       {
-        "command": "ardunno.libraries.filter.topic.Uncategorized",
+        "command": "boardlab.libraries.filter.topic.Uncategorized",
         "title": "Uncategorized"
       },
       {
-        "command": "ardunno.libraries.filter.topic.Uncategorized.checked",
+        "command": "boardlab.libraries.filter.topic.Uncategorized.checked",
         "title": "✓ Uncategorized"
       },
       {
-        "command": "ardunno.platforms.filter.type.Updatable",
+        "command": "boardlab.platforms.filter.type.Updatable",
         "title": "Updatable"
       },
       {
-        "command": "ardunno.platforms.filter.type.Updatable.checked",
+        "command": "boardlab.platforms.filter.type.Updatable.checked",
         "title": "✓ Updatable"
       },
       {
-        "command": "ardunno.platforms.filter.type.Arduino",
+        "command": "boardlab.platforms.filter.type.Arduino",
         "title": "Arduino"
       },
       {
-        "command": "ardunno.platforms.filter.type.Arduino.checked",
+        "command": "boardlab.platforms.filter.type.Arduino.checked",
         "title": "✓ Arduino"
       },
       {
-        "command": "ardunno.platforms.filter.type.Contributed",
+        "command": "boardlab.platforms.filter.type.Contributed",
         "title": "Contributed"
       },
       {
-        "command": "ardunno.platforms.filter.type.Contributed.checked",
+        "command": "boardlab.platforms.filter.type.Contributed.checked",
         "title": "✓ Contributed"
       },
       {
-        "command": "ardunno.platforms.filter.type.ArduinoCertified",
+        "command": "boardlab.platforms.filter.type.ArduinoCertified",
         "title": "Arduino Certified"
       },
       {
-        "command": "ardunno.platforms.filter.type.ArduinoCertified.checked",
+        "command": "boardlab.platforms.filter.type.ArduinoCertified.checked",
         "title": "✓ Arduino Certified"
       },
       {
-        "command": "ardunno.platforms.filter.type.Partner",
+        "command": "boardlab.platforms.filter.type.Partner",
         "title": "Partner"
       },
       {
-        "command": "ardunno.platforms.filter.type.Partner.checked",
+        "command": "boardlab.platforms.filter.type.Partner.checked",
         "title": "✓ Partner"
       },
       {
-        "command": "ardunno.platforms.filter.type.ArduinoHeart",
+        "command": "boardlab.platforms.filter.type.ArduinoHeart",
         "title": "Arduino@Heart"
       },
       {
-        "command": "ardunno.platforms.filter.type.ArduinoHeart.checked",
+        "command": "boardlab.platforms.filter.type.ArduinoHeart.checked",
         "title": "✓ Arduino@Heart"
       }
     ],
     "configuration": {
-      "title": "ardunno",
+      "title": "BoardLab",
       "properties": {
-        "ardunno.monitor.lineEnding": {
+        "boardlab.monitor.lineEnding": {
           "type": "string",
           "enum": [
             "none",
@@ -583,31 +595,31 @@
           "default": "crlf",
           "markdownDescription": "Line ending appended to messages sent from the Monitor and Plotter inputs."
         },
-        "ardunno.monitor.bridgePort": {
+        "boardlab.monitor.bridgePort": {
           "type": "number",
           "default": 55888,
-          "markdownDescription": "Preferred TCP port for the Portino bridge server used to connect VS Code instances. If another process responds on this port with an unexpected protocol, the extension will warn and will not start its own bridge.",
+          "markdownDescription": "Preferred TCP port for the BoardLab monitor bridge server used to connect VS Code instances. If another process responds on this port with an unexpected protocol, the extension will warn and will not start its own bridge.",
           "minimum": 55000
         },
-        "ardunno.monitor.bridgeMode": {
+        "boardlab.monitor.bridgeMode": {
           "type": "string",
           "enum": [
             "external-process",
             "in-process"
           ],
           "default": "external-process",
-          "markdownDescription": "Controls how the Portino bridge server is started. Use 'in-process' to run it inside the VS Code extension host for easier debugging. Changing this setting requires reloading the window."
+          "markdownDescription": "Controls how the BoardLab monitor bridge server is started. Use 'in-process' to run it inside the VS Code extension host for easier debugging. Changing this setting requires reloading the window."
         },
-        "ardunno.cli.configPath": {
+        "boardlab.cli.configPath": {
           "type": "string",
-          "markdownDescription": "Absolute path to the Arduino CLI configuration file used by ardunno. Leave empty to auto-detect."
+          "markdownDescription": "Absolute path to the Arduino CLI configuration file used by BoardLab. Leave empty to auto-detect."
         },
-        "ardunno.compile.verbose": {
+        "boardlab.compile.verbose": {
           "type": "boolean",
           "markdownDescription": "True for verbose compile output. False by default",
           "default": false
         },
-        "ardunno.compile.warnings": {
+        "boardlab.compile.warnings": {
           "enum": [
             "None",
             "Default",
@@ -617,7 +629,7 @@
           "default": "None",
           "markdownDescription": "Tells gcc which warning level to use. It's 'None' by default"
         },
-        "ardunno.upload.verbose": {
+        "boardlab.upload.verbose": {
           "type": "boolean",
           "markdownDescription": "True for verbose upload output. False by default.",
           "default": false
@@ -626,7 +638,7 @@
     },
     "customEditors": [
       {
-        "viewType": "ardunno.monitorEditor",
+        "viewType": "boardlab.monitorEditor",
         "displayName": "Monitor",
         "selector": [
           {
@@ -637,7 +649,7 @@
         "priority": "option"
       },
       {
-        "viewType": "ardunno.plotterEditor",
+        "viewType": "boardlab.plotterEditor",
         "displayName": "Plotter",
         "selector": [
           {
@@ -648,7 +660,7 @@
         "priority": "option"
       },
       {
-        "viewType": "ardunno.profilesEditor",
+        "viewType": "boardlab.profilesEditor",
         "displayName": "Profiles",
         "selector": [
           {
@@ -668,534 +680,534 @@
     "menus": {
       "editor/title": [
         {
-          "command": "ardunno.monitor.copyAll",
-          "when": "activeCustomEditorId == ardunno.monitorEditor",
+          "command": "boardlab.monitor.copyAll",
+          "when": "activeCustomEditorId == boardlab.monitorEditor",
           "group": "navigation@1"
         },
         {
-          "command": "ardunno.monitor.saveToFile",
-          "when": "activeCustomEditorId == ardunno.monitorEditor",
+          "command": "boardlab.monitor.saveToFile",
+          "when": "activeCustomEditorId == boardlab.monitorEditor",
           "group": "navigation@2"
         },
         {
-          "command": "ardunno.monitor.clear",
-          "when": "activeCustomEditorId == ardunno.monitorEditor",
+          "command": "boardlab.monitor.clear",
+          "when": "activeCustomEditorId == boardlab.monitorEditor",
           "group": "navigation@3"
         },
         {
-          "command": "ardunno.monitor.toggleScrollLock",
-          "when": "activeCustomEditorId == ardunno.monitorEditor",
+          "command": "boardlab.monitor.toggleScrollLock",
+          "when": "activeCustomEditorId == boardlab.monitorEditor",
           "group": "navigation@4"
         },
         {
-          "command": "ardunno.monitor.configureLineEnding",
-          "when": "activeCustomEditorId == ardunno.monitorEditor",
+          "command": "boardlab.monitor.configureLineEnding",
+          "when": "activeCustomEditorId == boardlab.monitorEditor",
           "group": "navigation@5"
         },
         {
-          "command": "ardunno.plotter.clear",
-          "when": "activeCustomEditorId == ardunno.plotterEditor",
+          "command": "boardlab.plotter.clear",
+          "when": "activeCustomEditorId == boardlab.plotterEditor",
           "group": "navigation@1"
         },
         {
-          "command": "ardunno.plotter.resetYScale",
-          "when": "activeCustomEditorId == ardunno.plotterEditor",
+          "command": "boardlab.plotter.resetYScale",
+          "when": "activeCustomEditorId == boardlab.plotterEditor",
           "group": "navigation@2"
         },
         {
-          "command": "ardunno.plotter.configureLineEnding",
-          "when": "activeCustomEditorId == ardunno.plotterEditor",
+          "command": "boardlab.plotter.configureLineEnding",
+          "when": "activeCustomEditorId == boardlab.plotterEditor",
           "group": "navigation@3"
         },
         {
-          "command": "ardunno.profiles.openTextEditor",
-          "when": "activeCustomEditorId == ardunno.profilesEditor",
+          "command": "boardlab.profiles.openTextEditor",
+          "when": "activeCustomEditorId == boardlab.profilesEditor",
           "group": "navigation@99"
         }
       ],
       "view/title": [
         {
-          "command": "ardunno.selectSketch",
-          "when": "view == ardunno.currentSketch",
+          "command": "boardlab.selectSketch",
+          "when": "view == boardlab.currentSketch",
           "group": "navigation@1"
         },
         {
-          "command": "ardunno.openMainSketchFile",
-          "when": "view == ardunno.currentSketch",
+          "command": "boardlab.openMainSketchFile",
+          "when": "view == boardlab.currentSketch",
           "group": "navigation@2"
         },
         {
-          "command": "ardunno.extensions.searchBoardLab",
-          "when": "view == ardunno.currentSketch",
+          "command": "boardlab.extensions.searchBoardLab",
+          "when": "view == boardlab.currentSketch",
           "group": "extensions@99"
         },
         {
-          "command": "arduino.examples.refresh",
-          "when": "view == arduinoExamples",
+          "command": "boardlab.examples.refresh",
+          "when": "view == boardlabExamples",
           "group": "navigation@1"
         },
         {
-          "command": "ardunno.plotter.clear",
-          "when": "view == ardunno.plotter",
+          "command": "boardlab.plotter.clear",
+          "when": "view == boardlab.plotter",
           "group": "navigation@1"
         },
         {
-          "command": "ardunno.plotter.resetYScale",
-          "when": "view == ardunno.plotter",
+          "command": "boardlab.plotter.resetYScale",
+          "when": "view == boardlab.plotter",
           "group": "navigation@2"
         },
         {
-          "command": "ardunno.plotter.configureLineEnding",
-          "when": "view == ardunno.plotter",
+          "command": "boardlab.plotter.configureLineEnding",
+          "when": "view == boardlab.plotter",
           "group": "navigation@3"
         }
       ],
       "view/item/context": [
         {
-          "command": "ardunno.selectBoard",
-          "when": "view == ardunno.currentSketch && viewItem == board",
+          "command": "boardlab.selectBoard",
+          "when": "view == boardlab.currentSketch && viewItem == board",
           "group": "inline"
         },
         {
-          "command": "ardunno.selectPort",
-          "when": "view == ardunno.currentSketch && viewItem == port",
+          "command": "boardlab.selectPort",
+          "when": "view == boardlab.currentSketch && viewItem == port",
           "group": "inline"
         },
         {
-          "command": "ardunno.selectProgrammer",
-          "when": "view == ardunno.currentSketch && viewItem == programmer",
+          "command": "boardlab.selectProgrammer",
+          "when": "view == boardlab.currentSketch && viewItem == programmer",
           "group": "inline"
         },
         {
-          "command": "ardunno.selectConfigOption",
-          "when": "view == ardunno.currentSketch && (viewItem == configOption || viewItem == dirtyConfigOption)",
+          "command": "boardlab.selectConfigOption",
+          "when": "view == boardlab.currentSketch && (viewItem == configOption || viewItem == dirtyConfigOption)",
           "group": "inline"
         },
         {
-          "command": "ardunno.resetConfigOption",
-          "when": "view == ardunno.currentSketch && viewItem == dirtyConfigOption",
+          "command": "boardlab.resetConfigOption",
+          "when": "view == boardlab.currentSketch && viewItem == dirtyConfigOption",
           "group": "inline"
         },
         {
-          "command": "ardunno.task.runFromTree",
-          "when": "view == ardunno.currentSketch && viewItem == taskIdle",
+          "command": "boardlab.task.runFromTree",
+          "when": "view == boardlab.currentSketch && viewItem == taskIdle",
           "group": "inline"
         },
         {
-          "command": "ardunno.task.stopFromTree",
-          "when": "view == ardunno.currentSketch && viewItem == taskRunning",
+          "command": "boardlab.task.stopFromTree",
+          "when": "view == boardlab.currentSketch && viewItem == taskRunning",
           "group": "inline"
         },
         {
-          "command": "ardunno.tool.runFromTree",
-          "when": "view == ardunno.currentSketch && viewItem == tool",
+          "command": "boardlab.tool.runFromTree",
+          "when": "view == boardlab.currentSketch && viewItem == tool",
           "group": "inline"
         },
         {
-          "command": "ardunno.addSketchFolderToWorkspace",
-          "when": "view == ardunno.sketchbook && viewItem == sketchbookFolder",
+          "command": "boardlab.addSketchFolderToWorkspace",
+          "when": "view == boardlab.sketchbook && viewItem == sketchbookFolder",
           "group": "inline"
         },
         {
-          "command": "ardunno.addSketchFolderToWorkspace",
-          "when": "view == ardunno.sketchbook && viewItem == sketchbookSketch",
+          "command": "boardlab.addSketchFolderToWorkspace",
+          "when": "view == boardlab.sketchbook && viewItem == sketchbookSketch",
           "group": "inline"
         }
       ],
       "commandPalette": [
         {
-          "command": "ardunno.pickSketch",
+          "command": "boardlab.pickSketch",
           "when": "false"
         },
         {
-          "command": "ardunno.pickBoard",
+          "command": "boardlab.pickBoard",
           "when": "false"
         },
         {
-          "command": "ardunno.pickPort",
+          "command": "boardlab.pickPort",
           "when": "false"
         },
         {
-          "command": "ardunno.installPlatform",
+          "command": "boardlab.installPlatform",
           "when": "false"
         },
         {
-          "command": "ardunno.installLatestPlatform",
+          "command": "boardlab.installLatestPlatform",
           "when": "false"
         },
         {
-          "command": "ardunno.updatePlatform",
+          "command": "boardlab.updatePlatform",
           "when": "false"
         },
         {
-          "command": "ardunno.uninstallPlatform",
+          "command": "boardlab.uninstallPlatform",
           "when": "false"
         },
         {
-          "command": "ardunno.installLibrary",
+          "command": "boardlab.installLibrary",
           "when": "false"
         },
         {
-          "command": "ardunno.installLatestLibrary",
+          "command": "boardlab.installLatestLibrary",
           "when": "false"
         },
         {
-          "command": "ardunno.updateLibrary",
+          "command": "boardlab.updateLibrary",
           "when": "false"
         },
         {
-          "command": "ardunno.uninstallLibrary",
+          "command": "boardlab.uninstallLibrary",
           "when": "false"
         },
         {
-          "command": "ardunno.moreInfo",
+          "command": "boardlab.moreInfo",
           "when": "false"
         },
         {
-          "command": "ardunno.selectBoard",
+          "command": "boardlab.selectBoard",
           "when": "currentSketchPath != ''"
         },
         {
-          "command": "ardunno.selectConfigOption",
+          "command": "boardlab.selectConfigOption",
           "when": "false"
         },
         {
-          "command": "ardunno.resetConfigOption",
+          "command": "boardlab.resetConfigOption",
           "when": "false"
         }
       ],
       "webview/context": [
         {
-          "command": "ardunno.moreInfo",
-          "when": "(webviewId == 'ardunno.platformsManager' || webviewId == 'ardunno.librariesManager') && webviewSection == 'toolbar'",
+          "command": "boardlab.moreInfo",
+          "when": "(webviewId == 'boardlab.platformsManager' || webviewId == 'boardlab.librariesManager') && webviewSection == 'toolbar'",
           "group": "info@1"
         },
         {
-          "command": "ardunno.installLatestPlatform",
-          "when": "webviewId == 'ardunno.platformsManager' && webviewSection == 'toolbar' && canInstallLatest",
+          "command": "boardlab.installLatestPlatform",
+          "when": "webviewId == 'boardlab.platformsManager' && webviewSection == 'toolbar' && canInstallLatest",
           "group": "manage@1"
         },
         {
-          "command": "ardunno.installPlatform",
-          "when": "webviewId == 'ardunno.platformsManager' && webviewSection == 'toolbar' && canInstallSelected",
+          "command": "boardlab.installPlatform",
+          "when": "webviewId == 'boardlab.platformsManager' && webviewSection == 'toolbar' && canInstallSelected",
           "group": "manage@2"
         },
         {
-          "command": "ardunno.updatePlatform",
-          "when": "webviewId == 'ardunno.platformsManager' && webviewSection == 'toolbar' && canUpdate",
+          "command": "boardlab.updatePlatform",
+          "when": "webviewId == 'boardlab.platformsManager' && webviewSection == 'toolbar' && canUpdate",
           "group": "manage@3"
         },
         {
-          "command": "ardunno.uninstallPlatform",
-          "when": "webviewId == 'ardunno.platformsManager' && webviewSection == 'toolbar' && canRemove",
+          "command": "boardlab.uninstallPlatform",
+          "when": "webviewId == 'boardlab.platformsManager' && webviewSection == 'toolbar' && canRemove",
           "group": "manage@4"
         },
         {
-          "command": "ardunno.installLatestLibrary",
-          "when": "webviewId == 'ardunno.librariesManager' && webviewSection == 'toolbar' && canInstallLatest",
+          "command": "boardlab.installLatestLibrary",
+          "when": "webviewId == 'boardlab.librariesManager' && webviewSection == 'toolbar' && canInstallLatest",
           "group": "manage@1"
         },
         {
-          "command": "ardunno.installLibrary",
-          "when": "webviewId == 'ardunno.librariesManager' && webviewSection == 'toolbar' && canInstallSelected",
+          "command": "boardlab.installLibrary",
+          "when": "webviewId == 'boardlab.librariesManager' && webviewSection == 'toolbar' && canInstallSelected",
           "group": "manage@2"
         },
         {
-          "command": "ardunno.updateLibrary",
-          "when": "webviewId == 'ardunno.librariesManager' && webviewSection == 'toolbar' && canUpdate",
+          "command": "boardlab.updateLibrary",
+          "when": "webviewId == 'boardlab.librariesManager' && webviewSection == 'toolbar' && canUpdate",
           "group": "manage@3"
         },
         {
-          "command": "ardunno.uninstallLibrary",
-          "when": "webviewId == 'ardunno.librariesManager' && webviewSection == 'toolbar' && canRemove",
+          "command": "boardlab.uninstallLibrary",
+          "when": "webviewId == 'boardlab.librariesManager' && webviewSection == 'toolbar' && canRemove",
           "group": "manage@4"
         },
         {
-          "submenu": "ardunno.libraries.filter.type",
-          "when": "webviewId == 'ardunno.librariesManager' && webviewSection == 'search-filter'",
+          "submenu": "boardlab.libraries.filter.type",
+          "when": "webviewId == 'boardlab.librariesManager' && webviewSection == 'search-filter'",
           "group": "filter@1"
         },
         {
-          "submenu": "ardunno.libraries.filter.topic",
-          "when": "webviewId == 'ardunno.librariesManager' && webviewSection == 'search-filter'",
+          "submenu": "boardlab.libraries.filter.topic",
+          "when": "webviewId == 'boardlab.librariesManager' && webviewSection == 'search-filter'",
           "group": "filter@2"
         },
         {
-          "submenu": "ardunno.platforms.filter.type",
-          "when": "webviewId == 'ardunno.platformsManager' && webviewSection == 'search-filter'",
+          "submenu": "boardlab.platforms.filter.type",
+          "when": "webviewId == 'boardlab.platformsManager' && webviewSection == 'search-filter'",
           "group": "filter@1"
         },
         {
-          "command": "ardunno.profiles.setDefault",
-          "when": "webviewType == 'ardunno.profilesEditor' && webviewSection == 'profiles-master' && canSetDefault",
+          "command": "boardlab.profiles.setDefault",
+          "when": "webviewType == 'boardlab.profilesEditor' && webviewSection == 'profiles-master' && canSetDefault",
           "group": "manage@1"
         },
         {
-          "command": "ardunno.profiles.delete",
-          "when": "webviewType == 'ardunno.profilesEditor' && webviewSection == 'profiles-master' && canDelete",
+          "command": "boardlab.profiles.delete",
+          "when": "webviewType == 'boardlab.profilesEditor' && webviewSection == 'profiles-master' && canDelete",
           "group": "manage@99"
         },
         {
-          "command": "ardunno.profiles.setActive",
-          "when": "webviewType == 'ardunno.profilesEditor' && webviewSection == 'profiles-master' && canSetActive",
+          "command": "boardlab.profiles.setActive",
+          "when": "webviewType == 'boardlab.profilesEditor' && webviewSection == 'profiles-master' && canSetActive",
           "group": "manage@2"
         },
         {
-          "command": "ardunno.profiles.setDefault",
-          "when": "webviewId == 'ardunno.profilesEditor' && webviewSection == 'profiles-master' && canSetDefault",
+          "command": "boardlab.profiles.setDefault",
+          "when": "webviewId == 'boardlab.profilesEditor' && webviewSection == 'profiles-master' && canSetDefault",
           "group": "manage@1"
         },
         {
-          "command": "ardunno.profiles.delete",
-          "when": "webviewId == 'ardunno.profilesEditor' && webviewSection == 'profiles-master' && canDelete",
+          "command": "boardlab.profiles.delete",
+          "when": "webviewId == 'boardlab.profilesEditor' && webviewSection == 'profiles-master' && canDelete",
           "group": "manage@99"
         },
         {
-          "command": "ardunno.profiles.setActive",
-          "when": "webviewId == 'ardunno.profilesEditor' && webviewSection == 'profiles-master' && canSetActive",
+          "command": "boardlab.profiles.setActive",
+          "when": "webviewId == 'boardlab.profilesEditor' && webviewSection == 'profiles-master' && canSetActive",
           "group": "manage@2"
         }
       ],
-      "ardunno.libraries.filter.type": [
+      "boardlab.libraries.filter.type": [
         {
-          "command": "ardunno.libraries.filter.type.Updatable",
-          "when": "ardunno.librariesFilter:type != 'Updatable'",
+          "command": "boardlab.libraries.filter.type.Updatable",
+          "when": "boardlab.librariesFilter:type != 'Updatable'",
           "group": "type@1"
         },
         {
-          "command": "ardunno.libraries.filter.type.Updatable.checked",
-          "when": "ardunno.librariesFilter:type == 'Updatable'",
+          "command": "boardlab.libraries.filter.type.Updatable.checked",
+          "when": "boardlab.librariesFilter:type == 'Updatable'",
           "group": "type@1"
         },
         {
-          "command": "ardunno.libraries.filter.type.Installed",
-          "when": "ardunno.librariesFilter:type != 'Installed'",
+          "command": "boardlab.libraries.filter.type.Installed",
+          "when": "boardlab.librariesFilter:type != 'Installed'",
           "group": "type@2"
         },
         {
-          "command": "ardunno.libraries.filter.type.Installed.checked",
-          "when": "ardunno.librariesFilter:type == 'Installed'",
+          "command": "boardlab.libraries.filter.type.Installed.checked",
+          "when": "boardlab.librariesFilter:type == 'Installed'",
           "group": "type@2"
         },
         {
-          "command": "ardunno.libraries.filter.type.Arduino",
-          "when": "ardunno.librariesFilter:type != 'Arduino'",
+          "command": "boardlab.libraries.filter.type.Arduino",
+          "when": "boardlab.librariesFilter:type != 'Arduino'",
           "group": "type@3"
         },
         {
-          "command": "ardunno.libraries.filter.type.Arduino.checked",
-          "when": "ardunno.librariesFilter:type == 'Arduino'",
+          "command": "boardlab.libraries.filter.type.Arduino.checked",
+          "when": "boardlab.librariesFilter:type == 'Arduino'",
           "group": "type@3"
         },
         {
-          "command": "ardunno.libraries.filter.type.Partner",
-          "when": "ardunno.librariesFilter:type != 'Partner'",
+          "command": "boardlab.libraries.filter.type.Partner",
+          "when": "boardlab.librariesFilter:type != 'Partner'",
           "group": "type@4"
         },
         {
-          "command": "ardunno.libraries.filter.type.Partner.checked",
-          "when": "ardunno.librariesFilter:type == 'Partner'",
+          "command": "boardlab.libraries.filter.type.Partner.checked",
+          "when": "boardlab.librariesFilter:type == 'Partner'",
           "group": "type@4"
         },
         {
-          "command": "ardunno.libraries.filter.type.Recommended",
-          "when": "ardunno.librariesFilter:type != 'Recommended'",
+          "command": "boardlab.libraries.filter.type.Recommended",
+          "when": "boardlab.librariesFilter:type != 'Recommended'",
           "group": "type@5"
         },
         {
-          "command": "ardunno.libraries.filter.type.Recommended.checked",
-          "when": "ardunno.librariesFilter:type == 'Recommended'",
+          "command": "boardlab.libraries.filter.type.Recommended.checked",
+          "when": "boardlab.librariesFilter:type == 'Recommended'",
           "group": "type@5"
         },
         {
-          "command": "ardunno.libraries.filter.type.Contributed",
-          "when": "ardunno.librariesFilter:type != 'Contributed'",
+          "command": "boardlab.libraries.filter.type.Contributed",
+          "when": "boardlab.librariesFilter:type != 'Contributed'",
           "group": "type@6"
         },
         {
-          "command": "ardunno.libraries.filter.type.Contributed.checked",
-          "when": "ardunno.librariesFilter:type == 'Contributed'",
+          "command": "boardlab.libraries.filter.type.Contributed.checked",
+          "when": "boardlab.librariesFilter:type == 'Contributed'",
           "group": "type@6"
         },
         {
-          "command": "ardunno.libraries.filter.type.Retired",
-          "when": "ardunno.librariesFilter:type != 'Retired'",
+          "command": "boardlab.libraries.filter.type.Retired",
+          "when": "boardlab.librariesFilter:type != 'Retired'",
           "group": "type@7"
         },
         {
-          "command": "ardunno.libraries.filter.type.Retired.checked",
-          "when": "ardunno.librariesFilter:type == 'Retired'",
+          "command": "boardlab.libraries.filter.type.Retired.checked",
+          "when": "boardlab.librariesFilter:type == 'Retired'",
           "group": "type@7"
         }
       ],
-      "ardunno.libraries.filter.topic": [
+      "boardlab.libraries.filter.topic": [
         {
-          "command": "ardunno.libraries.filter.topic.Communication",
-          "when": "ardunno.librariesFilter:topic != 'Communication'",
+          "command": "boardlab.libraries.filter.topic.Communication",
+          "when": "boardlab.librariesFilter:topic != 'Communication'",
           "group": "topic@1"
         },
         {
-          "command": "ardunno.libraries.filter.topic.Communication.checked",
-          "when": "ardunno.librariesFilter:topic == 'Communication'",
+          "command": "boardlab.libraries.filter.topic.Communication.checked",
+          "when": "boardlab.librariesFilter:topic == 'Communication'",
           "group": "topic@1"
         },
         {
-          "command": "ardunno.libraries.filter.topic.DataProcessing",
-          "when": "ardunno.librariesFilter:topic != 'Data Processing'",
+          "command": "boardlab.libraries.filter.topic.DataProcessing",
+          "when": "boardlab.librariesFilter:topic != 'Data Processing'",
           "group": "topic@2"
         },
         {
-          "command": "ardunno.libraries.filter.topic.DataProcessing.checked",
-          "when": "ardunno.librariesFilter:topic == 'Data Processing'",
+          "command": "boardlab.libraries.filter.topic.DataProcessing.checked",
+          "when": "boardlab.librariesFilter:topic == 'Data Processing'",
           "group": "topic@2"
         },
         {
-          "command": "ardunno.libraries.filter.topic.DataStorage",
-          "when": "ardunno.librariesFilter:topic != 'Data Storage'",
+          "command": "boardlab.libraries.filter.topic.DataStorage",
+          "when": "boardlab.librariesFilter:topic != 'Data Storage'",
           "group": "topic@3"
         },
         {
-          "command": "ardunno.libraries.filter.topic.DataStorage.checked",
-          "when": "ardunno.librariesFilter:topic == 'Data Storage'",
+          "command": "boardlab.libraries.filter.topic.DataStorage.checked",
+          "when": "boardlab.librariesFilter:topic == 'Data Storage'",
           "group": "topic@3"
         },
         {
-          "command": "ardunno.libraries.filter.topic.DeviceControl",
-          "when": "ardunno.librariesFilter:topic != 'Device Control'",
+          "command": "boardlab.libraries.filter.topic.DeviceControl",
+          "when": "boardlab.librariesFilter:topic != 'Device Control'",
           "group": "topic@4"
         },
         {
-          "command": "ardunno.libraries.filter.topic.DeviceControl.checked",
-          "when": "ardunno.librariesFilter:topic == 'Device Control'",
+          "command": "boardlab.libraries.filter.topic.DeviceControl.checked",
+          "when": "boardlab.librariesFilter:topic == 'Device Control'",
           "group": "topic@4"
         },
         {
-          "command": "ardunno.libraries.filter.topic.Display",
-          "when": "ardunno.librariesFilter:topic != 'Display'",
+          "command": "boardlab.libraries.filter.topic.Display",
+          "when": "boardlab.librariesFilter:topic != 'Display'",
           "group": "topic@5"
         },
         {
-          "command": "ardunno.libraries.filter.topic.Display.checked",
-          "when": "ardunno.librariesFilter:topic == 'Display'",
+          "command": "boardlab.libraries.filter.topic.Display.checked",
+          "when": "boardlab.librariesFilter:topic == 'Display'",
           "group": "topic@5"
         },
         {
-          "command": "ardunno.libraries.filter.topic.Other",
-          "when": "ardunno.librariesFilter:topic != 'Other'",
+          "command": "boardlab.libraries.filter.topic.Other",
+          "when": "boardlab.librariesFilter:topic != 'Other'",
           "group": "topic@6"
         },
         {
-          "command": "ardunno.libraries.filter.topic.Other.checked",
-          "when": "ardunno.librariesFilter:topic == 'Other'",
+          "command": "boardlab.libraries.filter.topic.Other.checked",
+          "when": "boardlab.librariesFilter:topic == 'Other'",
           "group": "topic@6"
         },
         {
-          "command": "ardunno.libraries.filter.topic.Sensors",
-          "when": "ardunno.librariesFilter:topic != 'Sensors'",
+          "command": "boardlab.libraries.filter.topic.Sensors",
+          "when": "boardlab.librariesFilter:topic != 'Sensors'",
           "group": "topic@7"
         },
         {
-          "command": "ardunno.libraries.filter.topic.Sensors.checked",
-          "when": "ardunno.librariesFilter:topic == 'Sensors'",
+          "command": "boardlab.libraries.filter.topic.Sensors.checked",
+          "when": "boardlab.librariesFilter:topic == 'Sensors'",
           "group": "topic@7"
         },
         {
-          "command": "ardunno.libraries.filter.topic.SignalInputOutput",
-          "when": "ardunno.librariesFilter:topic != 'Signal Input/Output'",
+          "command": "boardlab.libraries.filter.topic.SignalInputOutput",
+          "when": "boardlab.librariesFilter:topic != 'Signal Input/Output'",
           "group": "topic@8"
         },
         {
-          "command": "ardunno.libraries.filter.topic.SignalInputOutput.checked",
-          "when": "ardunno.librariesFilter:topic == 'Signal Input/Output'",
+          "command": "boardlab.libraries.filter.topic.SignalInputOutput.checked",
+          "when": "boardlab.librariesFilter:topic == 'Signal Input/Output'",
           "group": "topic@8"
         },
         {
-          "command": "ardunno.libraries.filter.topic.Timing",
-          "when": "ardunno.librariesFilter:topic != 'Timing'",
+          "command": "boardlab.libraries.filter.topic.Timing",
+          "when": "boardlab.librariesFilter:topic != 'Timing'",
           "group": "topic@9"
         },
         {
-          "command": "ardunno.libraries.filter.topic.Timing.checked",
-          "when": "ardunno.librariesFilter:topic == 'Timing'",
+          "command": "boardlab.libraries.filter.topic.Timing.checked",
+          "when": "boardlab.librariesFilter:topic == 'Timing'",
           "group": "topic@9"
         },
         {
-          "command": "ardunno.libraries.filter.topic.Uncategorized",
-          "when": "ardunno.librariesFilter:topic != 'Uncategorized'",
+          "command": "boardlab.libraries.filter.topic.Uncategorized",
+          "when": "boardlab.librariesFilter:topic != 'Uncategorized'",
           "group": "topic@10"
         },
         {
-          "command": "ardunno.libraries.filter.topic.Uncategorized.checked",
-          "when": "ardunno.librariesFilter:topic == 'Uncategorized'",
+          "command": "boardlab.libraries.filter.topic.Uncategorized.checked",
+          "when": "boardlab.librariesFilter:topic == 'Uncategorized'",
           "group": "topic@10"
         }
       ],
-      "ardunno.platforms.filter.type": [
+      "boardlab.platforms.filter.type": [
         {
-          "command": "ardunno.platforms.filter.type.Updatable",
-          "when": "ardunno.platformsFilter:type != 'Updatable'",
+          "command": "boardlab.platforms.filter.type.Updatable",
+          "when": "boardlab.platformsFilter:type != 'Updatable'",
           "group": "type@1"
         },
         {
-          "command": "ardunno.platforms.filter.type.Updatable.checked",
-          "when": "ardunno.platformsFilter:type == 'Updatable'",
+          "command": "boardlab.platforms.filter.type.Updatable.checked",
+          "when": "boardlab.platformsFilter:type == 'Updatable'",
           "group": "type@1"
         },
         {
-          "command": "ardunno.platforms.filter.type.Arduino",
-          "when": "ardunno.platformsFilter:type != 'Arduino'",
+          "command": "boardlab.platforms.filter.type.Arduino",
+          "when": "boardlab.platformsFilter:type != 'Arduino'",
           "group": "type@2"
         },
         {
-          "command": "ardunno.platforms.filter.type.Arduino.checked",
-          "when": "ardunno.platformsFilter:type == 'Arduino'",
+          "command": "boardlab.platforms.filter.type.Arduino.checked",
+          "when": "boardlab.platformsFilter:type == 'Arduino'",
           "group": "type@2"
         },
         {
-          "command": "ardunno.platforms.filter.type.Contributed",
-          "when": "ardunno.platformsFilter:type != 'Contributed'",
+          "command": "boardlab.platforms.filter.type.Contributed",
+          "when": "boardlab.platformsFilter:type != 'Contributed'",
           "group": "type@3"
         },
         {
-          "command": "ardunno.platforms.filter.type.Contributed.checked",
-          "when": "ardunno.platformsFilter:type == 'Contributed'",
+          "command": "boardlab.platforms.filter.type.Contributed.checked",
+          "when": "boardlab.platformsFilter:type == 'Contributed'",
           "group": "type@3"
         },
         {
-          "command": "ardunno.platforms.filter.type.ArduinoCertified",
-          "when": "ardunno.platformsFilter:type != 'Arduino Certified'",
+          "command": "boardlab.platforms.filter.type.ArduinoCertified",
+          "when": "boardlab.platformsFilter:type != 'Arduino Certified'",
           "group": "type@4"
         },
         {
-          "command": "ardunno.platforms.filter.type.ArduinoCertified.checked",
-          "when": "ardunno.platformsFilter:type == 'Arduino Certified'",
+          "command": "boardlab.platforms.filter.type.ArduinoCertified.checked",
+          "when": "boardlab.platformsFilter:type == 'Arduino Certified'",
           "group": "type@4"
         },
         {
-          "command": "ardunno.platforms.filter.type.Partner",
-          "when": "ardunno.platformsFilter:type != 'Partner'",
+          "command": "boardlab.platforms.filter.type.Partner",
+          "when": "boardlab.platformsFilter:type != 'Partner'",
           "group": "type@5"
         },
         {
-          "command": "ardunno.platforms.filter.type.Partner.checked",
-          "when": "ardunno.platformsFilter:type == 'Partner'",
+          "command": "boardlab.platforms.filter.type.Partner.checked",
+          "when": "boardlab.platformsFilter:type == 'Partner'",
           "group": "type@5"
         },
         {
-          "command": "ardunno.platforms.filter.type.ArduinoHeart",
-          "when": "ardunno.platformsFilter:type != 'Arduino@Heart'",
+          "command": "boardlab.platforms.filter.type.ArduinoHeart",
+          "when": "boardlab.platformsFilter:type != 'Arduino@Heart'",
           "group": "type@6"
         },
         {
-          "command": "ardunno.platforms.filter.type.ArduinoHeart.checked",
-          "when": "ardunno.platformsFilter:type == 'Arduino@Heart'",
+          "command": "boardlab.platforms.filter.type.ArduinoHeart.checked",
+          "when": "boardlab.platformsFilter:type == 'Arduino@Heart'",
           "group": "type@6"
         }
       ]
     },
     "problemMatchers": [
       {
-        "name": "ardunno",
+        "name": "boardlab",
         "fileLocation": "absolute",
         "source": "ino",
         "pattern": {
@@ -1211,43 +1223,43 @@
     ],
     "submenus": [
       {
-        "id": "ardunno.libraries.filter.type",
+        "id": "boardlab.libraries.filter.type",
         "label": "Type"
       },
       {
-        "id": "ardunno.libraries.filter.topic",
+        "id": "boardlab.libraries.filter.topic",
         "label": "Topic"
       },
       {
-        "id": "ardunno.platforms.filter.type",
+        "id": "boardlab.platforms.filter.type",
         "label": "Type"
       }
     ],
     "taskDefinitions": [
       {
-        "type": "ardunno",
+        "type": "boardlab",
         "required": [
           "command"
         ],
         "properties": {
           "command": {
             "type": "string",
-            "description": "The Ardunno command to execute. Supported commands are 'compile', 'upload', 'burn-bootloader', 'export-binary', 'archive-sketch', 'upload-using-programmer', 'get-board-info', and 'reload-board-data'."
+            "description": "The BoardLab command to execute. Supported commands are 'compile', 'upload', 'burn-bootloader', 'export-binary', 'archive-sketch', 'upload-using-programmer', 'get-board-info', and 'reload-board-data'."
           },
           "sketchPath": {
             "type": "string",
             "description": "The path to the sketch to compile.",
-            "default": "${command:ardunno.pickSketch}"
+            "default": "${command:boardlab.pickSketch}"
           },
           "fqbn": {
             "type": "string",
             "description": "Fully Qualified Board Name (FQBN) for the compilation and upload or to disambiguate if more than one platform provides the pluggable monitor for a given port protocol. For example, 'arduino:avr:uno'.",
-            "default": "${command:ardunno.pickBoard}"
+            "default": "${command:boardlab.pickBoard}"
           },
           "port": {
             "type": "string",
             "description": "TODO! The qualified name of the port. The port protocol and the port address separated by a colon (`:`). The address can consists of the host and port separated by an additional colon. For example, 'serial:/dev/cu.usbmodem14201' or 'teensy:/usb:14300000'",
-            "default": "${command:ardunno.pickPort}"
+            "default": "${command:boardlab.pickPort}"
           },
           "programmer": {
             "type": "string",
@@ -1257,39 +1269,39 @@
       }
     ],
     "views": {
-      "ardunnoSketches": [
+      "boardlabSketches": [
         {
-          "id": "ardunno.currentSketch",
+          "id": "boardlab.currentSketch",
           "name": "Current Sketch",
           "contextualTitle": "Current Sketch",
           "icon": "$(circuit-board)"
         },
         {
-          "id": "ardunno.sketchbook",
+          "id": "boardlab.sketchbook",
           "name": "Sketchbook",
           "contextualTitle": "Sketchbook",
           "icon": "$(file-submodule)"
         },
         {
-          "id": "arduinoExamples",
+          "id": "boardlabExamples",
           "name": "Examples",
           "contextualTitle": "Examples",
           "icon": "$(book)",
           "type": "webview"
         }
       ],
-      "ardunnoPlatforms": [
+      "boardlabPlatforms": [
         {
-          "id": "ardunno.platformsManager",
+          "id": "boardlab.platformsManager",
           "type": "webview",
           "name": "Boards Manager",
           "contextualTitle": "Boards Manager",
           "icon": "$(package)"
         }
       ],
-      "ardunnoLibraries": [
+      "boardlabLibraries": [
         {
-          "id": "ardunno.librariesManager",
+          "id": "boardlab.librariesManager",
           "type": "webview",
           "name": "Library Manager",
           "contextualTitle": "Library Manager",
@@ -1301,35 +1313,35 @@
       "activitybar": [
         {
           "title": "Sketches",
-          "id": "ardunnoSketches",
+          "id": "boardlabSketches",
           "icon": "$(file-submodule)"
         },
         {
           "title": "Boards",
-          "id": "ardunnoPlatforms",
+          "id": "boardlabPlatforms",
           "icon": "$(package)"
         },
         {
           "title": "Libraries",
-          "id": "ardunnoLibraries",
+          "id": "boardlabLibraries",
           "icon": "$(library)"
         }
       ]
     },
     "viewsWelcome": [
       {
-        "view": "ardunno.currentSketch",
-        "contents": "No sketch folders have been detected in the workspace. Open a sketch to import it into the workspace.\n[Open Sketch](command:ardunno.openSketch)\nTo learn more about sketches [read the docs](https://arduino.github.io/arduino-cli/latest/sketch-specification)."
+        "view": "boardlab.currentSketch",
+        "contents": "No sketch folders have been detected in the workspace. Open a sketch to import it into the workspace.\n[Open Sketch](command:boardlab.selectSketch)\nTo learn more about sketches [read the docs](https://arduino.github.io/arduino-cli/latest/sketch-specification)."
       }
     ]
   },
   "activationEvents": [
     "workspaceContains:**/*.ino",
     "onLanguage:ino",
-    "onTaskType:ardunno",
-    "onFileSystem:ardunno-example",
-    "onFileSystem:arduino-example-md",
-    "onFileSystem:arduino-sketchbook",
+    "onTaskType:boardlab",
+    "onFileSystem:boardlab-example",
+    "onFileSystem:boardlab-example-md",
+    "onFileSystem:boardlab-sketchbook",
     "onFile:sketch.yaml"
   ],
   "dependencies": {

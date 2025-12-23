@@ -23,7 +23,7 @@ export class Daemon implements vscode.Disposable {
     context: vscode.ExtensionContext,
     private cliContext: CliContext
   ) {
-    this.output = vscode.window.createOutputChannel('Arduino CLI Daemon', {
+    this.output = vscode.window.createOutputChannel('BoardLab', {
       log: true,
     })
     this.onDidChangeAddressEmitter = new vscode.EventEmitter<

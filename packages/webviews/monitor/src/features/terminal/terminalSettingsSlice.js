@@ -8,7 +8,7 @@ import { createSlice } from '@reduxjs/toolkit'
  * >} TerminalSettings
  */
 
-const LS_KEY = 'portino.terminal.settings'
+const LS_KEY = 'boardlab.monitor.terminal.settings'
 
 /** @returns {TerminalSettings} */
 function load() {

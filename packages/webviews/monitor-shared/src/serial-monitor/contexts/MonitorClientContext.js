@@ -3,8 +3,8 @@
 import { createContext } from 'react'
 
 /**
- * @typedef {Object} PortinoClientContextType
- * @property {import('../client.js').PortinoClient | undefined} client
+ * @typedef {Object} MonitorClientContextType
+ * @property {import('../client.js').MonitorClient | undefined} client
  * @property {'connecting'
  *   | 'connected'
  *   | 'disconnected'
@@ -14,8 +14,8 @@ import { createContext } from 'react'
  * @property {string} [httpBaseUrl]
  */
 
-export const PortinoClientContext = createContext(
-  /** @type {PortinoClientContextType} */ ({
+export const MonitorClientContext = createContext(
+  /** @type {MonitorClientContextType} */ ({
     client: undefined,
     connectionStatus: 'disconnected',
   })

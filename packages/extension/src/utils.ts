@@ -4,7 +4,7 @@ import * as vscode from 'vscode'
 
 // TODO: move it elsewhere
 export function mementoKey(property: string, scope?: string): string {
-  return `ardunno.memento.${scope ? `${scope.toString()}.` : ''}${property}`
+  return `boardlab.memento.${scope ? `${scope.toString()}.` : ''}${property}`
 }
 
 export function deepClone<T extends object>(object: T): T {

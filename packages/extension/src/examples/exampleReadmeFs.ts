@@ -6,7 +6,7 @@ import {
   type BuiltinReadmeRenderContext,
 } from './showBuiltinSketchReadme'
 
-export const EXAMPLE_README_SCHEME = 'arduino-example-md'
+export const EXAMPLE_README_SCHEME = 'boardlab-example-md'
 
 type ReadmeRequest = BuiltinReadmeRequest
 

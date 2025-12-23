@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
-import { createServer as createPortinoBridgeServer } from '@vscode-ardunno/portino-bridge'
+import { createServer as createMonitorBridgeServer } from '@boardlab/portino-bridge'
 import {
   connectMonitorClient,
   disconnectMonitorClient,
@@ -28,7 +28,7 @@ import {
   type RequestPauseResumeMonitorParams,
   type RequestSendMonitorMessageParams,
   type RequestUpdateBaudrateParams,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import { createPortKey, type PortIdentifier } from 'boards-list'
 import * as vscode from 'vscode'
 import type { Messenger } from 'vscode-messenger'
@@ -38,7 +38,7 @@ import type {
 } from 'vscode-messenger-common'
 
 import type { CliContext } from '../cli/context'
-import { PortinoBridgeClient } from './portinoBridgeClient'
+import { MonitorBridgeClient } from './monitorBridgeClient'
 
 const DEFAULT_BRIDGE_HOST = '127.0.0.1'
 const DEFAULT_BRIDGE_PORT = 55888
@@ -77,7 +77,7 @@ export class BridgeInUseError extends Error {
     cause?: unknown
   ) {
     super(
-      `Portino bridge port ${port} is already in use (${reason}). Stop the other process or choose a different port.`
+      `BoardLab monitor bridge port ${port} is already in use (${reason}). Stop the other process or choose a different port.`
     )
     this.name = 'BridgeInUseError'
     if (cause !== undefined) {
@@ -86,16 +86,16 @@ export class BridgeInUseError extends Error {
   }
 }
 
-export interface PortinoServiceClientOptions {
+export interface MonitorBridgeServiceClientOptions {
   readonly preferredPort?: number
-  readonly mode?: PortinoBridgeMode
+  readonly mode?: MonitorBridgeMode
   readonly inProcessServerFactory?: InProcessServerFactory
 }
 
-export type PortinoBridgeMode = 'external-process' | 'in-process'
+export type MonitorBridgeMode = 'external-process' | 'in-process'
 
 type InProcessServerInstance = Awaited<
-  ReturnType<typeof createPortinoBridgeServer>
+  ReturnType<typeof createMonitorBridgeServer>
 >
 
 type InProcessServerFactory = (params: {
@@ -103,13 +103,13 @@ type InProcessServerFactory = (params: {
   cliPath: string
 }) => Promise<InProcessServerInstance>
 
-const DEFAULT_BRIDGE_MODE: PortinoBridgeMode = 'external-process'
+const DEFAULT_BRIDGE_MODE: MonitorBridgeMode = 'external-process'
 
 const defaultInProcessServerFactory: InProcessServerFactory = async ({
   port,
   cliPath,
 }) => {
-  return createPortinoBridgeServer({
+  return createMonitorBridgeServer({
     port,
     cliPath,
   })
@@ -124,10 +124,10 @@ function isAddressInUseError(error: unknown): error is NodeJS.ErrnoException {
   )
 }
 
-class PortinoServiceClient implements vscode.Disposable {
+class MonitorBridgeServiceClient implements vscode.Disposable {
   private readonly clientId = randomUUID()
   private preferredPort: number
-  private readonly mode: PortinoBridgeMode
+  private readonly mode: MonitorBridgeMode
   private readonly inProcessServerFactory: InProcessServerFactory
   private readyInfo: ServiceReadyInfo | undefined
   private ensuring: Promise<ServiceReadyInfo> | undefined
@@ -139,7 +139,7 @@ class PortinoServiceClient implements vscode.Disposable {
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly resolveCliPath: () => Promise<string>,
-    options: PortinoServiceClientOptions = {}
+    options: MonitorBridgeServiceClientOptions = {}
   ) {
     const resolvedPort =
       typeof options.preferredPort === 'number'
@@ -168,10 +168,10 @@ class PortinoServiceClient implements vscode.Disposable {
   dispose(): void {
     this.disposed = true
     this.detach().catch((error) => {
-      console.error('Failed to detach from Portino service', error)
+      console.error('Failed to detach from monitor bridge service', error)
     })
     this.shutdownInProcessServer().catch((error) => {
-      console.error('Failed to close in-process Portino server', error)
+      console.error('Failed to close in-process monitor bridge server', error)
     })
   }
 
@@ -230,7 +230,7 @@ class PortinoServiceClient implements vscode.Disposable {
 
   private async waitForBridge(port: number): Promise<ServiceReadyInfo> {
     if (port <= 0) {
-      throw new Error('Invalid Portino bridge port')
+      throw new Error('Invalid BoardLab monitor bridge port')
     }
     for (let attempt = 0; attempt < WAIT_ATTEMPTS; attempt++) {
       try {
@@ -245,7 +245,7 @@ class PortinoServiceClient implements vscode.Disposable {
       }
       await delay(WAIT_DELAY_MS)
     }
-    throw new Error('Timed out waiting for Portino bridge startup')
+    throw new Error('Timed out waiting for BoardLab monitor bridge startup')
   }
 
   private async fetchHealth(
@@ -343,7 +343,7 @@ class PortinoServiceClient implements vscode.Disposable {
           throw new BridgeInUseError(port, 'address-in-use', error)
         }
         throw new Error(
-          `Failed to launch in-process Portino service: ${String(error)}`
+          `Failed to launch in-process monitor bridge service: ${String(error)}`
         )
       }
     }
@@ -359,7 +359,7 @@ class PortinoServiceClient implements vscode.Disposable {
       String(port),
     ]
 
-    console.log('Launching Portino service', {
+    console.log('Launching monitor bridge service', {
       entry,
       cliPath,
       port,
@@ -370,16 +370,16 @@ class PortinoServiceClient implements vscode.Disposable {
         detached: false, // TODO: change to true when ready
         stdio: 'pipe', // // TODO: change to ignore when ready
       })
-      console.log('Launched Portino service', { pid: child.pid })
+      console.log('Launched monitor bridge service', { pid: child.pid })
       child.on('error', (error) => {
-        console.error('Portino service process error', error)
+        console.error('monitor bridge service process error', error)
       })
       child.on('exit', (code, signal) => {
-        console.log('Portino service process exited', { code, signal })
+        console.log('monitor bridge service process exited', { code, signal })
       })
       // child.unref() // TODO: uncomment when ready
     } catch (error) {
-      throw new Error(`Failed to launch Portino service: ${String(error)}`)
+      throw new Error(`Failed to launch monitor bridge service: ${String(error)}`)
     }
     return port
   }
@@ -429,7 +429,7 @@ class PortinoServiceClient implements vscode.Disposable {
     } catch (error) {
       this.attachToken = undefined
       this.readyInfo = undefined
-      throw new Error(`Failed to attach to Portino service: ${String(error)}`)
+      throw new Error(`Failed to attach to monitor bridge service: ${String(error)}`)
     }
   }
 
@@ -449,7 +449,7 @@ class PortinoServiceClient implements vscode.Disposable {
         body: JSON.stringify({ token }),
       })
     } catch (error) {
-      console.error('Failed to notify Portino service detach', error)
+      console.error('Failed to notify monitor bridge service detach', error)
     }
   }
 
@@ -470,26 +470,26 @@ class PortinoServiceClient implements vscode.Disposable {
   }
 }
 
-type PortinoBridgeClientOptions = ConstructorParameters<
-  typeof PortinoBridgeClient
+type MonitorBridgeClientOptions = ConstructorParameters<
+  typeof MonitorBridgeClient
 >[0]
 
 export interface MonitorManagerOptions {
-  readonly serviceClientOptions?: Partial<PortinoServiceClientOptions>
+  readonly serviceClientOptions?: Partial<MonitorBridgeServiceClientOptions>
   readonly serviceClientFactory?: (
     context: vscode.ExtensionContext,
     resolveCliPath: () => Promise<string>,
-    options: PortinoServiceClientOptions
-  ) => PortinoServiceClient
+    options: MonitorBridgeServiceClientOptions
+  ) => MonitorBridgeServiceClient
   readonly bridgeClientFactory?: (
-    options: PortinoBridgeClientOptions
-  ) => PortinoBridgeClient
+    options: MonitorBridgeClientOptions
+  ) => MonitorBridgeClient
 }
 
 export class MonitorManager implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = []
-  private readonly serviceClient: PortinoServiceClient
-  private readonly bridgeClient: PortinoBridgeClient
+  private readonly serviceClient: MonitorBridgeServiceClient
+  private readonly bridgeClient: MonitorBridgeClient
   private readonly clientSessions = new Map<string, MessageParticipant>()
   private bridgeEventsRegistered = false
   private bridgeConflictNotified = false
@@ -529,17 +529,17 @@ export class MonitorManager implements vscode.Disposable {
     private readonly messenger: Messenger,
     options: MonitorManagerOptions = {}
   ) {
-    const configuration = vscode.workspace.getConfiguration('ardunno.monitor')
+    const configuration = vscode.workspace.getConfiguration('boardlab.monitor')
     const configuredPort = configuration.get<number>('bridgePort', 0)
     const preferredPort =
       configuredPort > 0 ? configuredPort : DEFAULT_BRIDGE_PORT
-    const configuredMode = configuration.get<PortinoBridgeMode>(
+    const configuredMode = configuration.get<MonitorBridgeMode>(
       'bridgeMode',
       DEFAULT_BRIDGE_MODE
     )
 
     const overrides = options.serviceClientOptions ?? {}
-    const serviceClientOptions: PortinoServiceClientOptions = {
+    const serviceClientOptions: MonitorBridgeServiceClientOptions = {
       preferredPort:
         overrides.preferredPort !== undefined
           ? overrides.preferredPort
@@ -551,7 +551,7 @@ export class MonitorManager implements vscode.Disposable {
     const serviceClientFactory =
       options.serviceClientFactory ??
       ((ctx, resolver, clientOptions) =>
-        new PortinoServiceClient(ctx, resolver, clientOptions))
+        new MonitorBridgeServiceClient(ctx, resolver, clientOptions))
 
     this.serviceClient = serviceClientFactory(
       context,
@@ -562,8 +562,8 @@ export class MonitorManager implements vscode.Disposable {
 
     const bridgeClientFactory =
       options.bridgeClientFactory ??
-      ((clientOptions: PortinoBridgeClientOptions) =>
-        new PortinoBridgeClient(clientOptions))
+      ((clientOptions: MonitorBridgeClientOptions) =>
+        new MonitorBridgeClient(clientOptions))
 
     this.bridgeClient = bridgeClientFactory({
       resolveBridgeInfo: async () => this.serviceClient.getBridgeInfo(),

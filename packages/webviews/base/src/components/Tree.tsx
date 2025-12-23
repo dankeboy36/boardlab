@@ -301,7 +301,7 @@ export function Tree({
   return (
     <VscodeTree
       className={className}
-      data-ardunno-tree={String(instanceId)}
+      data-boardlab-tree={String(instanceId)}
       aria-label={ariaLabel}
       expandMode={expandMode}
       multiSelect={multiSelect}

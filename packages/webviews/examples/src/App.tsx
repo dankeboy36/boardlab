@@ -3,12 +3,8 @@ import {
   useCodiconStylesheet,
   vscode,
   type TreeNode,
-} from '@vscode-ardunno/base'
-import type {
-  Board,
-  ExampleLibrary,
-  ExampleTreeNode,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/base'
+import type { Board, ExampleLibrary, ExampleTreeNode } from '@boardlab/protocol'
 import {
   getSelectedBoard,
   listExamples,
@@ -17,7 +13,7 @@ import {
   openExampleReadme,
   openExampleResource as openExampleResourceRequest,
   openExampleSketch as openExampleSketchRequest,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import {
   useCallback,
   useEffect,
@@ -158,7 +154,7 @@ export function App(): JSX.Element {
       return
     }
     const host = document.querySelector<HTMLElement>(
-      '[data-ardunno-search-input]'
+      '[data-boardlab-search-input]'
     )
     if (!host) {
       return
@@ -447,7 +443,7 @@ export function App(): JSX.Element {
           value={query}
           onInput={handleQueryChange}
           invalid={Boolean(regexError)}
-          data-ardunno-search-input
+          data-boardlab-search-input
         >
           <VscodeIcon
             slot="content-after"

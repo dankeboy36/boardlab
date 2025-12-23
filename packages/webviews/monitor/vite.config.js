@@ -9,20 +9,20 @@ export default defineConfig({
   base: './',
   plugins: [react(), singleCssBundlePlugin()],
   optimizeDeps: {
-    include: ['@vscode-ardunno/protocol'],
+    include: ['@boardlab/protocol'],
   },
   resolve: {
     alias: {
-      '@vscode-ardunno/base': path.resolve(__dirname, '../base/src/index.ts'),
-      '@vscode-ardunno/protocol': path.resolve(
+      '@boardlab/base': path.resolve(__dirname, '../base/src/index.ts'),
+      '@boardlab/protocol': path.resolve(
         __dirname,
         '../../protocol/src/index.ts'
       ),
-      '@vscode-ardunno/monitor-shared': path.resolve(
+      '@boardlab/monitor-shared': path.resolve(
         __dirname,
         '../monitor-shared/src'
       ),
-      '@vscode-ardunno/resources': path.resolve(
+      '@boardlab/resources': path.resolve(
         __dirname,
         '../resources/src/index.tsx'
       ),

@@ -2,12 +2,12 @@ import assert from 'node:assert/strict'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
-import { createServer as createPortinoServer } from '@vscode-ardunno/portino-bridge'
-import { MockCliBridge } from '@vscode-ardunno/portino-bridge/mockCliBridge'
+import { createServer as createMonitorBridgeServer } from '@boardlab/portino-bridge'
+import { MockCliBridge } from '@boardlab/portino-bridge/mockCliBridge'
 import {
   connectMonitorClient,
   type ConnectClientParams,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
 import type { PortIdentifier } from 'boards-list'
 import * as vscode from 'vscode'
 import type { Messenger } from 'vscode-messenger'
@@ -160,7 +160,7 @@ describe('MonitorManager (in-process bridge)', function () {
       scopeOrUri?: unknown,
       ...rest: unknown[]
     ) {
-      if (section === 'ardunno.monitor') {
+      if (section === 'boardlab.monitor') {
         return {
           get<T>(key: string, defaultValue: T): T {
             if (key === 'bridgePort') {
@@ -185,7 +185,7 @@ describe('MonitorManager (in-process bridge)', function () {
     ;(vscode.workspace.getConfiguration as unknown) = originalGetConfiguration
   })
 
-  it('embeds the Portino bridge and tracks monitor lifecycle', async () => {
+  it('embeds the monitor bridge and tracks monitor lifecycle', async () => {
     const mockBridge = new MockCliBridge()
     const messenger = new TestMessenger()
     const extensionPath = path.resolve(__dirname, '..', '..', '..', '..')
@@ -204,7 +204,7 @@ describe('MonitorManager (in-process bridge)', function () {
         mode: 'in-process',
         preferredPort: 0,
         inProcessServerFactory: async ({ port }) =>
-          createPortinoServer({
+          createMonitorBridgeServer({
             port,
             cliBridgeFactory: () => mockBridge as any,
             debug: false,

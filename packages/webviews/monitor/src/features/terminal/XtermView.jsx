@@ -115,7 +115,7 @@ const XtermView = forwardRef(function XtermView(props, ref) {
     const host =
       inputRef.current ??
       (typeof document !== 'undefined'
-        ? document.querySelector('[data-ardunno-monitor-search-input]')
+        ? document.querySelector('[data-boardlab-monitor-search-input]')
         : null)
     if (!(host instanceof HTMLElement)) return
 
@@ -632,7 +632,7 @@ const XtermView = forwardRef(function XtermView(props, ref) {
           placeholder="Find (⇅ for history)"
           value={query}
           tabIndex={searchOpen ? 0 : -1}
-          data-ardunno-monitor-search-input=""
+          data-boardlab-monitor-search-input=""
           onInput={(e) => {
             const v = /** @type {any} */ (e).currentTarget?.value ?? ''
             setQuery(v)

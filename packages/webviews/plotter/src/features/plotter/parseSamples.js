@@ -1,7 +1,7 @@
 // @ts-check
 
 /**
- * Serial text → aligned columnar samples according to Portino policy.
+ * Serial text → aligned columnar samples according to Monitor policy.
  *
  * - Split by CR/LF; tokenize by whitespace/comma/semicolon.
  * - Extract finite numbers only.

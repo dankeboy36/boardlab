@@ -40,7 +40,7 @@ export function registerExampleReadmeActions(
 
   context.subscriptions.push(
     vscode.commands.registerCommand(
-      'ardunno.cloneToSketchbook',
+      'boardlab.cloneToSketchbook',
       async (meta?: ExampleReadmeMeta) => {
         const resolved = resolve(meta)
         if (!resolved) {
@@ -53,7 +53,7 @@ export function registerExampleReadmeActions(
       }
     ),
     vscode.commands.registerCommand(
-      'ardunno.openContainingLibrary',
+      'boardlab.openContainingLibrary',
       async (meta?: ExampleReadmeMeta) => {
         const resolved = resolve(meta)
         if (!resolved) {
@@ -88,7 +88,7 @@ class ExampleLensProvider implements vscode.CodeLensProvider {
     const lenses = [
       new vscode.CodeLens(range, {
         title: '$(repo-clone) Clone sketch to Sketchbook',
-        command: 'ardunno.cloneToSketchbook',
+        command: 'boardlab.cloneToSketchbook',
         arguments: [meta],
       }),
     ]
@@ -101,7 +101,7 @@ class ExampleLensProvider implements vscode.CodeLensProvider {
           title: inWorkspace
             ? '$(folder-opened) Open Sketch Folder in Workspace'
             : '$(folder-add) Add Sketch Folder to Workspace',
-          command: 'ardunno.addSketchFolderToWorkspace',
+          command: 'boardlab.addSketchFolderToWorkspace',
           arguments: [
             {
               folderUri: resolved.sketchUri,
@@ -117,7 +117,7 @@ class ExampleLensProvider implements vscode.CodeLensProvider {
       lenses.push(
         new vscode.CodeLens(range, {
           title: '$(library) Open Containing Library',
-          command: 'ardunno.openContainingLibrary',
+          command: 'boardlab.openContainingLibrary',
           arguments: [meta],
         })
       )
@@ -135,7 +135,7 @@ async function cloneToSketchbook(
 
   const sketchbookPath =
     vscode.workspace
-      .getConfiguration('ardunno')
+      .getConfiguration('boardlab')
       .get<string>('sketchbookPath') ??
     process.env.ARDUINO_SKETCHBOOK ??
     defaultSketchbookPath()

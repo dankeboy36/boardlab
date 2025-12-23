@@ -4,7 +4,7 @@ import { VscodeIcon } from 'vscode-react-elements-x'
 
 import SendText from './SendText.jsx'
 
-const HISTORY_KEY = 'portino.serialInput.history'
+const HISTORY_KEY = 'boardlab.monitor.serialInput.history'
 const MAX_HISTORY = 20
 
 /** @typedef {'none' | 'lf' | 'cr' | 'crlf'} LineEnding */

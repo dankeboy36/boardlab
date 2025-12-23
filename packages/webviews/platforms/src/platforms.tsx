@@ -1,4 +1,3 @@
-import { EventEmitter } from '@c4312/evt'
 import {
   Disposable,
   ErrorEventParams,
@@ -16,7 +15,8 @@ import {
   uninstallPlatform,
   willInstallPlatform,
   willUninstallPlatform,
-} from '@vscode-ardunno/protocol'
+} from '@boardlab/protocol'
+import { EventEmitter } from '@c4312/evt'
 import { HOST_EXTENSION } from 'vscode-messenger-common'
 import type { Messenger } from 'vscode-messenger-webview'
 
