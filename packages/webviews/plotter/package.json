@@ -22,7 +22,7 @@
     "@c4312/evt": "^0.1.1",
     "@react-hookz/web": "^25.1.1",
     "@reduxjs/toolkit": "^2.8.2",
-    "@vscode/codicons": "^0.0.39",
+    "@vscode/codicons": "^0.0.44",
     "boards-list": "^1.1.0",
     "fqbn": "^1.3.1",
     "nanoid": "^5.1.5",

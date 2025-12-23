@@ -21,7 +21,7 @@
     "@boardlab/protocol": "0.0.0",
     "@c4312/evt": "^0.1.1",
     "@reduxjs/toolkit": "^2.8.2",
-    "@vscode/codicons": "^0.0.40",
+    "@vscode/codicons": "^0.0.44",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-search": "^0.15.0",
     "@xterm/addon-serialize": "^0.13.0",

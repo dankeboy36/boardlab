@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@boardlab/protocol": "0.0.0",
-    "@vscode/codicons": "^0.0.40",
+    "@vscode/codicons": "^0.0.44",
     "react": "^19.1.1",
     "vscode-messenger-common": "^0.5.1",
     "vscode-messenger-webview": "^0.5.1",
