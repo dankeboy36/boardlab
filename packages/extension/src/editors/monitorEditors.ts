@@ -442,7 +442,7 @@ abstract class MonitorBaseEditorProvider<
           <div id="root"></div>
           <script nonce="${nonce}">
             window.__CSP_NONCE__ = '${nonce}';
-            window.__ARDUNNO_WEBVIEW_TYPE__ = '${this.webviewAssetType}';
+            window.__BOARDLAB_WEBVIEW_TYPE__ = '${this.webviewAssetType}';
             ${stateScript}
           </script>
           <script type="module" nonce="${nonce}" src="${scriptUri}"></script>

@@ -366,7 +366,7 @@ function Search(props: SearchProps) {
     const type = (filter['type'] as any) ?? ''
     // topic only applies to libraries
     const topic = (filter['topic'] as any) ?? ''
-    const webviewType = (window as any).__ARDUNNO_WEBVIEW_TYPE__ as
+    const webviewType = (window as any).__BOARDLAB_WEBVIEW_TYPE__ as
       | 'libraries'
       | 'platforms'
       | string
@@ -395,7 +395,7 @@ function Search(props: SearchProps) {
 
   // React to filter changes coming from the extension-side (menu commands)
   useEffect(() => {
-    const webviewType = (window as any).__ARDUNNO_WEBVIEW_TYPE__ as
+    const webviewType = (window as any).__BOARDLAB_WEBVIEW_TYPE__ as
       | 'libraries'
       | 'platforms'
       | string
@@ -442,7 +442,7 @@ function Search(props: SearchProps) {
   const clearFilters = useCallback(() => {
     setFilter({})
     try {
-      const webviewType = (window as any).__ARDUNNO_WEBVIEW_TYPE__ as string
+      const webviewType = (window as any).__BOARDLAB_WEBVIEW_TYPE__ as string
       if (webviewType === 'platforms') {
         vscode.messenger?.sendRequest(
           setPlatformsFilterContext,
