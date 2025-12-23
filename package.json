@@ -2,7 +2,7 @@
   "name": "boardlab",
   "displayName": "BoardLab",
   "version": "0.0.1-beta.1",
-  "description": "Vendor-independent board development in VS Code, powered by the Arduino CLI",
+  "description": "Vendor-independent board development for Visual Studio Code, powered by the Arduino CLI",
   "categories": [
     "Programming Languages",
     "Other"
@@ -598,7 +598,7 @@
         "boardlab.monitor.bridgePort": {
           "type": "number",
           "default": 55888,
-          "markdownDescription": "Preferred TCP port for the BoardLab monitor bridge server used to connect VS Code instances. If another process responds on this port with an unexpected protocol, the extension will warn and will not start its own bridge.",
+          "markdownDescription": "Preferred TCP port for the BoardLab monitor bridge server used to connect Visual Studio Code instances. If another process responds on this port with an unexpected protocol, the extension will warn and will not start its own bridge.",
           "minimum": 55000
         },
         "boardlab.monitor.bridgeMode": {
@@ -608,7 +608,7 @@
             "in-process"
           ],
           "default": "external-process",
-          "markdownDescription": "Controls how the BoardLab monitor bridge server is started. Use 'in-process' to run it inside the VS Code extension host for easier debugging. Changing this setting requires reloading the window."
+          "markdownDescription": "Controls how the BoardLab monitor bridge server is started. Use 'in-process' to run it inside the Visual Studio Code extension host for easier debugging. Changing this setting requires reloading the window."
         },
         "boardlab.cli.configPath": {
           "type": "string",

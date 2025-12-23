@@ -14,5 +14,5 @@
 
 ## Debugging
 
-- Press `F5` in VS Code to launch an Extension Development Host.
+- Press `F5` in Visual Studio Code to launch an Extension Development Host.
 - Use the Command Palette and search for "BoardLab" commands.
