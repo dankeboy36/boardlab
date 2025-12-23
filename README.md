@@ -18,11 +18,32 @@ BoardLab focuses on removing friction from Arduino development workflows inside 
 
 Current features include:
 
-- Board, port, and sketch management from VS Code
+- Board, port, and sketch management from Visual Studio Code
 - Compile, upload, and archive sketches using the Arduino CLI
-- Built-in serial monitor and plotter views
-- Build profiles for repeatable board and toolchain configurations
-- Native VS Code commands, views, tasks, and diagnostics
+- **Multi-sketch support**:
+  - Discover and manage multiple sketches across all Visual Studio Code workspace folders
+  - Import and work with multiple sketches without opening more than one Visual Studio Code window
+- **Built-in serial monitor and plotter**:
+  - Implemented as custom text editors, allowing views to be detached from the main Visual Studio Code window
+  - Designed for multi-window workflows where editing, uploading, and monitoring happen in parallel
+  - Shared underlying HTTP server coordinating serial port access across windows
+  - Supports suspend/resume between uploads when multiple windows compete for the same sketch
+  - High-throughput output (tested up to ~150 MiB/s) to an Xterm.js terminal with ANSI control code support
+- **Profile-based workflows**:
+  - Visual Studio Code–native profile editor with both structured UI and YAML editors
+  - Profile validation with actionable diagnostics
+  - Every detected issue provides a Quick Fix to synchronize profiles with the local installation
+  - Profiles are portable and can be shared across projects and machines
+  - Profiles are not locked-in yet; current validation focuses on guiding users rather than enforcing restrictions
+  - Supports running separate Arduino CLI daemon instances per profile when needed
+- **Preview and discovery**:
+  - Preview built-in examples before importing them into a workspace or sketchbook
+  - Preview third-party and built-in libraries
+  - Inspect sketch contents before adding them to a project
+- Native Visual Studio Code commands, views, tasks, and diagnostics
+- **Ecosystem compatibility**:
+  - Fully compatible with the [Visual Studio Code Arduino API](https://github.com/dankeboy36/vscode-arduino-api)
+  - Extensions compatible with Arduino IDE 2.x can work with BoardLab without modification
 
 Screenshots and short animations will be added as the UI stabilizes.
 
