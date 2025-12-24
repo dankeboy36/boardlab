@@ -723,14 +723,17 @@ export function activate(context: vscode.ExtensionContext) {
 
   const librariesViewProvider = new LibrariesManagerViewProvider(
     context.extensionUri,
+    context.extensionMode,
     messenger
   )
   const platformsViewProvider = new PlatformsManagerViewProvider(
     context.extensionUri,
+    context.extensionMode,
     messenger
   )
   const examplesViewProvider = new ExamplesViewProvider(
     context.extensionUri,
+    context.extensionMode,
     messenger
   )
 
@@ -907,12 +910,14 @@ export function activate(context: vscode.ExtensionContext) {
   )
   const monitorEditors = new MonitorEditors(
     context.extensionUri,
+    context.extensionMode,
     messenger,
     monitorResourceStore,
     monitorSelectionCoordinator
   )
   const plotterEditors = new PlotterEditors(
     context.extensionUri,
+    context.extensionMode,
     messenger,
     monitorResourceStore,
     monitorSelectionCoordinator
@@ -922,6 +927,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(profilesDiagnostics)
   const profilesEditor = new ProfilesEditorProvider(
     context.extensionUri,
+    context.extensionMode,
     messenger,
     boardlabContext,
     profilesDiagnostics

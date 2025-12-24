@@ -24,6 +24,10 @@ import {
 } from '../monitor/monitorResources'
 import type { MonitorSelectionCoordinator } from '../monitor/monitorSelections'
 import { getMonitorDisplayName, parseMonitorUri } from '../monitor/monitorUri'
+import {
+  getWebviewBuildRoot,
+  getWebviewHtmlResources,
+} from '../webviews/webviewAssets'
 
 type MonitorDocumentSelection = MonitorSelectionNotification | undefined
 
@@ -180,6 +184,7 @@ abstract class MonitorBaseEditorProvider<
 
   protected constructor(
     protected readonly extensionUri: vscode.Uri,
+    private readonly extensionMode: vscode.ExtensionMode,
     protected readonly messenger: Messenger,
     protected readonly resourceStore: MonitorResourceStore,
     protected readonly selectionCoordinator: MonitorSelectionCoordinator,
@@ -371,12 +376,10 @@ abstract class MonitorBaseEditorProvider<
   }
 
   private configureWebview(panel: vscode.WebviewPanel): void {
-    const buildRootSegments = [
-      'packages',
-      'webviews',
+    const buildRootSegments = getWebviewBuildRoot(
       this.webviewAssetType,
-      'out',
-    ]
+      this.extensionMode
+    )
     panel.webview.options = {
       enableScripts: true,
       enableCommandUris: false,
@@ -391,31 +394,12 @@ abstract class MonitorBaseEditorProvider<
     webview: vscode.Webview,
     initialState: unknown
   ): string {
-    const nonce = getNonce()
-    const buildRootSegments = [
-      'packages',
-      'webviews',
+    const buildRootSegments = getWebviewBuildRoot(
       this.webviewAssetType,
-      'out',
-    ]
-    const stylesUri = getWebviewResourceUri(webview, this.extensionUri, [
-      ...buildRootSegments,
-      'static',
-      'css',
-      'main.css',
-    ])
-    const scriptUri = getWebviewResourceUri(webview, this.extensionUri, [
-      ...buildRootSegments,
-      'static',
-      'js',
-      'main.js',
-    ])
-    const codiconFontUri = getWebviewResourceUri(webview, this.extensionUri, [
-      ...buildRootSegments,
-      'static',
-      'media',
-      'codicon.ttf',
-    ])
+      this.extensionMode
+    )
+    const { stylesUri, scriptUri, codiconFontUri, nonce } =
+      getWebviewHtmlResources(webview, this.extensionUri, buildRootSegments)
     const stateScript = initialState
       ? `window.__INITIAL_VSCODE_STATE__ = ${JSON.stringify(initialState).replace(/</g, '\\u003c')};`
       : ''
@@ -467,12 +451,14 @@ export class MonitorEditors extends MonitorBaseEditorProvider<
 > {
   constructor(
     extensionUri: vscode.Uri,
+    extensionMode: vscode.ExtensionMode,
     messenger: Messenger,
     resourceStore: MonitorResourceStore,
     selectionCoordinator: MonitorSelectionCoordinator
   ) {
     super(
       extensionUri,
+      extensionMode,
       messenger,
       resourceStore,
       selectionCoordinator,
@@ -516,12 +502,14 @@ export class PlotterEditors extends MonitorBaseEditorProvider<
 > {
   constructor(
     extensionUri: vscode.Uri,
+    extensionMode: vscode.ExtensionMode,
     messenger: Messenger,
     resourceStore: MonitorResourceStore,
     selectionCoordinator: MonitorSelectionCoordinator
   ) {
     super(
       extensionUri,
+      extensionMode,
       messenger,
       resourceStore,
       selectionCoordinator,
@@ -543,22 +531,4 @@ export class PlotterEditors extends MonitorBaseEditorProvider<
   ): PlotterDocument {
     return new PlotterDocument(uri, port, query, this.resourceStore)
   }
-}
-
-function getWebviewResourceUri(
-  webview: vscode.Webview,
-  extensionUri: vscode.Uri,
-  segments: string[]
-): vscode.Uri {
-  return webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, ...segments))
-}
-
-function getNonce(): string {
-  const possible =
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-  let nonce = ''
-  for (let i = 0; i < 32; i++) {
-    nonce += possible.charAt(Math.floor(Math.random() * possible.length))
-  }
-  return nonce
 }

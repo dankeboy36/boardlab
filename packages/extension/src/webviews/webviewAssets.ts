@@ -1,8 +1,10 @@
 import * as vscode from 'vscode'
 
-export function getWebviewBuildRoot(type: string): string[] {
-  const envMode = (process.env.NODE_ENV ?? '').toLowerCase()
-  if (envMode === 'development') {
+export function getWebviewBuildRoot(
+  type: string,
+  extensionMode: vscode.ExtensionMode
+): string[] {
+  if (extensionMode !== vscode.ExtensionMode.Production) {
     return ['packages', 'webviews', type, 'out']
   }
   return ['dist', 'webviews', type]

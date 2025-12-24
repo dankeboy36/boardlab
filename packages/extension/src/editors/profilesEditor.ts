@@ -370,6 +370,7 @@ export class ProfilesEditorProvider
 
   constructor(
     private readonly extensionUri: vscode.Uri,
+    private readonly extensionMode: vscode.ExtensionMode,
     private readonly messenger: Messenger,
     private readonly boardlabContext: BoardLabContextImpl,
     diagnostics?: vscode.DiagnosticCollection
@@ -739,7 +740,7 @@ export class ProfilesEditorProvider
     document: vscode.TextDocument,
     state: ProfilesDocumentState
   ): string {
-    const buildRoot = getWebviewBuildRoot('profiles')
+    const buildRoot = getWebviewBuildRoot('profiles', this.extensionMode)
     const { stylesUri, scriptUri, codiconFontUri, nonce } =
       getWebviewHtmlResources(webview, this.extensionUri, buildRoot)
     const bootstrap = {

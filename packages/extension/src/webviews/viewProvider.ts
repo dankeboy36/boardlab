@@ -18,6 +18,7 @@ import { getWebviewBuildRoot, getWebviewHtmlResources } from './webviewAssets'
 abstract class WebviewViewProvider implements vscode.WebviewViewProvider {
   constructor(
     private readonly extensionUri: vscode.Uri,
+    private readonly extensionMode: vscode.ExtensionMode,
     protected readonly messenger: Messenger,
     private readonly type:
       | 'platforms'
@@ -103,7 +104,7 @@ abstract class WebviewViewProvider implements vscode.WebviewViewProvider {
   }
 
   private getBuildRootSegments(): string[] {
-    return getWebviewBuildRoot(this.type)
+    return getWebviewBuildRoot(this.type, this.extensionMode)
   }
 }
 
@@ -114,8 +115,12 @@ export class PlatformsManagerViewProvider extends WebviewViewProvider {
 
   readonly onDidResolve = this.onDidResolveEmitter.event
 
-  constructor(extensionUri: vscode.Uri, messenger: Messenger) {
-    super(extensionUri, messenger, 'platforms')
+  constructor(
+    extensionUri: vscode.Uri,
+    extensionMode: vscode.ExtensionMode,
+    messenger: Messenger
+  ) {
+    super(extensionUri, extensionMode, messenger, 'platforms')
   }
 
   get isResolved(): boolean {
@@ -138,8 +143,12 @@ export class LibrariesManagerViewProvider extends WebviewViewProvider {
 
   readonly onDidResolve = this.onDidResolveEmitter.event
 
-  constructor(extensionUri: vscode.Uri, messenger: Messenger) {
-    super(extensionUri, messenger, 'libraries')
+  constructor(
+    extensionUri: vscode.Uri,
+    extensionMode: vscode.ExtensionMode,
+    messenger: Messenger
+  ) {
+    super(extensionUri, extensionMode, messenger, 'libraries')
   }
 
   get isResolved(): boolean {
@@ -162,8 +171,12 @@ export class ExamplesViewProvider extends WebviewViewProvider {
 
   readonly onDidResolve = this.onDidResolveEmitter.event
 
-  constructor(extensionUri: vscode.Uri, messenger: Messenger) {
-    super(extensionUri, messenger, 'examples')
+  constructor(
+    extensionUri: vscode.Uri,
+    extensionMode: vscode.ExtensionMode,
+    messenger: Messenger
+  ) {
+    super(extensionUri, extensionMode, messenger, 'examples')
   }
 
   get isResolved(): boolean {
