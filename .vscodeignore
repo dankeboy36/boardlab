@@ -3,7 +3,6 @@
 node_modules/**
 packages/**
 out/**
-!out/portino-bridge/out/**
 src/**
 scripts/**
 test_workspace/**
