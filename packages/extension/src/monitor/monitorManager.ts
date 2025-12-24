@@ -124,6 +124,24 @@ function isAddressInUseError(error: unknown): error is NodeJS.ErrnoException {
   )
 }
 
+function formatLog(message: string, data?: unknown): string {
+  if (data === undefined) {
+    return message
+  }
+  try {
+    return `${message} ${JSON.stringify(data)}`
+  } catch {
+    return `${message} ${String(data)}`
+  }
+}
+
+function formatError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.stack ?? error.message
+  }
+  return String(error)
+}
+
 class MonitorBridgeServiceClient implements vscode.Disposable {
   private readonly clientId = randomUUID()
   private preferredPort: number
@@ -139,6 +157,7 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly resolveCliPath: () => Promise<string>,
+    private readonly outputChannel: vscode.OutputChannel,
     options: MonitorBridgeServiceClientOptions = {}
   ) {
     const resolvedPort =
@@ -168,10 +187,10 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
   dispose(): void {
     this.disposed = true
     this.detach().catch((error) => {
-      console.error('Failed to detach from monitor bridge service', error)
+      this.logError('Failed to detach from monitor bridge service', error)
     })
     this.shutdownInProcessServer().catch((error) => {
-      console.error('Failed to close in-process monitor bridge server', error)
+      this.logError('Failed to close in-process monitor bridge server', error)
     })
   }
 
@@ -350,16 +369,9 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
 
     const cliPath = await this.resolveCliPath()
     const entry = this.serviceEntryPoint
-    const args = [
-      '--inspect', // TODO: remove when ready
-      entry,
-      '--cli-path',
-      cliPath,
-      '--port',
-      String(port),
-    ]
+    const args = [entry, '--cli-path', cliPath, '--port', String(port)]
 
-    console.log('Launching monitor bridge service', {
+    this.log('Launching monitor bridge service', {
       entry,
       cliPath,
       port,
@@ -370,12 +382,12 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
         detached: false, // TODO: change to true when ready
         stdio: 'pipe', // // TODO: change to ignore when ready
       })
-      console.log('Launched monitor bridge service', { pid: child.pid })
+      this.log('Launched monitor bridge service', { pid: child.pid })
       child.on('error', (error) => {
-        console.error('monitor bridge service process error', error)
+        this.logError('monitor bridge service process error', error)
       })
       child.on('exit', (code, signal) => {
-        console.log('monitor bridge service process exited', { code, signal })
+        this.log('monitor bridge service process exited', { code, signal })
       })
       // child.unref() // TODO: uncomment when ready
     } catch (error) {
@@ -388,13 +400,16 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
 
   private get serviceEntryPoint(): string {
     const extensionRoot = this.context.extensionPath
-    return path.join(
-      extensionRoot,
-      'out',
-      'portino-bridge',
-      'out',
-      'serviceMain.js'
-    )
+    if (this.context.extensionMode !== vscode.ExtensionMode.Production) {
+      return path.join(
+        extensionRoot,
+        'out',
+        'portino-bridge',
+        'out',
+        'serviceMain.js'
+      )
+    }
+    return path.join(extensionRoot, 'dist', 'portino-bridge', 'serviceMain.js')
   }
 
   private async ensureAttached(info: ServiceReadyInfo): Promise<void> {
@@ -453,7 +468,7 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
         body: JSON.stringify({ token }),
       })
     } catch (error) {
-      console.error('Failed to notify monitor bridge service detach', error)
+      this.logError('Failed to notify monitor bridge service detach', error)
     }
   }
 
@@ -472,6 +487,14 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
       return false
     }
   }
+
+  private log(message: string, data?: unknown): void {
+    this.outputChannel.appendLine(formatLog(message, data))
+  }
+
+  private logError(message: string, error: unknown): void {
+    this.outputChannel.appendLine(`${message} ${formatError(error)}`)
+  }
 }
 
 type MonitorBridgeClientOptions = ConstructorParameters<
@@ -483,6 +506,7 @@ export interface MonitorManagerOptions {
   readonly serviceClientFactory?: (
     context: vscode.ExtensionContext,
     resolveCliPath: () => Promise<string>,
+    outputChannel: vscode.OutputChannel,
     options: MonitorBridgeServiceClientOptions
   ) => MonitorBridgeServiceClient
   readonly bridgeClientFactory?: (
@@ -494,6 +518,7 @@ export class MonitorManager implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = []
   private readonly serviceClient: MonitorBridgeServiceClient
   private readonly bridgeClient: MonitorBridgeClient
+  private readonly outputChannel: vscode.OutputChannel
   private readonly clientSessions = new Map<string, MessageParticipant>()
   private bridgeEventsRegistered = false
   private bridgeConflictNotified = false
@@ -531,8 +556,10 @@ export class MonitorManager implements vscode.Disposable {
     context: vscode.ExtensionContext,
     private readonly cliContext: CliContext,
     private readonly messenger: Messenger,
+    outputChannel: vscode.OutputChannel,
     options: MonitorManagerOptions = {}
   ) {
+    this.outputChannel = outputChannel
     const configuration = vscode.workspace.getConfiguration('boardlab.monitor')
     const configuredPort = configuration.get<number>('bridgePort', 0)
     const preferredPort =
@@ -554,12 +581,13 @@ export class MonitorManager implements vscode.Disposable {
 
     const serviceClientFactory =
       options.serviceClientFactory ??
-      ((ctx, resolver, clientOptions) =>
-        new MonitorBridgeServiceClient(ctx, resolver, clientOptions))
+      ((ctx, resolver, channel, clientOptions) =>
+        new MonitorBridgeServiceClient(ctx, resolver, channel, clientOptions))
 
     this.serviceClient = serviceClientFactory(
       context,
       async () => this.cliContext.resolveExecutablePath(),
+      outputChannel,
       serviceClientOptions
     )
     this.disposables.push(this.serviceClient)
@@ -623,7 +651,7 @@ export class MonitorManager implements vscode.Disposable {
       try {
         disposable?.dispose()
       } catch (error) {
-        console.error('Failed to dispose monitor manager', error)
+        this.logError('Failed to dispose monitor manager', error)
       }
     }
     this.clientSessions.clear()
@@ -642,7 +670,7 @@ export class MonitorManager implements vscode.Disposable {
 
   async getBridgeInfo(): Promise<MonitorBridgeInfo> {
     const info = await this.serviceClient.getBridgeInfo()
-    console.log('Got monitor bridge info', info)
+    this.log('Got monitor bridge info', info)
 
     this.bridgeConflictNotified = false
     return { httpBaseUrl: info.httpBaseUrl, wsUrl: info.wsUrl }
@@ -653,7 +681,7 @@ export class MonitorManager implements vscode.Disposable {
       const params: RequestPauseResumeMonitorParams = { port }
       return await this.bridgeClient.pauseMonitor(params)
     } catch (error) {
-      console.error('Failed to pause monitor via RPC', error)
+      this.logError('Failed to pause monitor via RPC', error)
       return false
     }
   }
@@ -663,7 +691,7 @@ export class MonitorManager implements vscode.Disposable {
       const params: RequestPauseResumeMonitorParams = { port }
       return await this.bridgeClient.resumeMonitor(params)
     } catch (error) {
-      console.error('Failed to resume monitor via RPC', error)
+      this.logError('Failed to resume monitor via RPC', error)
       return false
     }
   }
@@ -740,7 +768,7 @@ export class MonitorManager implements vscode.Disposable {
           selectedBaudrate = selection.baudrate
         }
       } catch (error) {
-        console.error('Failed to resolve monitor selection', error)
+        this.logError('Failed to resolve monitor selection', error)
       }
     }
 
@@ -944,7 +972,7 @@ export class MonitorManager implements vscode.Disposable {
     try {
       this.messenger.sendNotification(notification, participant, payload)
     } catch (error) {
-      console.error(
+      this.logError(
         `Failed to notify monitor client ${clientId} (${notification.method})`,
         error
       )
@@ -1026,6 +1054,14 @@ export class MonitorManager implements vscode.Disposable {
     this.selectedBaudrateCache.set(createPortKey(port), baudrate)
   }
 
+  private log(message: string, data?: unknown): void {
+    this.outputChannel.appendLine(formatLog(message, data))
+  }
+
+  private logError(message: string, error: unknown): void {
+    this.outputChannel.appendLine(`${message} ${formatError(error)}`)
+  }
+
   private async handleGetBridgeInfo(
     sender?: MessageParticipant
   ): Promise<MonitorBridgeInfo> {
@@ -1043,7 +1079,7 @@ export class MonitorManager implements vscode.Disposable {
             message,
           })
         } catch (notifyError) {
-          console.error('Failed to notify monitor bridge error', notifyError)
+          this.logError('Failed to notify monitor bridge error', notifyError)
         }
       }
       throw error

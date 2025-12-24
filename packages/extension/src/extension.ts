@@ -103,7 +103,17 @@ export function activate(context: vscode.ExtensionContext) {
   const start = performance.now()
   const messenger = new Messenger({ ignoreHiddenViews: false, debugLog: true })
 
-  const boardlabContext = createBoardLabContext(context, messenger)
+  const outputChannel = vscode.window.createOutputChannel('BoardLab', {
+    log: true,
+  })
+  context.subscriptions.push(outputChannel)
+
+  const boardlabContext = createBoardLabContext(
+    context,
+    messenger,
+    true,
+    outputChannel
+  )
   console.log('Central services ready', {
     boardsListWatcher: boardlabContext.boardsListWatcher.constructor.name,
     monitorsRegistry: boardlabContext.monitorsRegistry.constructor.name,

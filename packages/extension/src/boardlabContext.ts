@@ -120,14 +120,22 @@ export interface BoardLabContext extends ArduinoContext {
   readonly boardsListWatcher: BoardsListWatcher
   readonly monitorsRegistry: MonitorsRegistry
   readonly extensionUri: vscode.Uri
+  readonly outputChannel: vscode.OutputChannel
 }
 
 export function createBoardLabContext(
   context: vscode.ExtensionContext,
   messenger: Messenger,
-  start = true
+  start = true,
+  outputChannel?: vscode.OutputChannel
 ): BoardLabContextImpl {
-  const boardlabContext = new BoardLabContextImpl(context, messenger)
+  const output =
+    outputChannel ??
+    vscode.window.createOutputChannel('BoardLab', { log: true })
+  if (!outputChannel) {
+    context.subscriptions.push(output)
+  }
+  const boardlabContext = new BoardLabContextImpl(context, messenger, output)
   if (start) {
     boardlabContext.cliContext.daemon.start()
   }
@@ -137,6 +145,7 @@ export function createBoardLabContext(
 export class BoardLabContextImpl implements BoardLabContext {
   readonly cliContext: CliContext
   readonly sketchbooks: Sketchbooks
+  readonly outputChannel: vscode.OutputChannel
   revealSketch: (sketch: Sketch | SketchFolder) => Promise<void> = async () => {
     /* NOOP */
   }
@@ -191,10 +200,12 @@ export class BoardLabContextImpl implements BoardLabContext {
 
   constructor(
     private readonly context: vscode.ExtensionContext,
-    private readonly messenger: Messenger
+    private readonly messenger: Messenger,
+    outputChannel: vscode.OutputChannel
   ) {
+    this.outputChannel = outputChannel
     this.workspaceState = context.workspaceState
-    this.cliContext = new CliContext(context)
+    this.cliContext = new CliContext(context, outputChannel)
     this._client = createClient(this.cliContext)
     this._currentCliConfig = this.snapshotCliConfig(
       this.cliContext.cliConfig.data
@@ -268,7 +279,8 @@ export class BoardLabContextImpl implements BoardLabContext {
     this.monitorManager = new MonitorManager(
       context,
       this.cliContext,
-      messenger
+      messenger,
+      outputChannel
     )
     this.monitorsRegistry = new InMemoryMonitorsRegistry()
     this.boardsListWatcher = new BoardsListWatcher(() =>

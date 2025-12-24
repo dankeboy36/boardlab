@@ -11,7 +11,6 @@ export interface DaemonAddress {
 }
 
 export class Daemon implements vscode.Disposable {
-  private readonly output: vscode.OutputChannel
   private readonly onDidChangeAddressEmitter: vscode.EventEmitter<
     DaemonAddress | undefined
   >
@@ -21,15 +20,12 @@ export class Daemon implements vscode.Disposable {
 
   constructor(
     context: vscode.ExtensionContext,
-    private cliContext: CliContext
+    private readonly cliContext: CliContext,
+    private readonly outputChannel: vscode.OutputChannel
   ) {
-    this.output = vscode.window.createOutputChannel('BoardLab', {
-      log: true,
-    })
     this.onDidChangeAddressEmitter = new vscode.EventEmitter<
       DaemonAddress | undefined
     >()
-    context.subscriptions.push(this.output)
     context.subscriptions.push(this.onDidChangeAddressEmitter)
     context.subscriptions.push(this)
   }
@@ -63,7 +59,7 @@ export class Daemon implements vscode.Disposable {
     setTimeout(async () => {
       try {
         const process = await spawnDaemon(command, cliConfigPath, (data) =>
-          this.output.append(data)
+          this.outputChannel.append(data)
         )
         this._process = process
         this.onDidChangeAddressEmitter.fire(this._process.address)

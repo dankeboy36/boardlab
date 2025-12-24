@@ -37,4 +37,21 @@ const extensionConfig = {
     level: 'log',
   },
 }
-module.exports = [extensionConfig]
+
+/** @type {import('webpack').Configuration} */
+const portinoBridgeConfig = {
+  target: 'node',
+  mode: 'none',
+  entry: './packages/servers/portino-bridge/out/serviceMain.js',
+  output: {
+    path: path.resolve(__dirname, 'dist', 'portino-bridge'),
+    filename: 'serviceMain.js',
+    libraryTarget: 'commonjs2',
+  },
+  resolve: {
+    extensions: ['.js'],
+  },
+  devtool: false,
+}
+
+module.exports = [extensionConfig, portinoBridgeConfig]

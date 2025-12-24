@@ -198,6 +198,16 @@ describe('MonitorManager (in-process bridge)', function () {
     const cliContext: CliContext = {
       resolveExecutablePath: async () => '/tmp/mock-cli',
     } as unknown as CliContext
+    const outputChannel: vscode.OutputChannel = {
+      name: 'BoardLab',
+      append: () => undefined,
+      appendLine: () => undefined,
+      replace: () => undefined,
+      clear: () => undefined,
+      show: () => undefined,
+      hide: () => undefined,
+      dispose: () => undefined,
+    } as unknown as vscode.OutputChannel
 
     const managerOptions: MonitorManagerOptions = {
       serviceClientOptions: {
@@ -217,6 +227,7 @@ describe('MonitorManager (in-process bridge)', function () {
       context,
       cliContext,
       messenger as unknown as Messenger,
+      outputChannel,
       managerOptions
     )
 

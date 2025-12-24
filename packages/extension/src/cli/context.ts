@@ -13,9 +13,12 @@ export class CliContext extends ExecutableContext {
   readonly daemon: Daemon
   readonly cliConfig: CliConfig
 
-  constructor(context: vscode.ExtensionContext) {
+  constructor(
+    context: vscode.ExtensionContext,
+    outputChannel: vscode.OutputChannel
+  ) {
     super(context, getArduinoCliParams)
-    this.daemon = new Daemon(context, this)
+    this.daemon = new Daemon(context, this, outputChannel)
     this.cliConfig = new CliConfig(context, this)
   }
 }
