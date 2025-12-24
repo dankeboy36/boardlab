@@ -217,8 +217,12 @@ export class MonitorViewProvider extends WebviewViewProvider {
 
   readonly onDidResolve = this.onDidResolveEmitter.event
 
-  constructor(extensionUri: vscode.Uri, messenger: Messenger) {
-    super(extensionUri, messenger, 'monitor')
+  constructor(
+    extensionUri: vscode.Uri,
+    extensionMode: vscode.ExtensionMode,
+    messenger: Messenger
+  ) {
+    super(extensionUri, extensionMode, messenger, 'monitor')
   }
 
   get isResolved(): boolean {
@@ -315,8 +319,12 @@ export class PlotterViewProvider extends WebviewViewProvider {
 
   readonly onDidResolve = this.onDidResolveEmitter.event
 
-  constructor(extensionUri: vscode.Uri, messenger: Messenger) {
-    super(extensionUri, messenger, 'plotter')
+  constructor(
+    extensionUri: vscode.Uri,
+    extensionMode: vscode.ExtensionMode,
+    messenger: Messenger
+  ) {
+    super(extensionUri, extensionMode, messenger, 'plotter')
   }
 
   get isResolved(): boolean {
