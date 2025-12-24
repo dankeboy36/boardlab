@@ -1,8 +1,6 @@
 unsigned long previousMillis;
 unsigned int ansi = 1;
-void setup() {
-  Serial.begin(9600);
-}
+void setup() { Serial.begin(9600); }
 void loop() {
   if (Serial.available() > 0) {
     while (Serial.available() > 0) {
