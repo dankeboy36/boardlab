@@ -653,10 +653,7 @@ export class ProfilesEditorProvider
       localResourceRoots: [
         vscode.Uri.joinPath(
           this.extensionUri,
-          'packages',
-          'webviews',
-          'profiles',
-          'out'
+          ...getWebviewBuildRoot('profiles', this.extensionMode)
         ),
         vscode.Uri.joinPath(this.extensionUri, 'out'),
       ],
