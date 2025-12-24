@@ -1,6 +1,6 @@
 # BoardLab
 
-Vendor-independent board development for Visual Studio Code, powered by the Arduino CLI.
+Vendor-independent board development for Visual Studio Code, powered by Arduino CLI.
 
 BoardLab for Visual Studio Code aims to be feature-complete with Arduino IDE 2.x, while staying fully open, power-user friendly, and strictly native to VS Code's UX.
 

@@ -2,7 +2,7 @@
   "name": "boardlab",
   "displayName": "BoardLab",
   "version": "0.0.1-beta.1",
-  "description": "Vendor-independent board development for Visual Studio Code, powered by the Arduino CLI",
+  "description": "Vendor-independent board development for Visual Studio Code, powered by Arduino CLI.",
   "categories": [
     "Programming Languages",
     "Other"
