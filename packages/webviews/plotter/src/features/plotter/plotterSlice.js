@@ -1,5 +1,5 @@
 // @ts-check
-import { createSlice } from '@reduxjs/toolkit'
+import { createSelector, createSlice } from '@reduxjs/toolkit'
 
 /**
  * @typedef {{
@@ -101,9 +101,9 @@ export const selectPlotter = (state) => state.plotter
  *   state: import('../../app/store').RootState
  * ) => Pick<PlotterState, 'x' | 'ys' | 'version'>}
  */
-export const selectPlotData = (state) => ({
-  x: state.plotter.x,
-  ys: state.plotter.ys,
-  version: state.plotter.version,
-  maxPoints: state.plotter.maxPoints,
-})
+export const selectPlotData = createSelector([selectPlotter], (plotter) => ({
+  x: plotter.x,
+  ys: plotter.ys,
+  version: plotter.version,
+  maxPoints: plotter.maxPoints,
+}))

@@ -11,7 +11,6 @@ describe('Root', () => {
 
   it('renders without crashing', async () => {
     setup()
-    // Expect the default tab header text to be present
-    expect(screen.getByText('Terminal')).toBeDefined()
+    expect(screen.getByTitle('Start (open monitor)')).toBeDefined()
   })
 })

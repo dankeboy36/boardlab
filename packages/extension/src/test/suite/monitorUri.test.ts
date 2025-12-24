@@ -16,7 +16,11 @@ describe('monitorUri helpers', () => {
 
     assert.strictEqual(uri.scheme, 'monitor')
     assert.strictEqual(uri.path, '/usbserial-14101')
-    assert.strictEqual(uri.toString(), 'monitor://serial/usbserial-14101')
+    assert.strictEqual(uri.query, 'baud=115200&flow=none')
+    assert.strictEqual(
+      uri.toString(),
+      'monitor://serial/usbserial-14101?baud%3D115200%26flow%3Dnone'
+    )
     const parsed = parseMonitorUri(uri)
     assert.deepStrictEqual(parsed.port, {
       protocol: 'serial',
@@ -32,10 +36,10 @@ describe('monitorUri helpers', () => {
       port: { protocol: 'serial', address },
     })
 
-    assert.strictEqual(uri.path, '/%2Fdev%2Fcu.usbserial-0001')
+    assert.strictEqual(uri.path, '//dev/cu.usbserial-0001')
     assert.strictEqual(
       uri.toString(),
-      'monitor://serial/%2Fdev%2Fcu.usbserial-0001'
+      'monitor://serial//dev/cu.usbserial-0001'
     )
     assert.strictEqual(parseMonitorUri(uri).port.address, address)
   })

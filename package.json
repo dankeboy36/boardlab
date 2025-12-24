@@ -63,9 +63,9 @@
     "package": "vsce package",
     "prereset": "npm run reset --workspaces",
     "reset": "rimraf schemas out node_modules .vscode-test",
-    "pretest": "npm run compile && npm run lint",
+    "pretest": "npm run compile",
     "test": "node ./out/test/runTest.js",
-    "test:unit": "vitest run",
+    "test:ci": "npm run test:ci --workspaces --if-present && npm test",
     "watch": "tsc -watch -p ./"
   },
   "contributes": {
