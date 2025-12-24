@@ -33,16 +33,8 @@
   "main": "./extension-entry.js",
   "workspaces": [
     "packages/protocol",
-    "packages/servers/portino-bridge",
-    "packages/webviews/base",
-    "packages/webviews/monitor-shared",
-    "packages/webviews/resources",
-    "packages/webviews/examples",
-    "packages/webviews/monitor",
-    "packages/webviews/plotter",
-    "packages/webviews/platforms",
-    "packages/webviews/libraries",
-    "packages/webviews/profiles"
+    "packages/servers/*",
+    "packages/webviews/*"
   ],
   "scripts": {
     "prebundle": "rimraf dist && npm run compile",
