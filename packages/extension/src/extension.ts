@@ -114,7 +114,7 @@ export function activate(context: vscode.ExtensionContext) {
   const currentSketchView = new CurrentSketchView(boardlabContext)
   console.log('Registered sketches view')
   const sketchbook = new SketchbookView(context, boardlabContext.sketchbooks)
-  console.log('Registered sketchbook view', sketchbook)
+  console.log('Registered sketchbook view')
   registerSketchbookReadonlyFs(context)
 
   context.subscriptions.push(
