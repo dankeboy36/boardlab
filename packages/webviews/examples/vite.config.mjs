@@ -6,7 +6,10 @@ import { defineConfig } from 'vite'
 import { singleCssBundlePlugin } from '../base/vite/singleCssBundlePlugin.mjs'
 import { getWebviewBuildConfig } from '../base/vite/webviewBuildConfig.mjs'
 
-const { isOutBuild, outDir } = getWebviewBuildConfig('examples', __dirname)
+const { isOutBuild, outDir, emptyOutDir } = getWebviewBuildConfig(
+  'examples',
+  __dirname
+)
 
 export default defineConfig({
   base: './',
@@ -27,6 +30,7 @@ export default defineConfig({
     outDir,
     sourcemap: isOutBuild,
     minify: isOutBuild ? false : 'esbuild',
+    emptyOutDir,
     cssCodeSplit: false,
     chunkSizeWarningLimit: 2048,
     rollupOptions: {

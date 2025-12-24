@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import path from 'node:path'
 import { TextEncoder } from 'node:util'
 
 import {
@@ -129,6 +128,10 @@ import {
 } from '../profile/codeActions'
 import { findPairByPath, validateProfilesYAML } from '../profile/validation'
 import { disposeAll, QuickInputNoopLabel } from '../utils'
+import {
+  getWebviewBuildRoot,
+  getWebviewHtmlResources,
+} from '../webviews/webviewAssets'
 
 interface ProfilesEditorBinding {
   readonly document: vscode.TextDocument
@@ -163,18 +166,6 @@ type MutablePlatform = Record<string, unknown> & {
 
 type MutableLibrary = Record<string, unknown> & {
   library?: string
-}
-
-function getNonce(): string {
-  return randomUUID().replace(/-/g, '')
-}
-
-function getWebviewUri(
-  webview: vscode.Webview,
-  extensionUri: vscode.Uri,
-  segments: readonly string[]
-): vscode.Uri {
-  return webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, ...segments))
 }
 
 function parseProfilesText(text: string): MutableProfilesDocument {
@@ -748,29 +739,9 @@ export class ProfilesEditorProvider
     document: vscode.TextDocument,
     state: ProfilesDocumentState
   ): string {
-    const overrideRoot = process.env.BOARDLAB_WEBVIEW_ROOT?.trim()
-    const buildRoot = overrideRoot
-      ? ([...this.parseWebviewRoot(overrideRoot), 'profiles', 'out'] as const)
-      : (['dist', 'webviews', 'profiles'] as const)
-    const stylesUri = getWebviewUri(webview, this.extensionUri, [
-      ...buildRoot,
-      'static',
-      'css',
-      'main.css',
-    ])
-    const scriptUri = getWebviewUri(webview, this.extensionUri, [
-      ...buildRoot,
-      'static',
-      'js',
-      'main.js',
-    ])
-    const codiconFontUri = getWebviewUri(webview, this.extensionUri, [
-      ...buildRoot,
-      'static',
-      'media',
-      'codicon.ttf',
-    ])
-    const nonce = getNonce()
+    const buildRoot = getWebviewBuildRoot('profiles')
+    const { stylesUri, scriptUri, codiconFontUri, nonce } =
+      getWebviewHtmlResources(webview, this.extensionUri, buildRoot)
     const bootstrap = {
       uri: document.uri.toString(),
       snapshot: state,
@@ -817,13 +788,6 @@ export class ProfilesEditorProvider
       return match
     }
     return undefined
-  }
-
-  private parseWebviewRoot(root: string): string[] {
-    if (root.includes(path.win32.sep)) {
-      throw new Error('BOARDLAB_WEBVIEW_ROOT must use POSIX separators (/).')
-    }
-    return root.split(path.posix.sep).filter(Boolean)
   }
 
   private async ensureDocument(

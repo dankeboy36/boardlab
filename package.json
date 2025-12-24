@@ -30,7 +30,7 @@
   "qna": "https://github.com/dankeboy36/boardlab/discussions",
   "author": "dankeboy36",
   "publisher": "dankeboy36",
-  "main": "./dist/extension.js",
+  "main": "./extension-entry.js",
   "workspaces": [
     "packages/protocol",
     "packages/servers/portino-bridge",

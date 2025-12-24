@@ -5,10 +5,11 @@ import path from 'node:path'
  * @param {string} dirname
  */
 export function getWebviewBuildConfig(name, dirname) {
-  const buildTarget = process.env.BOARDLAB_WEBVIEW_BUILD_TARGET ?? 'dist'
-  const isOutBuild = buildTarget === 'out'
+  const envMode = (process.env.NODE_ENV ?? '').toLowerCase()
+  const isOutBuild = envMode === 'development'
   const outDir = isOutBuild
     ? 'out'
     : path.resolve(dirname, `../../../dist/webviews/${name}`)
-  return { buildTarget, isOutBuild, outDir }
+  const emptyOutDir = isOutBuild
+  return { isOutBuild, outDir, emptyOutDir }
 }

@@ -1,5 +1,3 @@
-import path from 'node:path'
-
 import {
   notifyExamplesToolbarAction,
   notifyMonitorLineEndingChanged,
@@ -14,6 +12,8 @@ import {
 } from '@boardlab/protocol'
 import * as vscode from 'vscode'
 import type { Messenger } from 'vscode-messenger'
+
+import { getWebviewBuildRoot, getWebviewHtmlResources } from './webviewAssets'
 
 abstract class WebviewViewProvider implements vscode.WebviewViewProvider {
   constructor(
@@ -63,29 +63,8 @@ abstract class WebviewViewProvider implements vscode.WebviewViewProvider {
     buildRootSegments: readonly string[],
     initialState: unknown
   ): string {
-    // The CSS file from the React build output
-    const stylesUri = getUri(webview, extensionUri, [
-      ...buildRootSegments,
-      'static',
-      'css',
-      'main.css',
-    ])
-    // The JS file from the React build output
-    const scriptUri = getUri(webview, extensionUri, [
-      ...buildRootSegments,
-      'static',
-      'js',
-      'main.js',
-    ])
-
-    // The font file in the media folder for codicon
-    const codiconFontUri = getUri(webview, extensionUri, [
-      ...buildRootSegments,
-      'static',
-      'media',
-      'codicon.ttf',
-    ])
-    const nonce = getNonce()
+    const { stylesUri, scriptUri, codiconFontUri, nonce } =
+      getWebviewHtmlResources(webview, extensionUri, buildRootSegments)
 
     const stateScript = initialState
       ? `window.__INITIAL_VSCODE_STATE__ = ${JSON.stringify(initialState).replace(/</g, '\\u003c')};`
@@ -124,15 +103,7 @@ abstract class WebviewViewProvider implements vscode.WebviewViewProvider {
   }
 
   private getBuildRootSegments(): string[] {
-    const overrideRoot = process.env.BOARDLAB_WEBVIEW_ROOT?.trim()
-    if (overrideRoot) {
-      if (overrideRoot.includes(path.win32.sep)) {
-        throw new Error('BOARDLAB_WEBVIEW_ROOT must use POSIX separators (/).')
-      }
-      const segments = overrideRoot.split(path.posix.sep).filter(Boolean)
-      return [...segments, this.type, 'out']
-    }
-    return ['dist', 'webviews', this.type]
+    return getWebviewBuildRoot(this.type)
   }
 }
 
@@ -404,22 +375,4 @@ export class PlotterViewProvider extends WebviewViewProvider {
       console.error('Failed to send monitor line ending', error)
     }
   }
-}
-
-function getNonce(): string {
-  let text = ''
-  const possible =
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-  for (let i = 0; i < 32; i++) {
-    text += possible.charAt(Math.floor(Math.random() * possible.length))
-  }
-  return text
-}
-
-function getUri(
-  webview: vscode.Webview,
-  extensionUri: vscode.Uri,
-  pathList: string[]
-): vscode.Uri {
-  return webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, ...pathList))
 }

@@ -17,7 +17,7 @@
       "outFiles": ["${workspaceFolder}/out/**/*.js"],
       "preLaunchTask": "npm: compile",
       "env": {
-        "BOARDLAB_WEBVIEW_ROOT": "packages/webviews"
+        "NODE_ENV": "development"
       }
     },
     {
@@ -32,7 +32,7 @@
       "outFiles": ["${workspaceFolder}/out/**/*.js"],
       "preLaunchTask": "npm: compile extension",
       "env": {
-        "BOARDLAB_WEBVIEW_ROOT": "packages/webviews"
+        "NODE_ENV": "development"
       }
     },
     {

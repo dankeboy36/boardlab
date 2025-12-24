@@ -9,7 +9,7 @@
       "command": "npm run compile --ignore-scripts",
       "options": {
         "env": {
-          "BOARDLAB_WEBVIEW_BUILD_TARGET": "out"
+          "NODE_ENV": "development"
         }
       },
       "group": {
@@ -24,7 +24,7 @@
       "script": "compile",
       "options": {
         "env": {
-          "BOARDLAB_WEBVIEW_BUILD_TARGET": "out"
+          "NODE_ENV": "development"
         }
       },
       "group": {

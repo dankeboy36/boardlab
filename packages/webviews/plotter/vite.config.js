@@ -6,7 +6,10 @@ import { defineConfig } from 'vitest/config'
 import { singleCssBundlePlugin } from '../base/vite/singleCssBundlePlugin.mjs'
 import { getWebviewBuildConfig } from '../base/vite/webviewBuildConfig.mjs'
 
-const { isOutBuild, outDir } = getWebviewBuildConfig('plotter', __dirname)
+const { isOutBuild, outDir, emptyOutDir } = getWebviewBuildConfig(
+  'plotter',
+  __dirname
+)
 
 export default defineConfig({
   base: './',
@@ -35,6 +38,7 @@ export default defineConfig({
     outDir,
     sourcemap: isOutBuild,
     minify: isOutBuild ? false : 'esbuild',
+    emptyOutDir,
     cssCodeSplit: false,
     chunkSizeWarningLimit: 2048,
     rollupOptions: {
