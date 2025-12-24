@@ -538,7 +538,6 @@ export class ProfilesCodeActionProvider implements vscode.CodeActionProvider {
         )
         if (!match) continue
         const id = match[1]
-        const requested = match[2]
 
         let quickInfo: QuickResource | undefined
         try {

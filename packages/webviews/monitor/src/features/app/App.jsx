@@ -1,6 +1,4 @@
 // @ts-check
-import { useEffect, useRef, useState } from 'react'
-
 import { useCodiconStylesheet, vscode } from '@boardlab/base'
 import { useMonitorClientSync } from '@boardlab/monitor-shared/hooks'
 import {
@@ -12,6 +10,8 @@ import {
   notifyMonitorThemeChanged,
   notifyMonitorToolbarAction,
 } from '@boardlab/protocol'
+import { useEffect, useRef, useState } from 'react'
+
 import { applyNonce } from '../../utils/csp.js'
 import TerminalPanel from '../terminal/TerminalPanel.jsx'
 import Shell from './Shell.jsx'
@@ -55,7 +55,7 @@ function App() {
       try {
         switch (action) {
           case 'copyAll':
-            void terminal.copyAll?.()
+            terminal.copyAll?.()
             break
           case 'saveToFile':
             terminal.saveToFile?.()

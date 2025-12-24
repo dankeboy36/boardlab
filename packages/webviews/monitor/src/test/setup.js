@@ -94,10 +94,8 @@ vi.mock('@xterm/xterm', () => {
       this.options = {}
       this.element = null
     }
+
     loadAddon() {}
-    open(element) {
-      this.element = element ?? null
-    }
     write() {}
     clear() {}
     dispose() {}
@@ -106,7 +104,12 @@ vi.mock('@xterm/xterm', () => {
     get rows() {
       return 0
     }
+
+    open(element) {
+      this.element = element ?? null
+    }
   }
+
   return { Terminal }
 })
 

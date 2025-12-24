@@ -162,56 +162,6 @@ async function cloneToSketchbook(
   }
 }
 
-async function importToWorkspace(
-  context: ResolvedExampleContext
-): Promise<void> {
-  const { sketchUri } = context
-  const sketchName = basename(sketchUri)
-
-  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]
-  if (!workspaceRoot) {
-    const openLabel = 'Open Example in New Window'
-    const choice = await vscode.window.showInformationMessage(
-      'No workspace is open.',
-      openLabel
-    )
-    if (choice === openLabel) {
-      await vscode.commands.executeCommand('vscode.openFolder', sketchUri, true)
-    }
-    return
-  }
-
-  const destination = vscode.Uri.joinPath(workspaceRoot.uri, sketchName)
-
-  if (await uriExists(destination)) {
-    vscode.window.showWarningMessage(
-      `Workspace already contains "${sketchName}".`
-    )
-    return
-  }
-
-  try {
-    await copyFolder(sketchUri, destination)
-  } catch (error) {
-    vscode.window.showErrorMessage(
-      `Failed to import "${sketchName}": ${toErrorMessage(error)}`
-    )
-    return
-  }
-
-  const inoUri = vscode.Uri.joinPath(destination, `${sketchName}.ino`)
-  try {
-    const document = await vscode.workspace.openTextDocument(inoUri)
-    await vscode.window.showTextDocument(document, { preview: false })
-  } catch {
-    // It's valid for sketches to omit a matching .ino file; ignore.
-  }
-
-  vscode.window.showInformationMessage(
-    `Imported "${sketchName}" into the current workspace.`
-  )
-}
-
 async function openContainingLibrary(
   context: ResolvedExampleContext
 ): Promise<void> {

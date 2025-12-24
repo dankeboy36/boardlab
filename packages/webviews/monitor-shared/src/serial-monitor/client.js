@@ -478,13 +478,3 @@ export class MonitorClient {
     this._didResumeMonitor.fire(payload)
   }
 }
-
-/** @param {URL} wsUrl */
-function deriveHttpBase(wsUrl) {
-  const base = new URL(wsUrl.toString())
-  base.protocol = base.protocol === 'wss:' ? 'https:' : 'http:'
-  base.pathname = ''
-  base.hash = ''
-  base.search = ''
-  return base
-}

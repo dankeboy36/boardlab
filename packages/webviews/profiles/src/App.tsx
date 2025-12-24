@@ -238,6 +238,7 @@ export function App(): JSX.Element {
     undefined
   )
   const [boardDetailsLoading, setBoardDetailsLoading] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [boardDetailsError, setBoardDetailsError] = useState<
     string | undefined
   >(undefined)
@@ -288,10 +289,6 @@ export function App(): JSX.Element {
   const [draftValidationError, setDraftValidationError] = useState<
     string | undefined
   >(undefined)
-  const [newPlatformIdentifier, setNewPlatformIdentifier] = useState('')
-  const [newPlatformVersion, setNewPlatformVersion] = useState('')
-  const [newLibraryName, setNewLibraryName] = useState('')
-  const [newLibraryVersion, setNewLibraryVersion] = useState('')
   const [selectedDetailsItem, setSelectedDetailsItem] = useState<
     string | undefined
   >(undefined)
@@ -1342,10 +1339,6 @@ export function App(): JSX.Element {
         boardDescriptor: descriptor,
       })
       setDraftValidationError(undefined)
-      setNewPlatformIdentifier('')
-      setNewPlatformVersion('')
-      setNewLibraryName('')
-      setNewLibraryVersion('')
       setSelectedProfileKey(DRAFT_PROFILE_KEY)
     },
     [state.profiles]
@@ -1378,10 +1371,6 @@ export function App(): JSX.Element {
       note: '',
     })
     setDraftValidationError(undefined)
-    setNewPlatformIdentifier('')
-    setNewPlatformVersion('')
-    setNewLibraryName('')
-    setNewLibraryVersion('')
     setSelectedProfileKey(DRAFT_PROFILE_KEY)
     setDraftJustCreated(true)
   }, [draftProfile, state.profiles])
@@ -1411,10 +1400,6 @@ export function App(): JSX.Element {
     }
     setDraftProfile(undefined)
     setDraftValidationError(undefined)
-    setNewPlatformIdentifier('')
-    setNewPlatformVersion('')
-    setNewLibraryName('')
-    setNewLibraryVersion('')
     const fallback =
       state.selectedProfile ?? state.profiles[0]?.name ?? undefined
     setSelectedProfileKey(fallback)
@@ -1824,10 +1809,6 @@ export function App(): JSX.Element {
     if (result) {
       setDraftProfile(undefined)
       setDraftValidationError(undefined)
-      setNewPlatformIdentifier('')
-      setNewPlatformVersion('')
-      setNewLibraryName('')
-      setNewLibraryVersion('')
       setSelectedProfileKey(trimmedName)
     }
   }, [documentUri, draftProfile, execute, state.profiles])
@@ -1893,19 +1874,19 @@ export function App(): JSX.Element {
                   <ProfileNameSection
                     inputRef={draftNameInputRef}
                     value={activeDraft.name}
-                    onChange={(next) =>
+                    onChange={(next) => {
                       setDraftProfile((current) =>
                         current ? { ...current, name: next } : current
                       )
-                    }
+                    }}
                   />
                   <NoteSection
                     value={activeDraft.note ?? ''}
-                    onChange={(next) =>
+                    onChange={(next) => {
                       setDraftProfile((current) =>
                         current ? { ...current, note: next } : current
                       )
-                    }
+                    }}
                   />
                   <Tree
                     className="profiles-details-tree tree--actions-on-hover"

@@ -329,7 +329,10 @@ export function useSerialMonitorConnection({
         pendingStartRef.current = false
       } catch (err) {
         if (mySeq !== seqRef.current) return
-        if (err?.name === 'AbortError' || controller.signal.aborted) {
+        if (
+          (err instanceof Error && err?.name === 'AbortError') ||
+          controller.signal.aborted
+        ) {
           onStop()
           if (abortRef.current === controller) {
             abortRef.current = undefined
@@ -341,7 +344,7 @@ export function useSerialMonitorConnection({
         if (abortRef.current === controller) {
           abortRef.current = undefined
         }
-        const message = String(err?.message || err)
+        const message = err instanceof Error ? err?.message : String(err)
         if (/Serial port busy|423/i.test(message)) {
           notifyError(`${selectedPort.address} port busy`)
           userStoppedRef.current = true
@@ -368,7 +371,7 @@ export function useSerialMonitorConnection({
         pendingStartRef.current = false
         return
       }
-      void startStream().finally(() => {
+      startStream().finally(() => {
         if (startTokenRef.current === startToken) {
           pendingStartRef.current = false
         }

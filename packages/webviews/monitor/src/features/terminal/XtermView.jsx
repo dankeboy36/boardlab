@@ -477,8 +477,9 @@ const XtermView = forwardRef(function XtermView(props, ref) {
     let restoreCreateElement
     if (el) {
       const nonce =
-        typeof window !== 'undefined' && window /** @type {any} */.__CSP_NONCE__
-          ? window /** @type {any} */.__CSP_NONCE__
+        typeof window !== 'undefined' &&
+        /** @type {any} */ (window).__CSP_NONCE__
+          ? /** @type {any} */ (window).__CSP_NONCE__
           : undefined
       const ensureStyleNonce = (node) => {
         if (!nonce) {
