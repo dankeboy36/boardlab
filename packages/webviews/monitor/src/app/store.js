@@ -1,7 +1,8 @@
 // @ts-check
+import { configureStore } from '@reduxjs/toolkit'
+
 import connectionReducer from '@boardlab/monitor-shared/connection'
 import serialMonitorReducer from '@boardlab/monitor-shared/serial-monitor'
-import { configureStore } from '@reduxjs/toolkit'
 
 import terminalSettingsReducer from '../features/terminal/terminalSettingsSlice.js'
 import {

@@ -24,6 +24,7 @@ export default defineConfig([
     },
     settings: {
       react: { version: 'detect' },
+      'import/internal-regex': '^@boardlab/',
     },
     rules: {
       curly: 'warn',

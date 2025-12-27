@@ -1,4 +1,6 @@
 // @ts-check
+import { useEffect, useRef, useState } from 'react'
+
 import { useCodiconStylesheet, vscode } from '@boardlab/base'
 import { useMonitorClientSync } from '@boardlab/monitor-shared/hooks'
 import {
@@ -9,7 +11,6 @@ import {
   notifyPlotterLineEndingChanged,
   notifyPlotterToolbarAction,
 } from '@boardlab/protocol'
-import { useEffect, useRef, useState } from 'react'
 
 import { applyNonce } from '../../utils/csp.js'
 import PlotterPanel from '../plotter/PlotterPanel.jsx'

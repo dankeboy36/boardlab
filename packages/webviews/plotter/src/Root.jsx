@@ -1,9 +1,10 @@
 // @ts-check
-import { useCodiconStylesheet } from '@boardlab/base'
-import { MonitorClientContextProvider } from '@boardlab/monitor-shared/serial-monitor'
 import { StrictMode } from 'react'
 import { Provider } from 'react-redux'
 import { BrowserRouter } from 'react-router-dom'
+
+import { useCodiconStylesheet } from '@boardlab/base'
+import { MonitorClientContextProvider } from '@boardlab/monitor-shared/serial-monitor'
 
 import { store } from './app/store.js'
 import App from './features/app/App.jsx'

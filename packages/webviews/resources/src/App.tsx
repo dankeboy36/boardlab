@@ -1,20 +1,3 @@
-import {
-  createVscodeDataContext,
-  dispatchContextMenuEvent,
-  preventDefaultContextMenuItems,
-  useCodiconStylesheet,
-  vscode,
-} from '@boardlab/base'
-import {
-  notifyLibrariesFilterChanged,
-  notifyPlatformsFilterChanged,
-  Resource,
-  Resources,
-  SearchFilterParams,
-  setLibrariesFilterContext,
-  setPlatformsFilterContext,
-  Version,
-} from '@boardlab/protocol'
 import debounce from 'lodash.debounce'
 import React, {
   FormEvent as ReactFormEvent,
@@ -43,6 +26,24 @@ import {
   VscodeSingleSelect,
   VscodeTextfield,
 } from 'vscode-react-elements-x'
+
+import {
+  createVscodeDataContext,
+  dispatchContextMenuEvent,
+  preventDefaultContextMenuItems,
+  useCodiconStylesheet,
+  vscode,
+} from '@boardlab/base'
+import {
+  notifyLibrariesFilterChanged,
+  notifyPlatformsFilterChanged,
+  Resource,
+  Resources,
+  SearchFilterParams,
+  setLibrariesFilterContext,
+  setPlatformsFilterContext,
+  Version,
+} from '@boardlab/protocol'
 
 import './App.css'
 import {

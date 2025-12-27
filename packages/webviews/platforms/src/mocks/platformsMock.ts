@@ -1,3 +1,5 @@
+import { EventEmitter } from '@c4312/evt'
+
 import {
   ErrorEventParams,
   InstallEventParams,
@@ -5,7 +7,6 @@ import {
   Platforms,
   UninstallEventParams,
 } from '@boardlab/protocol'
-import { EventEmitter } from '@c4312/evt'
 
 export function createPlatformsMock(): Platforms {
   const _busyResources = new Set<string>()

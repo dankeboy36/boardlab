@@ -1,3 +1,19 @@
+import type {
+  Library,
+  LibraryInstallResponse,
+  LibraryUninstallResponse,
+  PlatformInstallResponse,
+  PlatformUninstallResponse,
+} from 'ardunno-cli'
+import defer from 'p-defer'
+import { compareLoose } from 'semver'
+import * as vscode from 'vscode'
+import { Messenger } from 'vscode-messenger'
+import type {
+  CancellationToken,
+  MessageParticipant,
+} from 'vscode-messenger-common'
+
 import {
   Platform as ApiPlatform,
   ErrorEventParams,
@@ -35,21 +51,6 @@ import {
   willUninstallLibrary,
   willUninstallPlatform,
 } from '@boardlab/protocol'
-import type {
-  Library,
-  LibraryInstallResponse,
-  LibraryUninstallResponse,
-  PlatformInstallResponse,
-  PlatformUninstallResponse,
-} from 'ardunno-cli'
-import defer from 'p-defer'
-import { compareLoose } from 'semver'
-import * as vscode from 'vscode'
-import { Messenger } from 'vscode-messenger'
-import type {
-  CancellationToken,
-  MessageParticipant,
-} from 'vscode-messenger-common'
 
 import type { BoardLabContext } from './boardlabContext'
 import type { Arduino } from './cli/arduino'

@@ -1,5 +1,4 @@
 // @ts-check
-import { useMonitorStream } from '@boardlab/monitor-shared/serial-monitor'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import {
   forwardRef,
@@ -10,6 +9,8 @@ import {
   useState,
 } from 'react'
 import { useSelector } from 'react-redux'
+
+import { useMonitorStream } from '@boardlab/monitor-shared/serial-monitor'
 
 import {
   getPersistedState,

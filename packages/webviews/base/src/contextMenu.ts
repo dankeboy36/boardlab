@@ -1,5 +1,6 @@
-import type { VscodeDataContextParams } from '@boardlab/protocol'
 import type { MouseEvent as ReactMouseEvent } from 'react'
+
+import type { VscodeDataContextParams } from '@boardlab/protocol'
 
 export const preventDefaultContextMenuItems = {
   preventDefaultContextMenuItems: true,

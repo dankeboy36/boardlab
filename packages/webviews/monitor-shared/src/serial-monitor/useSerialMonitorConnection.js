@@ -1,7 +1,8 @@
 // @ts-check
 
-import { notifyError, notifyInfo } from '@boardlab/base'
 import { useCallback, useEffect, useRef, useState } from 'react'
+
+import { notifyError, notifyInfo } from '@boardlab/base'
 
 /**
  * @typedef {Object} UseSerialMonitorConnectionOptions

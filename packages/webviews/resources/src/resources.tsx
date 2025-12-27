@@ -1,11 +1,12 @@
+import React, { createContext } from 'react'
+import type { Messenger } from 'vscode-messenger-webview'
+
 import type { Store } from '@boardlab/base'
 import type {
   Resource,
   Resources,
   SearchFilterParams,
 } from '@boardlab/protocol'
-import React, { createContext } from 'react'
-import type { Messenger } from 'vscode-messenger-webview'
 
 export interface ResourcesContextParams<
   T extends Resource = Resource,

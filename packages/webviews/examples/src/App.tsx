@@ -1,4 +1,19 @@
 import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from 'react'
+import { HOST_EXTENSION } from 'vscode-messenger-common'
+import {
+  VscodeBadge,
+  VscodeIcon,
+  VscodeScrollable,
+  VscodeTextfield,
+} from 'vscode-react-elements-x'
+
+import {
   Tree,
   useCodiconStylesheet,
   vscode,
@@ -14,20 +29,6 @@ import {
   openExampleResource as openExampleResourceRequest,
   openExampleSketch as openExampleSketchRequest,
 } from '@boardlab/protocol'
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type FormEvent,
-} from 'react'
-import { HOST_EXTENSION } from 'vscode-messenger-common'
-import {
-  VscodeBadge,
-  VscodeIcon,
-  VscodeScrollable,
-  VscodeTextfield,
-} from 'vscode-react-elements-x'
 
 import '../../base/styles/tree.css'
 import './App.css'

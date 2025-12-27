@@ -1,5 +1,4 @@
 // @ts-check
-import { useMonitorStream } from '@boardlab/monitor-shared/serial-monitor'
 import { useResizeObserver } from '@react-hookz/web'
 import {
   forwardRef,
@@ -10,6 +9,8 @@ import {
   useState,
 } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
+
+import { useMonitorStream } from '@boardlab/monitor-shared/serial-monitor'
 
 import MonitorPlotter from './MonitorPlotter.jsx'
 import { parseSamples } from './parseSamples.js'

@@ -2,6 +2,15 @@
 import { randomUUID } from 'node:crypto'
 import http from 'node:http'
 
+import { Port } from 'ardunno-cli'
+import { createPortKey } from 'boards-list'
+import cors from 'cors'
+import express from 'express'
+import { FQBN } from 'fqbn'
+import { ClientError } from 'nice-grpc'
+import { ConsoleLogger, createWebSocketConnection } from 'vscode-ws-jsonrpc'
+import { WebSocketServer } from 'ws'
+
 import {
   NotifyDidChangeBaudrate,
   NotifyDidChangeDetectedPorts,
@@ -17,14 +26,6 @@ import {
   RequestSendMonitorMessage,
   RequestUpdateBaudrate,
 } from '@boardlab/protocol'
-import { Port } from 'ardunno-cli'
-import { createPortKey } from 'boards-list'
-import cors from 'cors'
-import express from 'express'
-import { FQBN } from 'fqbn'
-import { ClientError } from 'nice-grpc'
-import { ConsoleLogger, createWebSocketConnection } from 'vscode-ws-jsonrpc'
-import { WebSocketServer } from 'ws'
 
 import { DaemonCliBridge } from './cliBridge.js'
 

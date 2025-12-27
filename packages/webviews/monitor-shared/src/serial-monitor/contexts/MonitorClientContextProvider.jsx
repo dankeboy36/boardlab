@@ -1,6 +1,4 @@
 // @ts-check
-import { vscode } from '@boardlab/base'
-import { getMonitorBridgeInfo } from '@boardlab/protocol'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { HOST_EXTENSION } from 'vscode-messenger-common'
 import {
@@ -8,6 +6,9 @@ import {
   createWebSocketConnection,
   toSocket,
 } from 'vscode-ws-jsonrpc'
+
+import { vscode } from '@boardlab/base'
+import { getMonitorBridgeInfo } from '@boardlab/protocol'
 
 import { MonitorClient } from '../client.js'
 import { MonitorClientContext } from './MonitorClientContext.js'

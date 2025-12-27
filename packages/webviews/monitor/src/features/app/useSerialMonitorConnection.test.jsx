@@ -1,8 +1,9 @@
-import { notifyError } from '@boardlab/base'
-import { useSerialMonitorConnection } from '@boardlab/monitor-shared'
 import { act, render, waitFor } from '@testing-library/react'
 import { forwardRef, useImperativeHandle, useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { notifyError } from '@boardlab/base'
+import { useSerialMonitorConnection } from '@boardlab/monitor-shared'
 
 vi.mock('@boardlab/base', () => ({
   notifyError: vi.fn(),

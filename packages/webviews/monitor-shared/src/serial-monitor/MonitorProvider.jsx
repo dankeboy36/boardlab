@@ -1,9 +1,4 @@
 // @ts-check
-import { vscode } from '@boardlab/base'
-import {
-  getMonitorSelection,
-  notifyMonitorSelectionChanged,
-} from '@boardlab/protocol'
 import { createPortKey } from 'boards-list'
 import {
   createContext,
@@ -15,6 +10,12 @@ import {
 } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { HOST_EXTENSION } from 'vscode-messenger-common'
+
+import { vscode } from '@boardlab/base'
+import {
+  getMonitorSelection,
+  notifyMonitorSelectionChanged,
+} from '@boardlab/protocol'
 
 import { selectSerialMonitor } from './serialMonitorSelectors.js'
 import {

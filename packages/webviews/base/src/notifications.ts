@@ -1,8 +1,9 @@
+import { HOST_EXTENSION } from 'vscode-messenger-common'
+
 import {
   requestShowWebviewMessage,
   type WebviewMessageLevel,
 } from '@boardlab/protocol'
-import { HOST_EXTENSION } from 'vscode-messenger-common'
 
 import { vscode } from './vscode'
 

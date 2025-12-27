@@ -1,3 +1,5 @@
+import { EventEmitter } from '@c4312/evt'
+
 import {
   ErrorEventParams,
   InstallEventParams,
@@ -5,7 +7,6 @@ import {
   Library,
   UninstallEventParams,
 } from '@boardlab/protocol'
-import { EventEmitter } from '@c4312/evt'
 
 export function createLibrariesMock(): Libraries {
   const _busyResources = new Set<string>()

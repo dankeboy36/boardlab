@@ -1,3 +1,6 @@
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+
 import {
   LibraryFilterTopic,
   LibraryFilterTopicLiterals,
@@ -5,8 +8,6 @@ import {
   LibraryFilterTypeLiterals,
 } from '@boardlab/protocol'
 import { App, FilterDefinition } from '@boardlab/resources'
-import React from 'react'
-import { createRoot } from 'react-dom/client'
 
 import { createLibraries as createService } from './libraries'
 

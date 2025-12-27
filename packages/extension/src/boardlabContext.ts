@@ -1,10 +1,6 @@
 import * as path from 'node:path'
 
 import {
-  getSelectedBoard,
-  notifyDidChangeSelectedBoard,
-} from '@boardlab/protocol'
-import {
   IndexUpdateReport,
   // eslint-disable-next-line camelcase
   IndexUpdateReport_Status,
@@ -37,6 +33,11 @@ import {
   SketchFoldersChangeEvent,
 } from 'vscode-arduino-api'
 import type { Messenger } from 'vscode-messenger'
+
+import {
+  getSelectedBoard,
+  notifyDidChangeSelectedBoard,
+} from '@boardlab/protocol'
 
 import {
   PlatformNotInstalledError,

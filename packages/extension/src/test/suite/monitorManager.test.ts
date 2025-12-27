@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
-import { MockCliBridge } from '@boardlab/portino-bridge/mockCliBridge'
 import type { PortIdentifier } from 'boards-list'
 import * as vscode from 'vscode'
 import type { Messenger } from 'vscode-messenger'
@@ -13,6 +12,7 @@ import type {
 } from 'vscode-messenger-common'
 
 import { createServer } from '@boardlab/portino-bridge'
+import { MockCliBridge } from '@boardlab/portino-bridge/mockCliBridge'
 import {
   connectMonitorClient,
   type ConnectClientParams,

@@ -1,3 +1,6 @@
+import * as vscode from 'vscode'
+import type { Messenger } from 'vscode-messenger'
+
 import {
   notifyExamplesToolbarAction,
   notifyMonitorLineEndingChanged,
@@ -10,8 +13,6 @@ import {
   type MonitorToolbarAction,
   type PlotterToolbarAction,
 } from '@boardlab/protocol'
-import * as vscode from 'vscode'
-import type { Messenger } from 'vscode-messenger'
 
 import { getWebviewBuildRoot, getWebviewHtmlResources } from './webviewAssets'
 

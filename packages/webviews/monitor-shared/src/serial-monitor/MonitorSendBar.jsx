@@ -1,10 +1,11 @@
 // @ts-check
-import { vscode } from '@boardlab/base'
-import { notifyMonitorToolbarAction } from '@boardlab/protocol'
 import { createPortKey } from 'boards-list'
 import { useEffect, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { VscodeIcon } from 'vscode-react-elements-x'
+
+import { vscode } from '@boardlab/base'
+import { notifyMonitorToolbarAction } from '@boardlab/protocol'
 
 import MonitorPlayStopButton from './MonitorPlayStopButton.jsx'
 import { useMonitorController } from './MonitorProvider.jsx'

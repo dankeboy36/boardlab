@@ -1,6 +1,12 @@
 import { promises as fs } from 'node:fs'
 import * as path from 'node:path'
 
+import type { Mutable, PortIdentifier } from 'boards-list'
+import { createPortKey } from 'boards-list'
+import { FQBN, valid as isValidFQBN } from 'fqbn'
+import * as vscode from 'vscode'
+import { Messenger } from 'vscode-messenger'
+
 import type {
   LibraryFilterTopic,
   LibraryFilterType,
@@ -27,11 +33,6 @@ import {
   setLibrariesFilterContext as setLibrariesFilterContextReq,
   setPlatformsFilterContext as setPlatformsFilterContextReq,
 } from '@boardlab/protocol'
-import type { Mutable, PortIdentifier } from 'boards-list'
-import { createPortKey } from 'boards-list'
-import { FQBN, valid as isValidFQBN } from 'fqbn'
-import * as vscode from 'vscode'
-import { Messenger } from 'vscode-messenger'
 
 import { BoardLabContextImpl, createBoardLabContext } from './boardlabContext'
 import { AddAdditionalPackageIndexUrlParams } from './cli/config'

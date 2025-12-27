@@ -1,3 +1,21 @@
+import { createPortKey, type DetectedPorts } from 'boards-list'
+import { FQBN, valid as isValidFQBN } from 'fqbn'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { HOST_EXTENSION } from 'vscode-messenger-common'
+import type { Messenger } from 'vscode-messenger-webview'
+import {
+  VscodeBadge,
+  VscodeButton,
+  VscodeButtonGroup,
+  VscodeContextMenu,
+  VscodeIcon,
+  VscodeLabel,
+  VscodeScrollable,
+  VscodeSplitLayout,
+  VscodeTextarea,
+  VscodeTextfield,
+} from 'vscode-react-elements-x'
+
 import {
   createVscodeDataContext,
   dispatchContextMenuEvent,
@@ -56,23 +74,6 @@ import {
   type ProfileLibraryDescriptor,
   type ProfilePlatformDescriptor,
 } from '@boardlab/protocol'
-import { createPortKey, type DetectedPorts } from 'boards-list'
-import { FQBN, valid as isValidFQBN } from 'fqbn'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { HOST_EXTENSION } from 'vscode-messenger-common'
-import type { Messenger } from 'vscode-messenger-webview'
-import {
-  VscodeBadge,
-  VscodeButton,
-  VscodeButtonGroup,
-  VscodeContextMenu,
-  VscodeIcon,
-  VscodeLabel,
-  VscodeScrollable,
-  VscodeSplitLayout,
-  VscodeTextarea,
-  VscodeTextfield,
-} from 'vscode-react-elements-x'
 
 import '../../base/styles/tree.css'
 import './App.css'

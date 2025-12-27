@@ -1,3 +1,7 @@
+import { EventEmitter } from '@c4312/evt'
+import { HOST_EXTENSION } from 'vscode-messenger-common'
+import type { Messenger } from 'vscode-messenger-webview'
+
 import {
   Disposable,
   ErrorEventParams,
@@ -16,9 +20,6 @@ import {
   willInstallPlatform,
   willUninstallPlatform,
 } from '@boardlab/protocol'
-import { EventEmitter } from '@c4312/evt'
-import { HOST_EXTENSION } from 'vscode-messenger-common'
-import type { Messenger } from 'vscode-messenger-webview'
 
 import { createPlatformsMock } from './mocks/platformsMock'
 

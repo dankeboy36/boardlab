@@ -2,13 +2,6 @@ import { Dirent, promises as fs } from 'node:fs'
 import * as path from 'node:path'
 import { URL } from 'node:url'
 
-import type {
-  ExampleFolderNode,
-  ExampleResourceNode,
-  ExampleSketchNode,
-  ExampleSource,
-  ExampleTreeNode,
-} from '@boardlab/protocol'
 import { LibraryLocation, type InstalledLibrary } from 'ardunno-cli/api'
 import {
   sketchbookTreeSync,
@@ -16,6 +9,14 @@ import {
   type SketchbookTree,
 } from 'ardunno-sketch'
 import * as vscode from 'vscode'
+
+import type {
+  ExampleFolderNode,
+  ExampleResourceNode,
+  ExampleSketchNode,
+  ExampleSource,
+  ExampleTreeNode,
+} from '@boardlab/protocol'
 
 import type { BoardLabContext } from '../boardlabContext'
 import { isBoardDetails } from '../boards'

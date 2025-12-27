@@ -1,10 +1,11 @@
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+
 import {
   PlatformFilterType,
   PlatformFilterTypeLiterals,
 } from '@boardlab/protocol'
 import { App, FilterDefinition } from '@boardlab/resources'
-import React from 'react'
-import { createRoot } from 'react-dom/client'
 
 import { createPlatforms as createService } from './platforms'
 
