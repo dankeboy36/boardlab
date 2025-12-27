@@ -1,3 +1,4 @@
+.github/**
 .vscode/**
 .vscode-test/**
 node_modules/**
@@ -7,7 +8,6 @@ src/**
 scripts/**
 test_workspace/**
 **/tsconfig.json
-**/.eslintrc.json
 **/*.map
 **/*.ts
 .prettierignore
