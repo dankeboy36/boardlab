@@ -1,7 +1,15 @@
 import { randomUUID } from 'node:crypto'
 
+import type { DetectedPorts, PortIdentifier } from 'boards-list'
+import { createPortKey } from 'boards-list'
+import * as vscode from 'vscode'
+import type { Disposable, MessageConnection } from 'vscode-jsonrpc'
+import { ConsoleLogger, createWebSocketConnection } from 'vscode-ws-jsonrpc'
+import WebSocket from 'ws'
+
 import {
   ConnectClientParams,
+  ConnectClientResult,
   DidChangeBaudrateNotification,
   DidPauseMonitorNotification,
   DidResumeMonitorNotification,
@@ -27,12 +35,6 @@ import {
   type MonitorBridgeInfo,
   type MonitorSettingsByProtocol,
 } from '@boardlab/protocol'
-import type { DetectedPorts, PortIdentifier } from 'boards-list'
-import { createPortKey } from 'boards-list'
-import * as vscode from 'vscode'
-import type { Disposable, MessageConnection } from 'vscode-jsonrpc'
-import { ConsoleLogger, createWebSocketConnection } from 'vscode-ws-jsonrpc'
-import WebSocket from 'ws'
 
 import { createNodeSocketAdapter } from './wsAdapters'
 
@@ -141,7 +143,9 @@ export class MonitorBridgeClient implements vscode.Disposable {
 
   async requestDetectedPorts(): Promise<DetectedPorts> {
     const connection = await this.ensureConnection()
-    const ports = await connection.sendRequest(RequestDetectedPorts)
+    const ports = await connection.sendRequest<DetectedPorts>(
+      RequestDetectedPorts.method
+    )
     this.currentDetectedPorts = ports
     this.onDidChangeDetectedPortsEmitter.fire(ports)
     return ports
@@ -149,7 +153,7 @@ export class MonitorBridgeClient implements vscode.Disposable {
 
   async updateBaudrate(params: RequestUpdateBaudrateParams): Promise<void> {
     const connection = await this.ensureConnection()
-    await connection.sendRequest(RequestUpdateBaudrate, params)
+    await connection.sendRequest(RequestUpdateBaudrate.method, params)
     this.updateSelectedBaudrate(params.port, params.baudrate)
   }
 
@@ -157,21 +161,21 @@ export class MonitorBridgeClient implements vscode.Disposable {
     params: RequestSendMonitorMessageParams
   ): Promise<void> {
     const connection = await this.ensureConnection()
-    await connection.sendRequest(RequestSendMonitorMessage, params)
+    await connection.sendRequest(RequestSendMonitorMessage.method, params)
   }
 
   async pauseMonitor(
     params: RequestPauseResumeMonitorParams
   ): Promise<boolean> {
     const connection = await this.ensureConnection()
-    return connection.sendRequest(RequestPauseMonitor, params)
+    return connection.sendRequest(RequestPauseMonitor.method, params)
   }
 
   async resumeMonitor(
     params: RequestPauseResumeMonitorParams
   ): Promise<boolean> {
     const connection = await this.ensureConnection()
-    return connection.sendRequest(RequestResumeMonitor, params)
+    return connection.sendRequest(RequestResumeMonitor.method, params)
   }
 
   dispose(): void {
@@ -303,9 +307,12 @@ export class MonitorBridgeClient implements vscode.Disposable {
     connection.listen()
 
     // Establish a logical connection so the bridge recognizes this participant.
-    const snapshot = await connection.sendRequest(RequestClientConnect, {
-      clientId: this.clientId,
-    })
+    const snapshot = await connection.sendRequest<ConnectClientResult>(
+      RequestClientConnect.method,
+      {
+        clientId: this.clientId,
+      }
+    )
     this.applyInitialSnapshot(snapshot)
   }
 

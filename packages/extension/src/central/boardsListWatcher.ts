@@ -1,8 +1,3 @@
-import {
-  MonitorBridgeInfo,
-  NotifyDidChangeDetectedPorts,
-  RequestDetectedPorts,
-} from '@boardlab/protocol'
 import type { DetectedPorts } from 'boards-list'
 import * as vscode from 'vscode'
 import type { Disposable, MessageConnection } from 'vscode-jsonrpc'
@@ -12,6 +7,12 @@ import {
   type IWebSocket,
 } from 'vscode-ws-jsonrpc'
 import WebSocket from 'ws'
+
+import {
+  MonitorBridgeInfo,
+  NotifyDidChangeDetectedPorts,
+  RequestDetectedPorts,
+} from '@boardlab/protocol'
 
 export type PortId = string
 
@@ -201,7 +202,7 @@ export class BoardsListWatcher implements vscode.Disposable {
     this.onDidChangeCliDaemonConnectionEmitter.fire(true)
 
     connection
-      .sendRequest(RequestDetectedPorts)
+      .sendRequest<DetectedPorts>(RequestDetectedPorts.method)
       .then((detectedPorts) => this.handleDetectedPorts(detectedPorts))
       .catch((error) =>
         console.error('[BoardsListWatcher] Failed to request ports', error)

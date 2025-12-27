@@ -2,12 +2,7 @@ import assert from 'node:assert/strict'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
-import { createServer as createMonitorBridgeServer } from '@boardlab/portino-bridge'
 import { MockCliBridge } from '@boardlab/portino-bridge/mockCliBridge'
-import {
-  connectMonitorClient,
-  type ConnectClientParams,
-} from '@boardlab/protocol'
 import type { PortIdentifier } from 'boards-list'
 import * as vscode from 'vscode'
 import type { Messenger } from 'vscode-messenger'
@@ -16,6 +11,12 @@ import type {
   NotificationType,
   RequestType,
 } from 'vscode-messenger-common'
+
+import { createServer } from '@boardlab/portino-bridge'
+import {
+  connectMonitorClient,
+  type ConnectClientParams,
+} from '@boardlab/protocol'
 
 import type { CliContext } from '../../cli/context'
 import {
@@ -214,7 +215,7 @@ describe('MonitorManager (in-process bridge)', function () {
         mode: 'in-process',
         preferredPort: 0,
         inProcessServerFactory: async ({ port }) =>
-          createMonitorBridgeServer({
+          createServer({
             port,
             cliBridgeFactory: () => mockBridge as any,
             debug: false,

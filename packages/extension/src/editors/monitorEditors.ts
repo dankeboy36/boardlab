@@ -1,3 +1,11 @@
+import { type PortIdentifier } from 'boards-list'
+import * as vscode from 'vscode'
+import { Messenger } from 'vscode-messenger'
+import type {
+  NotificationType,
+  WebviewIdMessageParticipant,
+} from 'vscode-messenger-common'
+
 import {
   notifyMonitorLineEndingChanged,
   notifyMonitorThemeChanged,
@@ -9,13 +17,6 @@ import {
   type MonitorToolbarAction,
   type PlotterToolbarAction,
 } from '@boardlab/protocol'
-import { type PortIdentifier } from 'boards-list'
-import * as vscode from 'vscode'
-import { Messenger } from 'vscode-messenger'
-import type {
-  NotificationType,
-  WebviewIdMessageParticipant,
-} from 'vscode-messenger-common'
 
 import type { MonitorRuntimeState } from '../monitor/monitorManager'
 import {

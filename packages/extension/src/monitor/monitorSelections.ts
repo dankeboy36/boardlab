@@ -1,7 +1,3 @@
-import {
-  notifyMonitorSelectionChanged,
-  type MonitorSelectionNotification,
-} from '@boardlab/protocol'
 import { createPortKey, type PortIdentifier } from 'boards-list'
 import * as vscode from 'vscode'
 import { Messenger } from 'vscode-messenger'
@@ -9,6 +5,11 @@ import type {
   MessageParticipant,
   WebviewIdMessageParticipant,
 } from 'vscode-messenger-common'
+
+import {
+  notifyMonitorSelectionChanged,
+  type MonitorSelectionNotification,
+} from '@boardlab/protocol'
 
 export type SelectionProvider = () => MonitorSelectionNotification | undefined
 

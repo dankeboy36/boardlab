@@ -1,6 +1,19 @@
 import { randomUUID } from 'node:crypto'
 import { TextEncoder } from 'node:util'
 
+import { MonitorPortSettingDescriptor } from 'ardunno-cli/api'
+import { isBoardIdentifier, type Port } from 'boards-list'
+import { FQBN } from 'fqbn'
+import * as vscode from 'vscode'
+import type {
+  BoardDetails as ApiBoardDetails,
+  ConfigOption as ApiConfigOption,
+  ConfigValue as ApiConfigValue,
+} from 'vscode-arduino-api'
+import { Messenger } from 'vscode-messenger'
+import type { WebviewIdMessageParticipant } from 'vscode-messenger-common'
+import { parse, parseDocument, stringify } from 'yaml'
+
 import {
   addLibrary,
   addPlatform,
@@ -106,18 +119,6 @@ import {
   type SelectProfileParams,
   type UpdateProfileParams,
 } from '@boardlab/protocol'
-import { MonitorPortSettingDescriptor } from 'ardunno-cli/api'
-import { isBoardIdentifier, type Port } from 'boards-list'
-import { FQBN } from 'fqbn'
-import * as vscode from 'vscode'
-import type {
-  BoardDetails as ApiBoardDetails,
-  ConfigOption as ApiConfigOption,
-  ConfigValue as ApiConfigValue,
-} from 'vscode-arduino-api'
-import { Messenger } from 'vscode-messenger'
-import type { WebviewIdMessageParticipant } from 'vscode-messenger-common'
-import { parse, parseDocument, stringify } from 'yaml'
 
 import type { BoardLabContextImpl } from '../boardlabContext'
 import { ensureBoardDetails, PlatformNotInstalledError } from '../boards'

@@ -3,7 +3,15 @@ import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
-import { createServer as createMonitorBridgeServer } from '@boardlab/portino-bridge'
+import { createPortKey, PortIdentifier } from 'boards-list'
+import * as vscode from 'vscode'
+import type { Messenger } from 'vscode-messenger'
+import type {
+  MessageParticipant,
+  NotificationType,
+} from 'vscode-messenger-common'
+
+import { createServer } from '@boardlab/portino-bridge'
 import {
   connectMonitorClient,
   disconnectMonitorClient,
@@ -29,13 +37,6 @@ import {
   type RequestSendMonitorMessageParams,
   type RequestUpdateBaudrateParams,
 } from '@boardlab/protocol'
-import { createPortKey, type PortIdentifier } from 'boards-list'
-import * as vscode from 'vscode'
-import type { Messenger } from 'vscode-messenger'
-import type {
-  MessageParticipant,
-  NotificationType,
-} from 'vscode-messenger-common'
 
 import type { CliContext } from '../cli/context'
 import { MonitorBridgeClient } from './monitorBridgeClient'
@@ -94,9 +95,7 @@ export interface MonitorBridgeServiceClientOptions {
 
 export type MonitorBridgeMode = 'external-process' | 'in-process'
 
-type InProcessServerInstance = Awaited<
-  ReturnType<typeof createMonitorBridgeServer>
->
+type InProcessServerInstance = Awaited<ReturnType<typeof createServer>>
 
 type InProcessServerFactory = (params: {
   port: number
@@ -109,7 +108,7 @@ const defaultInProcessServerFactory: InProcessServerFactory = async ({
   port,
   cliPath,
 }) => {
-  return createMonitorBridgeServer({
+  return createServer({
     port,
     cliPath,
   })

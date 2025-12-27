@@ -1,7 +1,7 @@
 import { spawn } from 'child_process'
 
+import defer from 'p-defer'
 import * as vscode from 'vscode'
-import defer = require('p-defer')
 
 import { CliContext } from './context'
 
