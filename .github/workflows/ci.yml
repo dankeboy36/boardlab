@@ -110,16 +110,10 @@ jobs:
         run: npm run download:builtins
 
       - name: Set Version
-        run: npm pkg set version="${{ needs.determine-version.outputs.version }}"
+        run: npm pkg set version="${{ needs.determine-version.outputs.version }}-preview-${{ needs.determine-version.outputs.short_sha }}"
 
       - name: Package
         run: npm run package
-
-      - name: Rename VSIX
-        run: |
-          set -euo pipefail
-          VSIX="$(ls -1 *.vsix | head -n 1)"
-          mv "$VSIX" "boardlab-${{ needs.determine-version.outputs.version }}-preview-${{ needs.determine-version.outputs.short_sha }}.vsix"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -148,12 +142,11 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: boardlab-*
-          merge-multiple: true
-          path: .
+      - name: Download Arduino Built-in Examples
+        run: npm run download:builtins
+
+      - name: Package
+        run: npm run package
 
       - name: Load secrets from 1Password
         id: load_secrets
