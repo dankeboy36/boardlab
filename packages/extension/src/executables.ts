@@ -12,7 +12,9 @@ import * as vscode from 'vscode'
 
 export class Executables {}
 
-export type ExecutableContextParams = Pick<GetToolParams, 'tool' | 'version'>
+export type ExecutableContextParams = Required<
+  Pick<GetToolParams, 'tool' | 'version'>
+>
 
 // File layout:
 //  <storageUri>/
