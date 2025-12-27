@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.get_version.outputs.version }}
+      short_sha: ${{ steps.get_sha.outputs.short_sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,6 +48,10 @@ jobs:
             VERSION="$(node -p "require('./package.json').version")"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Get Short SHA
+        id: get_sha
+        run: echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
   test:
     name: Test (${{ matrix.os }}, node-${{ matrix.node }})
@@ -110,11 +115,17 @@ jobs:
       - name: Package
         run: npm run package
 
+      - name: Rename VSIX
+        run: |
+          set -euo pipefail
+          VSIX="$(ls -1 *.vsix | head -n 1)"
+          mv "$VSIX" "boardlab-${{ needs.determine-version.outputs.version }}-preview-${{ needs.determine-version.outputs.short_sha }}.vsix"
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           if-no-files-found: error
-          name: build-artifacts-${{ runner.os }}-${{ runner.arch }}-${{ needs.determine-version.outputs.version }}
+          name: boardlab-${{ needs.determine-version.outputs.version }}-preview-${{ needs.determine-version.outputs.short_sha }}
           path: '*.vsix'
 
   release:
@@ -140,7 +151,7 @@ jobs:
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: build-artifacts-*
+          pattern: boardlab-*
           merge-multiple: true
           path: .
 
