@@ -110,3 +110,5 @@ Release notes are maintained in [`CHANGELOG.md`](./CHANGELOG.md).
 ## License
 
 MIT
+
+This extension includes third-party content. See [NOTICE.md](./NOTICE.md) for details.
