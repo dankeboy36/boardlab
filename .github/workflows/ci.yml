@@ -33,11 +33,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22.14.0
-          cache: 'npm'
-          cache-dependency-path: package-lock.json
 
       - name: Install Dependencies
-        run: npm ci --include=optional
+        run: npm ci
 
       - name: Get Next Version
         id: get_version
@@ -69,11 +67,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-          cache: 'npm'
-          cache-dependency-path: package-lock.json
 
       - name: Install Dependencies
-        run: npm ci --include=optional
+        run: npm ci
 
       - name: Check Format
         run: npm run format && git diff --exit-code
@@ -100,11 +96,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22.14.0
-          cache: 'npm'
-          cache-dependency-path: package-lock.json
 
       - name: Install Dependencies
-        run: npm ci --include=optional
+        run: npm ci
 
       - name: Download Arduino Built-in Examples
         run: npm run download:builtins
@@ -137,11 +131,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22.14.0
-          cache: 'npm'
-          cache-dependency-path: package-lock.json
 
       - name: Install Dependencies
-        run: npm ci --include=optional
+        run: npm ci
 
       - name: Download Artifacts
         uses: actions/download-artifact@v4
