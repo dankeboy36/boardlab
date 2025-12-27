@@ -1418,7 +1418,7 @@
     "temp": "^0.9.4",
     "ts-loader": "^9.5.4",
     "typescript": "^5.1.x",
-    "vitest": "^4.0.8",
+    "vitest": "^4.0.16",
     "vscode-arduino-api": "^0.2.1",
     "webpack": "^5.104.1",
     "webpack-cli": "^6.0.1"
