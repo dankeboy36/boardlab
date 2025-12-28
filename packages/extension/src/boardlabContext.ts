@@ -80,6 +80,7 @@ import {
   hasSketchFolder,
   sketchPathEquals,
 } from './sketch/sketchbooks'
+import { restoreCurrentSketch } from './sketch/sketchRestore'
 import { pickSketch } from './sketch/sketches'
 import { Sketch } from './sketch/types'
 import { BaseRecentItems, RecentItems, disposeAll, mementoKey } from './utils'
@@ -467,36 +468,22 @@ export class BoardLabContextImpl implements BoardLabContext {
           return
         }
 
-        if (lastSelectedSketchPath) {
-          const candidate = this.openedSketches.find(
-            (sketch) => sketch.sketchPath === lastSelectedSketchPath
-          )
-          if (candidate) {
-            const restored = await this.updateCurrentSketch(
-              candidate.sketchPath
-            )
-            if (restored) {
-              return
-            }
+        await restoreCurrentSketch(
+          () => ({
+            lastSelectedSketchPath,
+            openedSketchPaths: this.getWorkspaceOpenedSketchPaths(),
+            resolvedSketchPaths: this.getWorkspaceResolvedSketches().map(
+              (sketch) => sketch.sketchPath
+            ),
+            isLoading: this.sketchbooks.isLoading,
+            isEmpty: this.sketchbooks.isEmpty,
+          }),
+          {
+            updateCurrentSketch: (sketchPath) =>
+              this.updateCurrentSketch(sketchPath),
+            onDidRefresh: (listener) => this.sketchbooks.onDidRefresh(listener),
           }
-        }
-
-        const head = this.sketchbooks.resolvedSketchFolders[0]
-        if (head) {
-          await this.updateCurrentSketch(head)
-          return
-        }
-        if (!this.sketchbooks.resolvedSketchFolders.length) {
-          const toDispose = this.sketchbooks.onDidChangeResolvedSketches(
-            async () => {
-              const firstResolved = this.sketchbooks.resolvedSketchFolders[0]
-              if (firstResolved) {
-                await this.updateCurrentSketch(firstResolved)
-                toDispose.dispose()
-              }
-            }
-          )
-        }
+        )
       }
     )
   }
@@ -854,6 +841,24 @@ export class BoardLabContextImpl implements BoardLabContext {
 
   get currentSketch(): SketchFolder | undefined {
     return this.openedSketches[this._currentSketchIndex]
+  }
+
+  private getWorkspaceResolvedSketches(): readonly SketchFolderImpl[] {
+    return this.sketchbooks.resolvedSketchFolders.filter((sketch) =>
+      this.isSketchInWorkspace(sketch)
+    )
+  }
+
+  private getWorkspaceOpenedSketchPaths(): string[] {
+    return this.openedSketches
+      .filter((sketch) => this.isSketchInWorkspace(sketch))
+      .map((sketch) => sketch.sketchPath)
+  }
+
+  private isSketchInWorkspace(sketch: SketchFolder | Sketch): boolean {
+    const uri =
+      'sketchPath' in sketch ? vscode.Uri.file(sketch.sketchPath) : sketch.uri
+    return Boolean(vscode.workspace.getWorkspaceFolder(uri))
   }
 
   private snapshotCliConfig(
