@@ -68,7 +68,7 @@ export class Sketchbooks implements vscode.Disposable {
   private refreshPromise: Promise<void> | undefined
   private refreshResolve: (() => void) | undefined
   private _isLoading = false
-  private _isEmpty = true
+  private _isEmpty: boolean | undefined
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -82,6 +82,7 @@ export class Sketchbooks implements vscode.Disposable {
     this._onDidChangeResolvedSketches = new vscode.EventEmitter()
     this._onDidChangeUserSketchbook = new vscode.EventEmitter()
     this._onDidRefresh = new vscode.EventEmitter()
+    this.setSketchbooksEmpty(true)
     this.refreshDebounced = debounce(() => {
       this.refreshInternal().catch((error) =>
         console.warn('Failed to refresh sketchbooks', error)
@@ -166,7 +167,9 @@ export class Sketchbooks implements vscode.Disposable {
       this._sketchbooks = newSketchbooks
       this._onDidChange.fire(this._sketchbooks)
       const newOpenedSketches = this.getOpenedSketchesFrom(newSketchbooks)
-      this.setSketchbooksEmpty(newOpenedSketches.length === 0)
+      const workspaceOpenedSketches =
+        this.getWorkspaceOpenedSketchesFrom(newSketchbooks)
+      this.setSketchbooksEmpty(workspaceOpenedSketches.length === 0)
       const addedPaths = newOpenedSketches
         .filter((sketch) =>
           oldOpenedSketches.every(
@@ -185,9 +188,9 @@ export class Sketchbooks implements vscode.Disposable {
         .map((sketch) => sketch.uri.fsPath)
       this._onDidChangeSketchFolders.fire({ addedPaths, removedPaths })
       await this.resolveOpenedSketchFolders(newOpenedSketches)
-      this._onDidRefresh.fire()
     } finally {
       this.setSketchbooksLoading(false)
+      this._onDidRefresh.fire()
       if (this.refreshResolve) {
         this.refreshResolve()
         this.refreshResolve = undefined
@@ -225,7 +228,7 @@ export class Sketchbooks implements vscode.Disposable {
   }
 
   get isEmpty(): boolean {
-    return this._isEmpty
+    return this._isEmpty ?? true
   }
 
   private getOpenedSketchesFrom(
@@ -233,6 +236,14 @@ export class Sketchbooks implements vscode.Disposable {
   ): readonly Sketch[] {
     return Array.from(sketchbooks.values()).flatMap(
       (sketchbook) => sketchbook.sketches
+    )
+  }
+
+  private getWorkspaceOpenedSketchesFrom(
+    sketchbooks: Map<string, Sketchbook>
+  ): readonly Sketch[] {
+    return this.getOpenedSketchesFrom(sketchbooks).filter((sketch) =>
+      Boolean(vscode.workspace.getWorkspaceFolder(sketch.uri))
     )
   }
 

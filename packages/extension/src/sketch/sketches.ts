@@ -48,13 +48,17 @@ export async function pickSketch(
           if (item instanceof SketchQuickPickItem) {
             resolve(item.sketch)
           }
+          if (item instanceof CreateSketchQuickPickItem) {
+            vscode.commands.executeCommand('boardlab.openNewSketchWizard')
+            resolve(undefined)
+          }
           input.hide()
         }),
         input.onDidHide(() => {
           resolve(undefined)
           input.dispose()
         }),
-        sketchbooks.onDidChange(updateInput),
+        sketchbooks.onDidChangeSketchFolders(updateInput),
         pinnedItems.onDidUpdate(updateInput),
         recentItems.onDidUpdate(updateInput)
       )
@@ -72,7 +76,11 @@ function toSketchQuickPickItem(
 ): vscode.QuickPickItem[] {
   const quickItems: vscode.QuickPickItem[] = []
   for (const [uri, sketchbook] of sketchbooks.all().entries()) {
-    const sketchbookPath = vscode.Uri.parse(uri).fsPath
+    const sketchbookUri = vscode.Uri.parse(uri)
+    if (!vscode.workspace.getWorkspaceFolder(sketchbookUri)) {
+      continue
+    }
+    const sketchbookPath = sketchbookUri.fsPath
     if (sketchbook.sketches.length) {
       quickItems.push({
         kind: vscode.QuickPickItemKind.Separator,
@@ -84,6 +92,12 @@ function toSketchQuickPickItem(
         (sketch) => new SketchQuickPickItem(sketch, sketchbookPath)
       )
     )
+  }
+  if (!quickItems.length) {
+    return [
+      new CreateSketchQuickPickItem(),
+      new QuickInputNoopLabel('No sketches found in workspace'),
+    ]
   }
   return quickItems
 }
@@ -100,4 +114,9 @@ class SketchQuickPickItem implements vscode.QuickPickItem {
     this.label = basename(sketchPath)
     this.description = relative(sketchbookPath, sketchPath)
   }
+}
+
+class CreateSketchQuickPickItem implements vscode.QuickPickItem {
+  label = '$(add) New Sketch...'
+  description = 'Create a sketch in the workspace or sketchbook'
 }

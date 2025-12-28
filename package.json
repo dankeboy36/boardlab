@@ -84,7 +84,7 @@
       {
         "command": "boardlab.openNewSketchWizard",
         "title": "New Sketch",
-        "icon": "$(new-folder)",
+        "icon": "$(add)",
         "category": "BoardLab"
       },
       {
@@ -177,8 +177,8 @@
         "category": "BoardLab"
       },
       {
-        "command": "boardlab.addSketchFolderToWorkspace",
-        "title": "Add Sketch Folder to Workspace",
+        "command": "boardlab.importSketchFromSketchbook",
+        "title": "Import Sketch from Sketchbook",
         "category": "BoardLab"
       },
       {
@@ -829,12 +829,12 @@
           "group": "inline"
         },
         {
-          "command": "boardlab.addSketchFolderToWorkspace",
+          "command": "boardlab.importSketchFromSketchbook",
           "when": "view == boardlab.sketchbook && viewItem == sketchbookFolder",
           "group": "inline"
         },
         {
-          "command": "boardlab.addSketchFolderToWorkspace",
+          "command": "boardlab.importSketchFromSketchbook",
           "when": "view == boardlab.sketchbook && viewItem == sketchbookSketch",
           "group": "inline"
         }
@@ -1361,7 +1361,7 @@
       },
       {
         "view": "boardlab.currentSketch",
-        "contents": "No sketch folders have been detected in the workspace. Open a sketch to import it into the workspace.\n[Open Sketch](command:boardlab.selectSketch)\nTo learn more about sketches [read the docs](https://arduino.github.io/arduino-cli/latest/sketch-specification).",
+        "contents": "No sketch folders have been detected in the workspace.\n[New Sketch](command:boardlab.openNewSketchWizard)\n[Import from Sketchbook](command:boardlab.importSketchFromSketchbook)\nTo learn more about sketches [read the docs](https://arduino.github.io/arduino-cli/latest/sketch-specification).",
         "when": "!boardlab.sketchbooks.loading && boardlab.sketchbooks.empty"
       }
     ]

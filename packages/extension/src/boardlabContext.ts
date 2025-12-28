@@ -751,7 +751,7 @@ export class BoardLabContextImpl implements BoardLabContext {
     const uri = editor?.document.uri
     if (uri) {
       const sketch = this.sketchbooks.find(uri.toString())
-      if (sketch) {
+      if (sketch && this.isSketchInWorkspace(sketch)) {
         const currentSketch = this.currentSketch
         if (currentSketch && sketchPathEquals(currentSketch, sketch)) {
           return true

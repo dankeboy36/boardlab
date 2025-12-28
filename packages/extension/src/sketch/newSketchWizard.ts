@@ -4,6 +4,7 @@ import * as path from 'node:path'
 import * as vscode from 'vscode'
 
 import type { BoardLabContextImpl } from '../boardlabContext'
+import { copySketchFolder, renameMainSketchFile } from './sketchImport'
 import { defaultSketchFolderName, validateSketchFolderName } from './sketchName'
 import type { Resource as SketchResource } from './types'
 import {
@@ -20,6 +21,7 @@ export interface AddSketchFolderArgs {
   folderUri: vscode.Uri
   mainFileUri?: vscode.Uri
   openOnly?: boolean
+  importIntoWorkspace?: boolean
 }
 
 export async function openNewSketchWizard(
@@ -43,16 +45,21 @@ export async function openNewSketchWizard(
   await createSketch(boardlabContext, destinationFolder, sketchName)
 }
 
-export async function addSketchFolderToWorkspace(
+export async function importSketchFromSketchbook(
+  boardlabContext: BoardLabContextImpl,
   input: SketchResource | AddSketchFolderArgs | undefined
 ): Promise<void> {
-  const args = await normalizeAddSketchArgs(input)
+  const args = await normalizeAddSketchArgs(boardlabContext, input)
   if (!args) {
     vscode.window.showWarningMessage('Unable to determine sketch folder.')
     return
   }
 
-  const { folderUri, mainFileUri, openOnly } = args
+  const { folderUri, mainFileUri, openOnly, importIntoWorkspace } = args
+  if (importIntoWorkspace) {
+    await importSketchFolderToWorkspace(boardlabContext, folderUri, mainFileUri)
+    return
+  }
   const existing = getWorkspaceFolderByUri(folderUri)
   const targetFile = mainFileUri ?? guessMainSketchUri(folderUri)
 
@@ -146,19 +153,35 @@ async function resolveSketchDestination(
 async function promptSketchName(
   destinationFolder: string
 ): Promise<string | undefined> {
+  return promptSketchFolderName({
+    title: 'New Sketch',
+    destinationFolder,
+    initialValue: defaultSketchFolderName,
+    promptLabel: 'Create sketch in',
+  })
+}
+
+async function promptSketchFolderName({
+  title,
+  destinationFolder,
+  initialValue,
+  promptLabel,
+}: {
+  title: string
+  destinationFolder: string
+  initialValue: string
+  promptLabel: string
+}): Promise<string | undefined> {
   return new Promise((resolve) => {
     const input = vscode.window.createInputBox()
     let resolved = false
     let validationToken = 0
     let validationTimer: NodeJS.Timeout | undefined
     let disposed = false
-    input.title = 'New Sketch'
+    input.title = title
     input.placeholder = 'Sketch folder name'
-    input.value = defaultSketchFolderName
-    input.prompt = `Create sketch in ${path.join(
-      destinationFolder,
-      input.value
-    )}`
+    input.value = initialValue
+    input.prompt = `${promptLabel} ${path.join(destinationFolder, input.value)}`
     input.validationMessage = validateSketchFolderName(input.value)
 
     const scheduleExistenceValidation = (value: string) => {
@@ -173,10 +196,7 @@ async function promptSketchName(
         if (validateSketchFolderName(value)) {
           return
         }
-        const targetPath = path.join(
-          destinationFolder,
-          value || defaultSketchFolderName
-        )
+        const targetPath = path.join(destinationFolder, value || initialValue)
         try {
           await fs.stat(targetPath)
           if (!disposed && currentToken === validationToken) {
@@ -197,8 +217,8 @@ async function promptSketchName(
     }
 
     input.onDidChangeValue((value) => {
-      const label = value || defaultSketchFolderName
-      input.prompt = `Create sketch in ${path.join(destinationFolder, label)}`
+      const label = value || initialValue
+      input.prompt = `${promptLabel} ${path.join(destinationFolder, label)}`
       input.validationMessage = validateSketchFolderName(value)
       if (!input.validationMessage) {
         scheduleExistenceValidation(value)
@@ -326,7 +346,7 @@ async function createSketch(
   }
 
   if (picked === 'Add to Workspace') {
-    await addSketchFolderToWorkspace({
+    await importSketchFromSketchbook(boardlabContext, {
       folderUri: vscode.Uri.file(targetFolder),
       mainFileUri: vscode.Uri.file(inoPath),
     })
@@ -370,10 +390,11 @@ function isPathInWorkspace(targetPath: string): boolean {
 }
 
 async function normalizeAddSketchArgs(
+  boardlabContext: BoardLabContextImpl,
   input: SketchResource | AddSketchFolderArgs | undefined
 ): Promise<AddSketchFolderArgs | undefined> {
   if (!input) {
-    return undefined
+    return promptSketchbookImport(boardlabContext)
   }
 
   if ('folderUri' in input) {
@@ -383,6 +404,7 @@ async function normalizeAddSketchArgs(
       folderUri,
       mainFileUri,
       openOnly: input.openOnly ?? false,
+      importIntoWorkspace: input.importIntoWorkspace ?? false,
     }
   }
 
@@ -393,6 +415,7 @@ async function normalizeAddSketchArgs(
       mainFileUri:
         input.mainSketchFileUri?.with({ scheme: 'file' }) ??
         guessMainSketchUri(folderUri),
+      importIntoWorkspace: true,
     }
   }
 
@@ -401,10 +424,149 @@ async function normalizeAddSketchArgs(
     return {
       folderUri,
       mainFileUri: guessMainSketchUri(folderUri),
+      importIntoWorkspace: true,
     }
   }
 
   return undefined
+}
+
+async function promptSketchbookImport(
+  boardlabContext: BoardLabContextImpl
+): Promise<AddSketchFolderArgs | undefined> {
+  await boardlabContext.sketchbooks.refresh()
+  const sketchbook = boardlabContext.sketchbooks.userSketchbook
+  if (!sketchbook?.sketches.length) {
+    vscode.window.showInformationMessage('No sketches found in the sketchbook.')
+    return undefined
+  }
+
+  const sketchbookPath = sketchbook.uri.fsPath
+  const items = sketchbook.sketches.map((sketch) => ({
+    label: path.basename(sketch.uri.fsPath),
+    description: path.relative(sketchbookPath, sketch.uri.fsPath),
+    sketch,
+  }))
+  const picked = await vscode.window.showQuickPick(items, {
+    placeHolder: 'Select a sketch to import from the sketchbook',
+  })
+  if (!picked) {
+    return undefined
+  }
+  return {
+    folderUri: picked.sketch.uri.with({ scheme: 'file' }),
+    mainFileUri:
+      picked.sketch.mainSketchFileUri?.with({ scheme: 'file' }) ??
+      guessMainSketchUri(picked.sketch.uri),
+    importIntoWorkspace: true,
+  }
+}
+
+async function importSketchFolderToWorkspace(
+  boardlabContext: BoardLabContextImpl,
+  folderUri: vscode.Uri,
+  mainFileUri?: vscode.Uri
+): Promise<void> {
+  const sourceFolder = folderUri.fsPath
+  if (isPathInWorkspace(sourceFolder)) {
+    await openSketchDocument(
+      mainFileUri ?? guessMainSketchUri(vscode.Uri.file(sourceFolder))
+    )
+    return
+  }
+
+  const destinationRoot = await pickWorkspaceImportRoot()
+  if (!destinationRoot) {
+    return
+  }
+
+  const sourceName = path.basename(sourceFolder)
+  let targetName = sourceName
+  let destinationFolder = path.join(destinationRoot, targetName)
+
+  if (await pathExists(destinationFolder)) {
+    const resolved = await promptSketchFolderName({
+      title: 'Import Sketch',
+      destinationFolder: destinationRoot,
+      initialValue: sourceName,
+      promptLabel: 'Import sketch into',
+    })
+    if (!resolved) {
+      return
+    }
+    targetName = resolved
+    destinationFolder = path.join(destinationRoot, targetName)
+  }
+
+  try {
+    const stat = await fs.stat(destinationRoot)
+    if (!stat.isDirectory()) {
+      vscode.window.showErrorMessage(
+        `Destination is not a folder: ${destinationRoot}`
+      )
+      return
+    }
+  } catch {
+    vscode.window.showErrorMessage(
+      `Destination folder not found: ${destinationRoot}`
+    )
+    return
+  }
+
+  try {
+    await copySketchFolder(sourceFolder, destinationFolder)
+  } catch (error) {
+    vscode.window.showErrorMessage(
+      `Failed to import sketch into ${destinationFolder}.`
+    )
+    console.warn('Failed to import sketch', error)
+    return
+  }
+
+  const preferredExtension = mainFileUri
+    ? path.extname(mainFileUri.fsPath)
+    : undefined
+  const mainSketchPath = await renameMainSketchFile(
+    destinationFolder,
+    sourceName,
+    targetName,
+    preferredExtension
+  )
+
+  const refreshPromise = boardlabContext.sketchbooks.refresh()
+  await refreshPromise
+
+  if (mainSketchPath) {
+    await openSketchDocument(vscode.Uri.file(mainSketchPath))
+  }
+}
+
+async function pickWorkspaceImportRoot(): Promise<string | undefined> {
+  const workspaceFolders = (vscode.workspace.workspaceFolders ?? []).filter(
+    (folder) => folder.uri.scheme === 'file'
+  )
+  if (!workspaceFolders.length) {
+    const picked = await vscode.window.showOpenDialog({
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: 'Import here',
+      title: 'Select destination folder',
+    })
+    return picked?.[0]?.fsPath
+  }
+  if (workspaceFolders.length === 1) {
+    return workspaceFolders[0].uri.fsPath
+  }
+  const items = workspaceFolders.map((folder) => ({
+    label: folder.name,
+    description: folder.uri.fsPath,
+    folder,
+  }))
+  const picked = await vscode.window.showQuickPick(items, {
+    placeHolder: 'Select destination folder',
+  })
+  return picked?.folder.uri.fsPath
 }
 
 function guessMainSketchUri(folderUri: vscode.Uri): vscode.Uri {
@@ -431,4 +593,16 @@ function getWorkspaceFolderByUri(
   return (vscode.workspace.workspaceFolders ?? []).find(
     (folder) => folder.uri.fsPath === targetPath
   )
+}
+
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.stat(targetPath)
+    return true
+  } catch (error: any) {
+    if (error?.code === 'ENOENT') {
+      return false
+    }
+    throw error
+  }
 }
