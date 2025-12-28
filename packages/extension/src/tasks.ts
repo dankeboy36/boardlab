@@ -24,6 +24,11 @@ import { createProgrammerItemDescription } from './sketch/currentSketcheView'
 import { Sketch } from './sketch/types'
 import { buildStatusText } from './statusText'
 import type { TaskKind, TaskStatus } from './taskTracker'
+import {
+  extractPlatformIdFromError,
+  isPlatformNotInstalledError,
+  platformIdFromFqbn,
+} from './platformUtils'
 import { onDidChangeTaskStates, tryStopTask } from './taskTracker'
 import { presentTaskStatus } from './taskUiState'
 import { disposeAll } from './utils'
@@ -46,7 +51,9 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
   constructor(private readonly boardlabContext: BoardLabContextImpl) {
     this._disposables = []
     this.statusBarItem = vscode.window.createStatusBarItem(
-      'boardlab.contextStatusBar'
+      'boardlab.contextStatusBar',
+      vscode.StatusBarAlignment.Left,
+      100
     )
     this.didChangeStatusBarEmitter = new vscode.EventEmitter<void>()
     this._disposables.push(
@@ -562,6 +569,10 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
           if (error instanceof ClientError && error.code === Status.NOT_FOUND) {
             // https://github.com/arduino/arduino-cli/issues/3037
           }
+          this.handleMissingPlatformError(error, resolvedTask.fqbn).catch(
+            (handleError) =>
+              console.warn('Failed to handle missing platform', handleError)
+          )
           console.warn(
             `Failed to update compile summary for ${resolvedTask.sketchPath}`,
             error
@@ -573,6 +584,42 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
         })
       return pty
     })
+  }
+
+  private async handleMissingPlatformError(
+    error: unknown,
+    fqbn: string
+  ): Promise<void> {
+    if (!isPlatformNotInstalledError(error)) {
+      return
+    }
+    const platformId =
+      extractPlatformIdFromError(error) ?? platformIdFromFqbn(fqbn)
+    if (!platformId) {
+      return
+    }
+
+    const quick = await this.boardlabContext.platformsManager
+      .lookupPlatformQuick(platformId)
+      .catch(() => undefined)
+    const platformName = quick?.label ?? platformId
+    const version = quick?.availableVersions?.[0] || quick?.installedVersion
+    if (!version) {
+      return
+    }
+
+    const action = await vscode.window.showInformationMessage(
+      `Platform '${platformName}' (${platformId}) is not installed. Install now?`,
+      'Install',
+      'Cancel'
+    )
+    if (action === 'Install') {
+      await this.boardlabContext.platformsManager.install({
+        id: platformId,
+        name: platformName,
+        version,
+      })
+    }
   }
 
   private uploadTask(definition: UploadTaskDefinition): vscode.Task {
@@ -1076,26 +1123,26 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
   }
 
   private async statusText(): Promise<string> {
-    const icon = '$(dashboard) BoardLab'
+    const icon = '$(dashboard)'
     const currentSketch = this.boardlabContext.currentSketch
     if (!currentSketch) {
-      return icon
+      return `${icon} BoardLab`
     }
     const { sketchPath, board, port } = currentSketch
-    // Active profile, if set for this sketch
-    const activeProfile =
-      await this.boardlabContext.getValidatedActiveProfileForSketch(sketchPath)
     const { arduino } = await this.boardlabContext.client
     const detectedPorts = this.boardlabContext.boardsListWatcher.detectedPorts
-    const [resolvedSketch, resolvedBoard, resolvedPort] = await Promise.all([
-      this.resolveSketch(vscode.Uri.file(sketchPath)),
-      this.resolveBoard(board?.fqbn, arduino),
-      resolvePort(
-        port ? createPortKey(port) : undefined,
-        arduino,
-        detectedPorts
-      ),
-    ])
+    const [resolvedSketch, resolvedBoard, resolvedPort, activeProfile] =
+      await Promise.all([
+        this.resolveSketch(vscode.Uri.file(sketchPath)),
+        this.resolveBoard(board?.fqbn, arduino),
+        resolvePort(
+          port ? createPortKey(port) : undefined,
+          arduino,
+          detectedPorts
+        ),
+        // Active profile, if set for this sketch
+        this.boardlabContext.getValidatedActiveProfileForSketch(sketchPath),
+      ])
 
     this.resolvedSketch = resolvedSketch
     this.resolvedBoard = resolvedBoard
@@ -1115,7 +1162,7 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
             }
           : { spinning: true, message: this.compileTaskProgress?.message }
         : undefined,
-      maxVisible: 80,
+      maxVisible: 64,
     })
   }
 

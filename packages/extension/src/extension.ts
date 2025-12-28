@@ -66,6 +66,7 @@ import {
   isSketch as isSketchbookSketch,
 } from './sketch/types'
 import { BoardLabTasks } from './tasks'
+import { PlatformMissingStatusBar } from './platformMissingStatusBar'
 import {
   getTaskStatus,
   markTaskFinished,
@@ -122,11 +123,15 @@ export function activate(context: vscode.ExtensionContext) {
 
   const tasks = new BoardLabTasks(boardlabContext)
   console.log('Registered tasks provider')
+  const platformMissingStatusBar = new PlatformMissingStatusBar(boardlabContext)
+  console.log('Registered platform status bar')
   const currentSketchView = new CurrentSketchView(boardlabContext)
   console.log('Registered sketches view')
   const sketchbook = new SketchbookView(context, boardlabContext.sketchbooks)
   console.log('Registered sketchbook view')
   registerSketchbookReadonlyFs(context)
+
+  context.subscriptions.push(platformMissingStatusBar)
 
   context.subscriptions.push(
     vscode.tasks.onDidStartTask((event) => {

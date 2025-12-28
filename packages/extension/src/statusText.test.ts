@@ -48,7 +48,7 @@ describe('truncateVisibleAdvanced', () => {
       position: 'middle',
       preferSpace: true,
     })
-    expect(out.includes(' … ')).toBe(true)
+    expect(out.includes('…')).toBe(true)
   })
 })
 
@@ -92,8 +92,7 @@ describe('buildStatusText', () => {
       maxVisible: 30,
     })
     const parts = out.split(' ')
-    const boardPart =
-      parts.find((p) => p.includes('ESP32') || p.includes('WROOM')) || ''
+    const boardPart = parts.find((p) => p.includes('ESP')) ?? ''
     expect(boardPart.includes('…')).toBe(true)
   })
 

@@ -177,6 +177,8 @@ export class SketchFolderImpl implements vscode.Disposable, SketchFolder {
       } else {
         this.state.configOptions = undefined
       }
+    } else {
+      this.state.configOptions = undefined
     }
     this.state.selectedProgrammer = undefined
     this.saveSketchScopedState()

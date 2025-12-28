@@ -1,3 +1,5 @@
+import ellipsize from 'ellipsize'
+
 export type Progress =
   | { spinning: true; message?: string } // indefinite spinner
   | { percent: number; message?: string } // bounded progress
@@ -15,6 +17,7 @@ export interface StatusParts {
 type TruncPos = 'start' | 'middle' | 'end'
 
 const CODICON_RE = /\$\([^)]+\)/g
+const ICON_PLACEHOLDER = '\u0000'
 
 /** Visible length in code points (codicons ignored). */
 export function visibleLength(input: string): number {
@@ -69,79 +72,99 @@ export function truncateVisibleAdvanced(
   if (maxVisible <= 0) return ellipsis
   if (visibleLength(input) <= maxVisible) return input
 
-  const tokens = tokenize(input)
-
-  const takeStart = (n: number) => {
-    let need = n
-    let out = ''
-    for (const tk of tokens) {
-      if (need <= 0) break
-      if (tk.t === 'icon') {
-        out += tk.v
-        continue
-      }
-      const arr = Array.from(tk.v)
-      if (arr.length <= need) {
-        out += tk.v
-        need -= arr.length
-      } else {
-        let sliceEnd = need
-        if (preferSpace && arr.length > need) {
-          const raw = arr.join('')
-          sliceEnd = nearestSpace(raw, need, -1) + 1
-          sliceEnd = Math.max(1, Math.min(sliceEnd, arr.length))
-        }
-        out += arr.slice(0, sliceEnd).join('')
-        need = 0
-      }
-    }
-    return out
-  }
-
-  const takeEnd = (n: number) => {
-    let need = n
-    let out = ''
-    for (let i = tokens.length - 1; i >= 0; i--) {
-      if (need <= 0) break
-      const tk = tokens[i]
-      if (tk.t === 'icon') {
-        out = tk.v + out
-        continue
-      }
-      const arr = Array.from(tk.v)
-      if (arr.length <= need) {
-        out = tk.v + out
-        need -= arr.length
-      } else {
-        let sliceStart = arr.length - need
-        if (preferSpace && arr.length > need) {
-          const raw = arr.join('')
-          sliceStart = nearestSpace(raw, arr.length - need - 1, +1) + 1
-          sliceStart = Math.max(0, Math.min(sliceStart, arr.length - 1))
-        }
-        out = arr.slice(sliceStart).join('') + out
-        need = 0
-      }
-    }
-    return out
-  }
-
   if (position === 'start') {
-    const tail = takeEnd(maxVisible - 1)
+    const tokens = tokenize(input)
+    const tail = takeEnd(tokens, maxVisible - 1, preferSpace)
     return ellipsis + tail
   }
 
-  if (position === 'middle') {
-    const leftCount = Math.floor((maxVisible - 1) / 2)
-    const rightCount = maxVisible - 1 - leftCount
-    const left = takeStart(leftCount)
-    const right = takeEnd(rightCount)
-    return left + ellipsis + right
+  return ellipsizeWithCodicons(input, maxVisible, {
+    position,
+    preferSpace,
+    ellipsis,
+  })
+}
+
+function ellipsizeWithCodicons(
+  input: string,
+  maxVisible: number,
+  {
+    position,
+    preferSpace,
+    ellipsis,
+  }: { position: TruncPos; preferSpace: boolean; ellipsis: string }
+): string {
+  const tokens = tokenize(input)
+  const icons: string[] = []
+  let encoded = ''
+  for (const token of tokens) {
+    if (token.t === 'icon') {
+      icons.push(token.v)
+      encoded += ICON_PLACEHOLDER
+    } else {
+      encoded += token.v
+    }
   }
 
-  // 'end'
-  const head = takeStart(maxVisible - 1)
-  return head + ellipsis
+  const adjustedMax = maxVisible + icons.length
+  const options: {
+    ellipse: string
+    truncate?: boolean | 'middle'
+    chars?: string[]
+  } = {
+    ellipse: ellipsis,
+  }
+  if (preferSpace) {
+    options.chars = [' ']
+  }
+  options.truncate = position === 'middle' ? 'middle' : true
+
+  const truncated = ellipsize(encoded, adjustedMax, options as any)
+  if (!icons.length) {
+    return truncated
+  }
+  const parts = truncated.split(ICON_PLACEHOLDER)
+  if (parts.length === 1) {
+    return truncated
+  }
+  let out = parts[0]
+  let iconIndex = 0
+  for (let i = 1; i < parts.length; i++) {
+    out += (icons[iconIndex++] ?? '') + parts[i]
+  }
+  return out
+}
+
+function takeEnd(
+  tokens: Array<{ t: 'icon' | 'text'; v: string }>,
+  n: number,
+  preferSpace: boolean
+): string {
+  let need = n
+  let out = ''
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    if (need <= 0) break
+    const tk = tokens[i]
+    if (tk.t === 'icon') {
+      out = tk.v + out
+      continue
+    }
+    const arr = Array.from(tk.v)
+    if (arr.length <= need) {
+      out = tk.v + out
+      need -= arr.length
+    } else {
+      let sliceStart = arr.length - need
+      if (preferSpace && arr.length > need) {
+        const raw = arr.join('')
+        sliceStart = nearestSpace(raw, arr.length - need - 1, +1) + 1
+        sliceStart = Math.max(0, Math.min(sliceStart, arr.length - 1))
+      }
+      out = arr.slice(sliceStart).join('') + out
+      need = 0
+    }
+  }
+  return out
 }
 
 function joinSpaced(parts: string[]): string {

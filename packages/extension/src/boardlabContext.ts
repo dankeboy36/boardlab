@@ -35,16 +35,18 @@ import {
 import type { Messenger } from 'vscode-messenger'
 
 import {
+  UninstallEventParams,
   getSelectedBoard,
   notifyDidChangeSelectedBoard,
+  type InstallEventParams,
 } from '@boardlab/protocol'
 
+import { findBoardHistoryMatches, matchBoardByName } from './boardNameMatch'
 import {
   PlatformNotInstalledError,
   ensureBoardDetails,
   getBoardDetails,
   getSelectedConfigValue,
-  isApiBoardListItem,
   isBoardDetails,
   pickBoard,
 } from './boards'
@@ -61,6 +63,12 @@ import { DaemonAddress } from './cli/daemon'
 import { toCompileSummary } from './compile'
 import { computeConfigOverrides } from './configOptions'
 import { MonitorManager } from './monitor/monitorManager'
+import { getPlatformRequirement } from './platformMissing'
+import {
+  collectHistoryUpdates,
+  matchesPlatformId,
+  toUnresolvedBoard,
+} from './platformUtils'
 import { pickPort } from './ports'
 import { readProfiles } from './profile/profiles'
 import { LibrariesManager, PlatformsManager } from './resourcesManager'
@@ -431,12 +439,18 @@ export class BoardLabContextImpl implements BoardLabContext {
         getSelectedBoard,
         async () => this.currentSketch?.board
       ),
-      this.platformsManager.onDidInstall(
-        () => (this._boardDetailsCache = new Map())
-      ),
-      this.platformsManager.onDidUninstall(
-        () => (this._boardDetailsCache = new Map())
-      )
+      this.platformsManager.onDidInstall((event) => {
+        this._boardDetailsCache = new Map()
+        this.resolveMissingBoardsAfterPlatformInstall(event).catch((error) =>
+          console.warn('Failed to resolve boards after platform install', error)
+        )
+      }),
+      this.platformsManager.onDidUninstall((event) => {
+        this._boardDetailsCache = new Map()
+        this.handlePlatformUninstalled(event).catch((error) =>
+          console.warn('Failed to handle platform uninstall', error)
+        )
+      })
     )
     vscode.commands.executeCommand(
       'setContext',
@@ -1109,29 +1123,26 @@ export class BoardLabContextImpl implements BoardLabContext {
         board = boardDetails
       }
     }
-    if (
-      !isBoardDetails(board) &&
-      isApiBoardListItem(board) &&
-      board.platform &&
-      board.platform.metadata &&
-      board.platform.release
-    ) {
-      const {
-        platform: { metadata, release },
-      } = board
+    const platformRequirement =
+      !isBoardDetails(board) && board
+        ? getPlatformRequirement(board)
+        : undefined
+
+    if (platformRequirement && board) {
+      const { id, name, version } = platformRequirement
 
       vscode.window
         .showInformationMessage(
-          `To ensure the proper functioning of the extension, the ${release.name} (${metadata.id}) platform must be installed for the ${board.name} board. Would you like to proceed with the installation now?`,
+          `To ensure the proper functioning of the extension, the ${name} (${id}) platform must be installed for the ${board.name} board. Would you like to proceed with the installation now?`,
           'Install',
           'Skip'
         )
         .then(async (answer) => {
           if (answer === 'Install') {
             await this.platformsManager.install({
-              id: metadata.id,
-              name: release.name,
-              version: release.version,
+              id,
+              name,
+              version,
             })
             // TODO: reselect board with FQBN!
           }
@@ -1352,6 +1363,204 @@ export class BoardLabContextImpl implements BoardLabContext {
       object: sketch,
       changedProperties,
     })
+  }
+
+  private async resolveMissingBoardsAfterPlatformInstall(
+    event: InstallEventParams
+  ): Promise<void> {
+    const platformId = event.id
+    const platformLabel = await this.platformsManager
+      .lookupPlatformQuick(platformId)
+      .then((entry) => entry?.label)
+      .catch(() => undefined)
+
+    const sketches = this.sketchbooks.resolvedSketchFolders
+    if (!sketches.length) {
+      return
+    }
+
+    const { arduino } = await this.client
+
+    for (const sketch of sketches) {
+      const board = sketch.board
+      if (!board?.name || board.fqbn) {
+        continue
+      }
+
+      const candidates = await arduino.searchBoard({ searchArgs: board.name })
+      const match = matchBoardByName(board.name, candidates, {
+        platformId,
+      })
+      if (!match?.board?.fqbn) {
+        continue
+      }
+
+      const resolved =
+        (await getBoardDetails(match.board.fqbn, arduino)) ?? match.board
+      if (!resolved?.fqbn) {
+        continue
+      }
+
+      const previousName = board.name
+      sketch.setBoard(resolved)
+      this.emitSketchChange(sketch, 'board')
+
+      if (sketch === this.currentSketch) {
+        this.messenger.sendNotification(
+          notifyDidChangeSelectedBoard,
+          { type: 'webview', webviewType: 'boardlab.examples' },
+          resolved
+        )
+      }
+
+      await this.updateBoardHistoryEntries(previousName, resolved)
+
+      if (
+        sketch === this.currentSketch &&
+        match.kind !== 'exact' &&
+        previousName !== resolved.name
+      ) {
+        await this.showBoardMatchNotice({
+          previousName,
+          resolvedName: resolved.name,
+          platformId,
+          platformLabel,
+        })
+      }
+    }
+  }
+
+  private async updateBoardHistoryEntries(
+    previousName: string,
+    resolved: BoardIdentifier
+  ): Promise<void> {
+    const resolvedName = resolved.name
+    const resolvedFqbn = resolved.fqbn
+    if (!resolvedName || !resolvedFqbn) {
+      return
+    }
+
+    const historyEntry: BoardIdentifier = {
+      name: resolvedName,
+      fqbn: resolvedFqbn,
+    }
+
+    const recentMatches = findBoardHistoryMatches(
+      this.recentBoards.items,
+      previousName
+    )
+    for (const candidate of recentMatches) {
+      await this.recentBoards.remove(candidate)
+    }
+    if (recentMatches.length) {
+      await this.recentBoards.add(historyEntry)
+    }
+
+    const pinnedMatches = findBoardHistoryMatches(
+      this.pinnedBoards.items,
+      previousName
+    )
+    for (const candidate of pinnedMatches) {
+      await this.pinnedBoards.remove(candidate)
+    }
+    if (pinnedMatches.length) {
+      await this.pinnedBoards.add(historyEntry)
+    }
+  }
+
+  private async showBoardMatchNotice(params: {
+    previousName: string
+    resolvedName: string
+    platformId: string
+    platformLabel?: string
+  }): Promise<void> {
+    const platformName = params.platformLabel
+      ? `${params.platformLabel} (${params.platformId})`
+      : params.platformId
+    const message = `After installing ${platformName}, board '${params.previousName}' was matched to '${params.resolvedName}' as the closest available board.`
+    const action = await vscode.window.showInformationMessage(
+      message,
+      'Change Board',
+      'OK'
+    )
+    if (action === 'Change Board') {
+      await this.selectBoard(this.currentSketch)
+    }
+  }
+
+  private async handlePlatformUninstalled(
+    event: UninstallEventParams
+  ): Promise<void> {
+    const platformId = event.id
+    const platformInfo = await this.getPlatformInfo(platformId)
+
+    await this.updateHistoryForPlatformUninstall(platformId)
+
+    const sketches = this.sketchbooks.resolvedSketchFolders
+    if (!sketches.length) {
+      return
+    }
+
+    for (const sketch of sketches) {
+      const board = sketch.board
+      if (!board?.fqbn || !matchesPlatformId(board.fqbn, platformId)) {
+        continue
+      }
+
+      const unresolved = toUnresolvedBoard(board, platformInfo)
+      sketch.setBoard(unresolved)
+      this.emitSketchChange(sketch, 'board')
+
+      if (sketch === this.currentSketch) {
+        this.messenger.sendNotification(
+          notifyDidChangeSelectedBoard,
+          { type: 'webview', webviewType: 'boardlab.examples' },
+          unresolved
+        )
+      }
+    }
+  }
+
+  private async getPlatformInfo(
+    platformId: string
+  ): Promise<{ id: string; name?: string; version?: string }> {
+    const quick = await this.platformsManager
+      .lookupPlatformQuick(platformId)
+      .catch(() => undefined)
+    const version = quick?.availableVersions?.[0] || quick?.installedVersion
+    return {
+      id: platformId,
+      name: quick?.label,
+      version,
+    }
+  }
+
+  private async updateHistoryForPlatformUninstall(
+    platformId: string
+  ): Promise<void> {
+    const recentUpdates = collectHistoryUpdates(
+      this.recentBoards.items,
+      platformId
+    )
+    await this.applyHistoryUpdates(this.recentBoards, recentUpdates)
+
+    const pinnedUpdates = collectHistoryUpdates(
+      this.pinnedBoards.items,
+      platformId
+    )
+    await this.applyHistoryUpdates(this.pinnedBoards, pinnedUpdates)
+  }
+
+  private async applyHistoryUpdates(
+    history: RecentItems<BoardIdentifier>,
+    updates: { remove: BoardIdentifier[]; add: BoardIdentifier[] }
+  ): Promise<void> {
+    for (const item of updates.remove) {
+      await history.remove(item)
+    }
+    for (const item of updates.add) {
+      await history.add(item)
+    }
   }
 }
 
