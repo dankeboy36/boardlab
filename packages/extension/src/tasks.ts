@@ -20,7 +20,7 @@ import {
 import { portProtocolIcon, resolvePort } from './ports'
 import { collectCliDiagnostics } from './profile/cliDiagnostics'
 import { validateProfilesYAML } from './profile/validation'
-import { createProgrammerItemDescription } from './sketch/currentSketcheView'
+import { createProgrammerItemDescription } from './sketch/currentSketchView'
 import { Sketch } from './sketch/types'
 import { buildStatusText } from './statusText'
 import type { TaskKind, TaskStatus } from './taskTracker'

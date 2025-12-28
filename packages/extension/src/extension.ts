@@ -57,14 +57,16 @@ import { collectCliDiagnostics } from './profile/cliDiagnostics'
 import { ProfilesCodeActionProvider } from './profile/codeActions'
 import { validateProfilesYAML } from './profile/validation'
 import { registerProfilesYamlValidation } from './profile/validationHost'
-import { CurrentSketchView } from './sketch/currentSketcheView'
+import { CurrentSketchView } from './sketch/currentSketchView'
+import {
+  addSketchFolderToWorkspace,
+  openNewSketchWizard,
+  type AddSketchFolderArgs,
+  type NewSketchParams,
+} from './sketch/newSketchWizard'
 import { registerSketchbookReadonlyFs } from './sketch/sketchbookFs'
 import { SketchbookView } from './sketch/sketchbookView'
 import type { Resource as SketchResource } from './sketch/types'
-import {
-  isFolder as isSketchbookFolder,
-  isSketch as isSketchbookSketch,
-} from './sketch/types'
 import { BoardLabTasks } from './tasks'
 import { PlatformMissingStatusBar } from './platformMissingStatusBar'
 import {
@@ -79,12 +81,6 @@ import {
   LibrariesManagerViewProvider,
   PlatformsManagerViewProvider,
 } from './webviews/viewProvider'
-
-interface AddSketchFolderArgs {
-  folderUri: vscode.Uri
-  mainFileUri?: vscode.Uri
-  openOnly?: boolean
-}
 
 interface SketchTaskParamsInput {
   sketchPath?: string
@@ -168,6 +164,12 @@ export function activate(context: vscode.ExtensionContext) {
     ),
     vscode.commands.registerCommand('boardlab.configureCurrentSketch', () =>
       currentSketchView.revealCurrentSketch()
+    ),
+    vscode.commands.registerCommand(
+      'boardlab.openNewSketchWizard',
+      async (params: NewSketchParams = {}) => {
+        await openNewSketchWizard(boardlabContext, params)
+      }
     ),
     vscode.commands.registerCommand(
       'boardlab.compile',
@@ -1824,103 +1826,6 @@ async function resolveSketchTaskParams(
   }
 
   return { sketchPath, fqbn, port, programmer }
-}
-
-async function addSketchFolderToWorkspace(
-  input: SketchResource | AddSketchFolderArgs | undefined
-): Promise<void> {
-  const args = await normalizeAddSketchArgs(input)
-  if (!args) {
-    vscode.window.showWarningMessage('Unable to determine sketch folder.')
-    return
-  }
-
-  const { folderUri, mainFileUri, openOnly } = args
-  const existing = getWorkspaceFolderByUri(folderUri)
-  const targetFile = mainFileUri ?? guessMainSketchUri(folderUri)
-
-  if (existing || openOnly) {
-    await openSketchDocument(targetFile)
-    return
-  }
-
-  const startIndex = vscode.workspace.workspaceFolders?.length ?? 0
-  const added = vscode.workspace.updateWorkspaceFolders(startIndex, null, {
-    uri: folderUri,
-  })
-
-  if (!added) {
-    vscode.window.showErrorMessage(
-      `Failed to add "${path.basename(folderUri.fsPath)}" to the workspace.`
-    )
-    return
-  }
-
-  await openSketchDocument(targetFile)
-}
-
-async function normalizeAddSketchArgs(
-  input: SketchResource | AddSketchFolderArgs | undefined
-): Promise<AddSketchFolderArgs | undefined> {
-  if (!input) {
-    return undefined
-  }
-
-  if ('folderUri' in input) {
-    const folderUri = input.folderUri.with({ scheme: 'file' })
-    const mainFileUri = input.mainFileUri?.with({ scheme: 'file' })
-    return {
-      folderUri,
-      mainFileUri,
-      openOnly: input.openOnly ?? false,
-    }
-  }
-
-  if (isSketchbookSketch(input)) {
-    const folderUri = input.uri.with({ scheme: 'file' })
-    return {
-      folderUri,
-      mainFileUri:
-        input.mainSketchFileUri?.with({ scheme: 'file' }) ??
-        guessMainSketchUri(folderUri),
-    }
-  }
-
-  if (isSketchbookFolder(input)) {
-    const folderUri = input.uri.with({ scheme: 'file' })
-    return {
-      folderUri,
-      mainFileUri: guessMainSketchUri(folderUri),
-    }
-  }
-
-  return undefined
-}
-
-function guessMainSketchUri(folderUri: vscode.Uri): vscode.Uri {
-  const name = path.basename(folderUri.fsPath)
-  return vscode.Uri.joinPath(folderUri, `${name}.ino`)
-}
-
-async function openSketchDocument(uri: vscode.Uri): Promise<void> {
-  try {
-    const document = await vscode.workspace.openTextDocument(uri)
-    await vscode.window.showTextDocument(document, { preview: false })
-  } catch (error) {
-    console.warn('Failed to open sketch document', error)
-    vscode.window.showWarningMessage(
-      `Sketch folder added, but failed to open "${uri.fsPath}".`
-    )
-  }
-}
-
-function getWorkspaceFolderByUri(
-  folderUri: vscode.Uri
-): vscode.WorkspaceFolder | undefined {
-  const targetPath = folderUri.with({ scheme: 'file' }).fsPath
-  return (vscode.workspace.workspaceFolders ?? []).find(
-    (folder) => folder.uri.fsPath === targetPath
-  )
 }
 
 async function openExampleSketch(

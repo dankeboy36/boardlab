@@ -39,11 +39,20 @@ export class CurrentSketchView implements vscode.Disposable {
       this.treeView.description = activeProfileName ?? ''
     }
     const updateTitle = () => {
-      this.treeView.title = `Current Sketch • ${
-        boardlabContext.currentSketch?.sketchPath
-          ? path.basename(boardlabContext.currentSketch?.sketchPath)
-          : 'No sketch selected'
-      }`
+      const sketchPath = boardlabContext.currentSketch?.sketchPath
+      if (sketchPath) {
+        this.treeView.title = `Current Sketch • ${path.basename(sketchPath)}`
+        return
+      }
+      if (boardlabContext.sketchbooks.isLoading) {
+        this.treeView.title = 'Current Sketch • Loading...'
+        return
+      }
+      if (boardlabContext.sketchbooks.isEmpty) {
+        this.treeView.title = 'Current Sketch • No sketches found'
+        return
+      }
+      this.treeView.title = 'Current Sketch • No sketch selected'
     }
 
     this._disposable.push(
@@ -54,6 +63,10 @@ export class CurrentSketchView implements vscode.Disposable {
         updateDescription()
       }),
       boardlabContext.onDidChangeActiveProfile(() => {
+        updateDescription()
+      }),
+      boardlabContext.sketchbooks.onDidRefresh(() => {
+        updateTitle()
         updateDescription()
       })
     )

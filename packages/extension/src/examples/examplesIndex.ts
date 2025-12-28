@@ -4,7 +4,7 @@ import { URL } from 'node:url'
 
 import { LibraryLocation, type InstalledLibrary } from 'ardunno-cli/api'
 import {
-  sketchbookTreeSync,
+  sketchbookTree,
   type Folder as SketchTreeFolder,
   type SketchbookTree,
 } from 'ardunno-sketch'
@@ -210,7 +210,7 @@ export class ExamplesIndex implements ExampleLocator, vscode.Disposable {
     )
     let tree: SketchbookTree
     try {
-      tree = sketchbookTreeSync(baseUri.fsPath)
+      tree = await sketchbookTree(baseUri.fsPath)
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         console.warn('Failed to scan built-in examples', error)

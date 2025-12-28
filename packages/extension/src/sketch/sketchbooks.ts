@@ -6,10 +6,11 @@ import {
   Folder as TreeFolder,
   Sketch as TreeSketch,
   isMainSketchFile,
-  sketchbookTreeSync,
+  sketchbookTree,
 } from 'ardunno-sketch'
 import { createPortKey } from 'boards-list'
 import { FQBN } from 'fqbn'
+import debounce from 'lodash.debounce'
 import * as vscode from 'vscode'
 import { SketchFolder, SketchFoldersChangeEvent } from 'vscode-arduino-api'
 
@@ -55,6 +56,7 @@ export class Sketchbooks implements vscode.Disposable {
   private readonly _onDidChangeSketchFolders: vscode.EventEmitter<SketchFoldersChangeEvent>
   private readonly _onDidChangeResolvedSketches: vscode.EventEmitter<void>
   private readonly _onDidChangeUserSketchbook: vscode.EventEmitter<void>
+  private readonly _onDidRefresh: vscode.EventEmitter<void>
   /**
    * Keys are the `SketchbookTree#cwd` paths converted to `file:///` URI
    * strings.
@@ -62,6 +64,11 @@ export class Sketchbooks implements vscode.Disposable {
   private _sketchbooks: Map<string, Sketchbook> | undefined
   private _resolvedSketches: SketchFolderImpl[]
   private _currentUserDirPath: string | undefined
+  private readonly refreshDebounced: () => void
+  private refreshPromise: Promise<void> | undefined
+  private refreshResolve: (() => void) | undefined
+  private _isLoading = false
+  private _isEmpty = true
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -74,6 +81,12 @@ export class Sketchbooks implements vscode.Disposable {
     this._onDidChangeSketchFolders = new vscode.EventEmitter()
     this._onDidChangeResolvedSketches = new vscode.EventEmitter()
     this._onDidChangeUserSketchbook = new vscode.EventEmitter()
+    this._onDidRefresh = new vscode.EventEmitter()
+    this.refreshDebounced = debounce(() => {
+      this.refreshInternal().catch((error) =>
+        console.warn('Failed to refresh sketchbooks', error)
+      )
+    }, 200)
     const inoWatcher = vscode.workspace.createFileSystemWatcher(
       '**/*.ino',
       false,
@@ -105,17 +118,19 @@ export class Sketchbooks implements vscode.Disposable {
         }
       }),
       this._onDidChangeUserSketchbook,
+      this._onDidRefresh,
       vscode.workspace.onDidChangeWorkspaceFolders(() => this.refresh()),
     ]
-    this.resolveOpenedSketchFolders()
+    this.refresh()
   }
 
   private async resolveOpenedSketchFolders(
-    openedSketches: readonly Sketch[] = this.openedSketches
+    openedSketches?: readonly Sketch[]
   ): Promise<void> {
+    const sketches = openedSketches ?? this.openedSketches
     const { arduino } = await this.boardlabContext.client
     const resolvedSketches = await Promise.all(
-      openedSketches.map((sketch) => this.resolve(sketch, arduino))
+      sketches.map((sketch) => this.resolve(sketch, arduino))
     )
     const validSketches = resolvedSketches.filter((sketch) =>
       Boolean(sketch)
@@ -132,27 +147,126 @@ export class Sketchbooks implements vscode.Disposable {
     return false
   }
 
-  private refresh(): void {
-    const oldOpenedSketches = this.openedSketches
-    this._sketchbooks = undefined
-    this.all()
-    const newOpenedSketches = this.openedSketches
-    const addedPaths = newOpenedSketches
-      .filter((sketch) =>
-        oldOpenedSketches.every(
-          (otherSketch) => otherSketch.uri.toString() !== sketch.uri.toString()
+  refresh(): Promise<void> {
+    if (!this.refreshPromise) {
+      this.refreshPromise = new Promise((resolve) => {
+        this.refreshResolve = resolve
+      })
+    }
+    this.setSketchbooksLoading(true)
+    this.refreshDebounced()
+    return this.refreshPromise
+  }
+
+  private async refreshInternal(): Promise<void> {
+    try {
+      const previousSketchbooks = this._sketchbooks ?? new Map()
+      const oldOpenedSketches = this.getOpenedSketchesFrom(previousSketchbooks)
+      const newSketchbooks = await this.loadSketchbooks()
+      this._sketchbooks = newSketchbooks
+      this._onDidChange.fire(this._sketchbooks)
+      const newOpenedSketches = this.getOpenedSketchesFrom(newSketchbooks)
+      this.setSketchbooksEmpty(newOpenedSketches.length === 0)
+      const addedPaths = newOpenedSketches
+        .filter((sketch) =>
+          oldOpenedSketches.every(
+            (otherSketch) =>
+              otherSketch.uri.toString() !== sketch.uri.toString()
+          )
         )
-      )
-      .map((sketch) => sketch.uri.fsPath)
-    const removedPaths = oldOpenedSketches
-      .filter((sketch) =>
-        newOpenedSketches.every(
-          (otherSketch) => otherSketch.uri.toString() !== sketch.uri.toString()
+        .map((sketch) => sketch.uri.fsPath)
+      const removedPaths = oldOpenedSketches
+        .filter((sketch) =>
+          newOpenedSketches.every(
+            (otherSketch) =>
+              otherSketch.uri.toString() !== sketch.uri.toString()
+          )
         )
-      )
-      .map((sketch) => sketch.uri.fsPath)
-    this._onDidChangeSketchFolders.fire({ addedPaths, removedPaths })
-    this.resolveOpenedSketchFolders()
+        .map((sketch) => sketch.uri.fsPath)
+      this._onDidChangeSketchFolders.fire({ addedPaths, removedPaths })
+      await this.resolveOpenedSketchFolders(newOpenedSketches)
+      this._onDidRefresh.fire()
+    } finally {
+      this.setSketchbooksLoading(false)
+      if (this.refreshResolve) {
+        this.refreshResolve()
+        this.refreshResolve = undefined
+        this.refreshPromise = undefined
+      }
+    }
+  }
+
+  get isLoading(): boolean {
+    return this._isLoading
+  }
+
+  private setSketchbooksLoading(loading: boolean): void {
+    if (this._isLoading === loading) {
+      return
+    }
+    this._isLoading = loading
+    vscode.commands.executeCommand(
+      'setContext',
+      'boardlab.sketchbooks.loading',
+      loading
+    )
+  }
+
+  private setSketchbooksEmpty(empty: boolean): void {
+    if (this._isEmpty === empty) {
+      return
+    }
+    this._isEmpty = empty
+    vscode.commands.executeCommand(
+      'setContext',
+      'boardlab.sketchbooks.empty',
+      empty
+    )
+  }
+
+  get isEmpty(): boolean {
+    return this._isEmpty
+  }
+
+  private getOpenedSketchesFrom(
+    sketchbooks: Map<string, Sketchbook>
+  ): readonly Sketch[] {
+    return Array.from(sketchbooks.values()).flatMap(
+      (sketchbook) => sketchbook.sketches
+    )
+  }
+
+  private async loadSketchbooks(): Promise<Map<string, Sketchbook>> {
+    const rootPaths = new Set(
+      (vscode.workspace.workspaceFolders ?? [])
+        .filter((folder) => folder.uri.scheme === 'file')
+        .map(({ uri }) => uri.fsPath)
+    )
+    if (this._currentUserDirPath) {
+      rootPaths.add(this._currentUserDirPath)
+    }
+
+    const entries = await Promise.all(
+      Array.from(rootPaths).map(async (path) => {
+        const uri = vscode.Uri.file(path).toString()
+        try {
+          const tree = await sketchbookTree(path)
+          const sketchbook = createSketchbook(tree)
+          return [uri, sketchbook] as const
+        } catch (error) {
+          console.warn(`Could not load sketchbook at ${path}: ${error}`)
+          return undefined
+        }
+      })
+    )
+
+    const map = new Map<string, Sketchbook>()
+    for (const entry of entries) {
+      if (entry) {
+        map.set(entry[0], entry[1])
+      }
+    }
+    return map
   }
 
   get userSketchbook(): Sketchbook | undefined {
@@ -170,10 +284,12 @@ export class Sketchbooks implements vscode.Disposable {
     return this._onDidChangeUserSketchbook.event
   }
 
+  get onDidRefresh(): vscode.Event<void> {
+    return this._onDidRefresh.event
+  }
+
   get openedSketches(): readonly Sketch[] {
-    return Array.from(this.all().values()).flatMap(
-      (sketchbook) => sketchbook.sketches
-    )
+    return this.getOpenedSketchesFrom(this.all())
   }
 
   get resolvedSketchFolders(): readonly SketchFolderImpl[] {
@@ -188,28 +304,8 @@ export class Sketchbooks implements vscode.Disposable {
 
   all(): Map<string, Sketchbook> {
     if (!this._sketchbooks) {
-      const rootPaths = new Set(
-        (vscode.workspace.workspaceFolders ?? [])
-          .filter((folder) => folder.uri.scheme === 'file')
-          .map(({ uri }) => uri.fsPath)
-      )
-      if (this._currentUserDirPath) {
-        rootPaths.add(this._currentUserDirPath)
-      }
-
-      this._sketchbooks =
-        Array.from(rootPaths).reduce((all, path) => {
-          const uri = vscode.Uri.file(path).toString()
-          try {
-            const tree = sketchbookTreeSync(path)
-            const sketchbook = createSketchbook(tree)
-            all.set(uri, sketchbook)
-          } catch (e) {
-            console.warn(`Could not load sketchbook at ${path}: ${e}`)
-          }
-          return all
-        }, new Map<string, Sketchbook>()) ?? new Map()
-      this._onDidChange.fire(this._sketchbooks)
+      this._sketchbooks = new Map()
+      this.refresh()
     }
     return this._sketchbooks
   }

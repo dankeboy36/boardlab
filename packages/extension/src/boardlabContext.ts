@@ -72,7 +72,7 @@ import {
 import { pickPort } from './ports'
 import { readProfiles } from './profile/profiles'
 import { LibrariesManager, PlatformsManager } from './resourcesManager'
-import { ConfigOptionItem } from './sketch/currentSketcheView'
+import { ConfigOptionItem } from './sketch/currentSketchView'
 import { SketchFolderImpl } from './sketch/sketchFolder'
 import {
   SketchPathLike,
@@ -486,10 +486,7 @@ export class BoardLabContextImpl implements BoardLabContext {
           await this.updateCurrentSketch(head)
           return
         }
-        if (
-          this.sketchbooks.openedSketches.length &&
-          !this.sketchbooks.resolvedSketchFolders.length
-        ) {
+        if (!this.sketchbooks.resolvedSketchFolders.length) {
           const toDispose = this.sketchbooks.onDidChangeResolvedSketches(
             async () => {
               const firstResolved = this.sketchbooks.resolvedSketchFolders[0]
