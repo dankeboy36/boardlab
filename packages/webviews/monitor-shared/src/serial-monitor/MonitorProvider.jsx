@@ -14,7 +14,9 @@ import { HOST_EXTENSION } from 'vscode-messenger-common'
 import { vscode } from '@boardlab/base'
 import {
   getMonitorSelection,
+  notifyMonitorEditorStatus,
   notifyMonitorSelectionChanged,
+  notifyPlotterEditorStatus,
 } from '@boardlab/protocol'
 
 import { selectSerialMonitor } from './serialMonitorSelectors.js'
@@ -142,6 +144,58 @@ export function MonitorProvider({ client, children }) {
   useEffect(() => {
     startedRef.current = serialState.started
   }, [serialState.started])
+
+  const lastEditorStatusRef = useRef()
+
+  useEffect(() => {
+    const messenger = vscode.messenger
+    if (!messenger) {
+      return
+    }
+    const webviewType =
+      typeof window !== 'undefined'
+        ? window.__BOARDLAB_WEBVIEW_TYPE__
+        : undefined
+    const editorStatusNotification =
+      webviewType === 'plotter'
+        ? notifyPlotterEditorStatus
+        : notifyMonitorEditorStatus
+
+    const detectedPorts = serialState.detectedPorts ?? {}
+    const hasDetectionSnapshot = Object.keys(detectedPorts).length > 0
+    const selectedPort = serialState.selectedPort
+    const selectedKey = selectedPort ? createPortKey(selectedPort) : undefined
+    const selectedDetected = selectedKey
+      ? Object.values(detectedPorts).some(
+          ({ port }) => createPortKey(port) === selectedKey
+        )
+      : false
+
+    let editorStatus = 'idle'
+    if (selectedPort && hasDetectionSnapshot && !selectedDetected) {
+      editorStatus = 'disconnected'
+    } else if (serialState.started) {
+      editorStatus =
+        serialState.status === 'suspended' ? 'suspended' : 'running'
+    }
+
+    if (lastEditorStatusRef.current === editorStatus) {
+      return
+    }
+    lastEditorStatusRef.current = editorStatus
+    try {
+      messenger.sendNotification(editorStatusNotification, HOST_EXTENSION, {
+        status: editorStatus,
+      })
+    } catch (error) {
+      console.error('Failed to notify editor status', error)
+    }
+  }, [
+    serialState.detectedPorts,
+    serialState.selectedPort,
+    serialState.started,
+    serialState.status,
+  ])
 
   const { play, stop } = useSerialMonitorConnection({
     client,

@@ -130,21 +130,12 @@ const serialMonitorSlice = createSlice({
       state.detectedPorts = detectedPorts
       state.monitorSettingsByProtocol = monitorSettingsByProtocol
       state.selectedBaudrates = selectedBaudrates
-      state.started = runningEntries.length > 0
+      state.started = false
       const filteredSuspended = Array.isArray(suspendedPortKeys)
         ? suspendedPortKeys.filter((key) => runningKeys.has(key))
         : []
       state.suspendedPortKeys = filteredSuspended
-      if (state.selectedPort) {
-        const selKey = createPortKey(state.selectedPort)
-        state.status = filteredSuspended.includes(selKey)
-          ? 'suspended'
-          : state.started
-            ? 'connected'
-            : 'idle'
-      } else {
-        state.status = state.started ? 'connected' : 'idle'
-      }
+      state.status = 'idle'
       // Recompute supported baudrates for the current selection
       state.supportedBaudrates = computeSupportedBaudrates(state)
     },

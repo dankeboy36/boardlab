@@ -373,8 +373,17 @@ export class MonitorClient {
 
     const res = await fetch(dataUrl.toString(), { signal: options.signal })
     if (!res.ok) {
-      const text = await res.text().catch(() => res.statusText)
-      throw new Error(`Failed to open monitor on ${address}: ${text}`)
+      const status = res.status
+      const bodyText = await res.text().catch(() => '')
+      let payload
+      try {
+        payload = bodyText ? JSON.parse(bodyText) : undefined
+      } catch {}
+      const message = payload?.message || bodyText || res.statusText
+      const error = new Error(
+        `Failed to open monitor on ${address}: ${message}`
+      )
+      throw Object.assign(error, { code: payload?.code, status })
     }
 
     const reader = res.body?.getReader()

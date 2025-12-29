@@ -494,6 +494,14 @@ export async function createServer(options = {}) {
     const requestBaudrate =
       typeof baudrate === 'string' ? String(baudrate) : undefined
 
+    const isPortDetected = Boolean(watcher?.state?.[portKey])
+    if (!isPortDetected) {
+      return res.status(404).json({
+        code: 'port-not-detected',
+        message: `Port ${address} is not detected.`,
+      })
+    }
+
     // If this clientId already has a connection (possibly on a different port),
     // close the old one first using the global index for deterministic cleanup.
     const existing = globalClientIndex.get(clientId)
@@ -575,11 +583,24 @@ export async function createServer(options = {}) {
         // Fail fast for busy/denied ports without crashing the process
         const message = String((err && /** @type {any} */ (err).details) || err)
         if (message.includes('Serial port busy')) {
-          return res.status(423).send('Serial port busy')
+          return res.status(423).json({
+            code: 'port-busy',
+            message: 'Serial port busy',
+          })
         }
         // Cleanup placeholder
         activeSerialStreams.delete(portKey)
-        return res.status(502).send(message)
+        const stillDetected = Boolean(watcher?.state?.[portKey])
+        if (!stillDetected) {
+          return res.status(404).json({
+            code: 'port-not-detected',
+            message: `Port ${address} is not detected.`,
+          })
+        }
+        return res.status(502).json({
+          code: 'monitor-open-failed',
+          message,
+        })
       }
       v(
         `[serial] acquired monitor for ${portKey} @ ${
@@ -610,9 +631,23 @@ export async function createServer(options = {}) {
       } catch (err) {
         if (err instanceof ClientError) {
           if (err.details.includes('Serial port busy')) {
-            res.status(423).send('Serial port busy')
+            res.status(423).json({
+              code: 'port-busy',
+              message: 'Serial port busy',
+            })
           } else {
-            res.status(502).send(err.details)
+            const stillDetected = Boolean(watcher?.state?.[portKey])
+            if (!stillDetected) {
+              res.status(404).json({
+                code: 'port-not-detected',
+                message: `Port ${address} is not detected.`,
+              })
+            } else {
+              res.status(502).json({
+                code: 'monitor-open-failed',
+                message: err.details,
+              })
+            }
           }
         }
         // Cleanup on priming failure

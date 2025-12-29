@@ -1259,15 +1259,6 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
     if (this.resolvedPort) {
       const resolvePort = this.resolvedPort
       const resolveLabel = portProtocolIcon(resolvePort) + resolvePort.label
-      const runningMonitors =
-        this.boardlabContext.monitorManager.getRunningMonitors()
-      if (
-        runningMonitors.some(
-          ({ port }) => createPortKey(port) === createPortKey(resolvePort)
-        )
-      ) {
-        return `$(pulse) ${resolveLabel}`
-      }
       return resolveLabel
     }
     const label = this.boardlabContext.currentSketch?.port?.address ?? ''

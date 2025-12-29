@@ -155,6 +155,16 @@ export interface MonitorSelectionNotification {
   readonly baudrate?: string
 }
 
+export type MonitorEditorStatus =
+  | 'idle'
+  | 'running'
+  | 'suspended'
+  | 'disconnected'
+
+export interface MonitorEditorStatusNotification {
+  readonly status: MonitorEditorStatus
+}
+
 export const notifyMonitorSelectionChanged: MessengerNotificationType<MonitorSelectionNotification> =
   {
     method: 'boardlab/monitor/selectionChanged',
@@ -263,4 +273,14 @@ export const notifyMonitorViewDidPause: MessengerNotificationType<DidPauseMonito
 export const notifyMonitorViewDidResume: MessengerNotificationType<DidResumeMonitorNotification> =
   {
     method: 'boardlab/monitor/view/did-resume',
+  }
+
+export const notifyMonitorEditorStatus: MessengerNotificationType<MonitorEditorStatusNotification> =
+  {
+    method: 'boardlab/monitor/editor/status',
+  }
+
+export const notifyPlotterEditorStatus: MessengerNotificationType<MonitorEditorStatusNotification> =
+  {
+    method: 'boardlab/plotter/editor/status',
   }

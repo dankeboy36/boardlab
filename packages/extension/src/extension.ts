@@ -52,6 +52,7 @@ import { showBuiltinSketchReadmeFromFolderStrict } from './examples/showBuiltinS
 import { MonitorFileSystemProvider } from './monitor/monitorFs'
 import { MonitorResourceStore } from './monitor/monitorResources'
 import { MonitorSelectionCoordinator } from './monitor/monitorSelections'
+import { MonitorStatusBar } from './monitor/monitorStatusBar'
 import { formatMonitorUri, MONITOR_URI_SCHEME } from './monitor/monitorUri'
 import { collectCliDiagnostics } from './profile/cliDiagnostics'
 import { readProfile, readProfiles, updateProfile } from './profile/profiles'
@@ -126,6 +127,8 @@ export function activate(context: vscode.ExtensionContext) {
   console.log('Registered tasks provider')
   const platformMissingStatusBar = new PlatformMissingStatusBar(boardlabContext)
   console.log('Registered platform status bar')
+  const monitorStatusBar = new MonitorStatusBar(boardlabContext)
+  console.log('Registered monitor status bar')
   const currentSketchView = new CurrentSketchView(boardlabContext)
   console.log('Registered sketches view')
   const sketchbook = new SketchbookView(context, boardlabContext.sketchbooks)
@@ -305,7 +308,7 @@ export function activate(context: vscode.ExtensionContext) {
     return true
   }
 
-  context.subscriptions.push(platformMissingStatusBar)
+  context.subscriptions.push(platformMissingStatusBar, monitorStatusBar)
 
   context.subscriptions.push(
     vscode.tasks.onDidStartTask((event) => {

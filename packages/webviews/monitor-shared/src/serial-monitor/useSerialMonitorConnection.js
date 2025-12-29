@@ -95,6 +95,7 @@ export function useSerialMonitorConnection({
   const selectedDetectedRef = useRef(false)
   const hasDetectionSnapshotRef = useRef(false)
   const prevDetectedRef = useRef(false)
+  const forcedAbsentRef = useRef(false)
 
   useEffect(() => {
     const ports = detectedPorts ?? {}
@@ -110,9 +111,13 @@ export function useSerialMonitorConnection({
 
     hasDetectionSnapshotRef.current = hasSnapshot
     selectedDetectedRef.current = isDetected
+    if (forcedAbsentRef.current && isDetected) {
+      forcedAbsentRef.current = false
+    }
 
     if (!selectedPort) {
       prevDetectedRef.current = false
+      forcedAbsentRef.current = false
       return
     }
 
@@ -210,7 +215,8 @@ export function useSerialMonitorConnection({
 
     const hasDetectionSnapshot = hasDetectionSnapshotRef.current
     const selectedDetected = selectedDetectedRef.current
-    const detected = hasDetectionSnapshot && selectedDetected
+    const detected =
+      hasDetectionSnapshot && selectedDetected && !forcedAbsentRef.current
     const shouldStart =
       !userStoppedRef.current &&
       autoplayRef.current &&
@@ -312,7 +318,8 @@ export function useSerialMonitorConnection({
         }
         if (!userStoppedRef.current) {
           const elapsed = Date.now() - openedAtRef.current
-          const detectedNow = selectedDetectedRef.current
+          const detectedNow =
+            selectedDetectedRef.current && !forcedAbsentRef.current
           if (!wasStreamingRef.current && elapsed < coldStartMsRef.current) {
             disconnectHoldRef.current = false
             sawAbsentRef.current = false
@@ -346,12 +353,59 @@ export function useSerialMonitorConnection({
           abortRef.current = undefined
         }
         const message = err instanceof Error ? err?.message : String(err)
-        if (/Serial port busy|423/i.test(message)) {
+        const errorCode = err && typeof err === 'object' ? err.code : undefined
+        const errorStatus =
+          err && typeof err === 'object' ? err.status : undefined
+        if (errorCode === 'port-busy' || errorStatus === 423) {
           notifyError(`${selectedPort.address} port busy`)
           userStoppedRef.current = true
           onBusy()
           pendingStartRef.current = false
           return
+        }
+        const isMissingDevice =
+          errorCode === 'port-not-detected' || errorStatus === 404
+        const shouldRefreshDetection =
+          errorCode === 'monitor-open-failed' || errorStatus === 502
+        const resolveDetectedNow = async () => {
+          if (!client || !selectedPort || !client.detectedPorts) {
+            return selectedDetectedRef.current
+          }
+          try {
+            await new Promise((resolve) => setTimeout(resolve, 200))
+            const ports = await client.detectedPorts()
+            const key = `${selectedPort.protocol}:${selectedPort.address}`
+            return Object.values(ports ?? {}).some(
+              ({ port }) => `${port.protocol}:${port.address}` === key
+            )
+          } catch {
+            return selectedDetectedRef.current
+          }
+        }
+        if (isMissingDevice) {
+          forcedAbsentRef.current = true
+          disconnectHoldRef.current = true
+          disconnectAtRef.current = Date.now()
+          sawAbsentRef.current = true
+          if (!userStoppedRef.current) {
+            notifyInfo('Device disconnected; waiting for reappear')
+          }
+          pendingStartRef.current = false
+          return
+        }
+        if (shouldRefreshDetection) {
+          const detectedNow = await resolveDetectedNow()
+          if (!detectedNow) {
+            forcedAbsentRef.current = true
+            disconnectHoldRef.current = true
+            disconnectAtRef.current = Date.now()
+            sawAbsentRef.current = true
+            if (!userStoppedRef.current) {
+              notifyInfo('Device disconnected; waiting for reappear')
+            }
+            pendingStartRef.current = false
+            return
+          }
         }
         if (!userStoppedRef.current) {
           notifyError(message)

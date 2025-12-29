@@ -8,11 +8,15 @@ import type {
 
 import {
   notifyMonitorLineEndingChanged,
+  notifyMonitorEditorStatus,
   notifyMonitorThemeChanged,
   notifyMonitorToolbarAction,
   notifyPlotterLineEndingChanged,
+  notifyPlotterEditorStatus,
   notifyPlotterToolbarAction,
   type LineEnding,
+  type MonitorEditorStatus,
+  type MonitorEditorStatusNotification,
   type MonitorSelectionNotification,
   type MonitorToolbarAction,
   type PlotterToolbarAction,
@@ -75,9 +79,16 @@ abstract class MonitorBaseDocument implements vscode.CustomDocument {
    * an active connection even before streaming starts.
    */
   markConnected(): void {
-    if (this.currentState === 'disconnected') {
+    if (
+      this.currentState === 'disconnected' &&
+      this.resource.isPortDetected()
+    ) {
       this.resource.setState('connected')
     }
+  }
+
+  isPortDetected(): boolean {
+    return this.resource.isPortDetected()
   }
 
   /**
@@ -163,6 +174,7 @@ interface EditorPanelBinding<TDocument extends MonitorBaseDocument> {
   readonly participant: WebviewIdMessageParticipant
   readonly document: TDocument
   readonly disposables: vscode.Disposable[]
+  editorStatus?: MonitorEditorStatus
 }
 
 abstract class MonitorBaseEditorProvider<
@@ -199,6 +211,7 @@ abstract class MonitorBaseEditorProvider<
       readonly notifyLineEndingChanged: NotificationType<{
         lineEnding: LineEnding
       }>
+      readonly notifyEditorStatus: NotificationType<MonitorEditorStatusNotification>
     }
   ) {}
 
@@ -243,25 +256,11 @@ abstract class MonitorBaseEditorProvider<
     this.configureWebview(panel)
     panel.webview.html = html
 
-    const stateDisposable = document.onDidChangeState((state) => {
-      this.updatePanelPresentation(panel, document, state)
-    })
-    const selectionDisposable = this.selectionCoordinator.registerTarget(
-      participant,
-      () => document.getSelection()
-    )
-
-    const panelDisposable = panel.onDidDispose(() => {
-      this.detachPanel(panel)
-      selectionDisposable.dispose()
-      stateDisposable.dispose()
-    })
-
     const binding: EditorPanelBinding<TDocument> = {
       panel,
       participant,
       document,
-      disposables: [panelDisposable, stateDisposable, selectionDisposable],
+      disposables: [],
     }
     this.panelBindings.set(panel, binding)
     let set = this.documentBindings.get(document)
@@ -270,6 +269,35 @@ abstract class MonitorBaseEditorProvider<
       this.documentBindings.set(document, set)
     }
     set.add(binding)
+
+    const stateDisposable = document.onDidChangeState((state) => {
+      this.updatePanelPresentation(panel, document, binding, state)
+    })
+    const selectionDisposable = this.selectionCoordinator.registerTarget(
+      participant,
+      () => document.getSelection()
+    )
+    const editorStatusDisposable = this.messenger.onNotification(
+      this.stateConfig.notifyEditorStatus,
+      ({ status }) => {
+        binding.editorStatus = status
+        this.updatePanelPresentation(panel, document, binding, document.state)
+      },
+      { sender: participant }
+    )
+
+    const panelDisposable = panel.onDidDispose(() => {
+      this.detachPanel(panel)
+      selectionDisposable.dispose()
+      stateDisposable.dispose()
+    })
+
+    binding.disposables.push(
+      panelDisposable,
+      stateDisposable,
+      selectionDisposable,
+      editorStatusDisposable
+    )
 
     panel.onDidChangeViewState(() => {
       if (panel.active) {
@@ -280,7 +308,7 @@ abstract class MonitorBaseEditorProvider<
 
     document.markConnected()
     document.ensureRunning()
-    this.updatePanelPresentation(panel, document, document.state)
+    this.updatePanelPresentation(panel, document, binding, document.state)
     this.pushLineEnding(document)
     await this.selectionCoordinator.pushSelection(participant)
   }
@@ -439,10 +467,31 @@ abstract class MonitorBaseEditorProvider<
   private updatePanelPresentation(
     panel: vscode.WebviewPanel,
     document: TDocument,
+    binding: EditorPanelBinding<TDocument>,
     state: MonitorRuntimeState
   ): void {
-    const stateLabel = state.charAt(0).toUpperCase() + state.slice(1)
+    const resolved =
+      binding.editorStatus ??
+      this.mapMonitorStateToEditorStatus(document, state)
+    const stateLabel = resolved.charAt(0).toUpperCase() + resolved.slice(1)
     panel.title = `${this.stateConfig.titlePrefix}: ${document.title} — ${stateLabel}`
+  }
+
+  private mapMonitorStateToEditorStatus(
+    document: TDocument,
+    state: MonitorRuntimeState
+  ): MonitorEditorStatus {
+    switch (state) {
+      case 'running':
+        return 'running'
+      case 'suspended':
+        return 'suspended'
+      case 'connected':
+        return document.isPortDetected() ? 'idle' : 'disconnected'
+      case 'disconnected':
+      default:
+        return 'disconnected'
+    }
   }
 }
 
@@ -484,6 +533,7 @@ export class MonitorEditors extends MonitorBaseEditorProvider<
         },
         notifyToolbarAction: notifyMonitorToolbarAction,
         notifyLineEndingChanged: notifyMonitorLineEndingChanged,
+        notifyEditorStatus: notifyMonitorEditorStatus,
       }
     )
   }
@@ -549,6 +599,7 @@ export class PlotterEditors extends MonitorBaseEditorProvider<
         },
         notifyToolbarAction: notifyPlotterToolbarAction,
         notifyLineEndingChanged: notifyPlotterLineEndingChanged,
+        notifyEditorStatus: notifyPlotterEditorStatus,
       }
     )
   }

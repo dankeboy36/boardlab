@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
-import { createPortKey, PortIdentifier } from 'boards-list'
+import { createPortKey, type DetectedPorts, PortIdentifier } from 'boards-list'
 import * as vscode from 'vscode'
 import type { Messenger } from 'vscode-messenger'
 import type {
@@ -544,6 +544,8 @@ export class MonitorManager implements vscode.Disposable {
     protocols: {},
   }
 
+  private detectedPorts: DetectedPorts = {}
+
   private readonly onDidChangeRunningMonitorsEmitter = new vscode.EventEmitter<
     ReadonlyArray<{ port: PortIdentifier; baudrate?: string }>
   >()
@@ -667,6 +669,10 @@ export class MonitorManager implements vscode.Disposable {
     return this.monitorStates.get(createPortKey(port)) ?? 'disconnected'
   }
 
+  isPortDetected(port: PortIdentifier): boolean {
+    return Boolean(this.detectedPorts[createPortKey(port)])
+  }
+
   async getBridgeInfo(): Promise<MonitorBridgeInfo> {
     const info = await this.serviceClient.getBridgeInfo()
     this.log('Got monitor bridge info', info)
@@ -754,6 +760,7 @@ export class MonitorManager implements vscode.Disposable {
 
     const result = await this.bridgeClient.connectClient(params)
     this.monitorSettingsByProtocol = result.monitorSettingsByProtocol
+    this.detectedPorts = result.detectedPorts
     this.clientSessions.set(params.clientId, sender)
     this.ensureBridgeEventForwarders()
 
@@ -811,7 +818,7 @@ export class MonitorManager implements vscode.Disposable {
       this.selectedBaudrateCache.set(createPortKey(port), baud)
     }
 
-    if (selectedPort) {
+    if (selectedPort && this.isPortDetected(selectedPort)) {
       this.setMonitorState(selectedPort, 'connected')
     }
 
@@ -866,6 +873,7 @@ export class MonitorManager implements vscode.Disposable {
 
     this.disposables.push(
       this.bridgeClient.onDidChangeDetectedPorts((ports) => {
+        this.detectedPorts = ports
         this.forEachClient((clientId, participant) => {
           this.sendNotificationSafe(
             clientId,

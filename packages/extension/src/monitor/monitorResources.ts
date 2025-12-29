@@ -54,6 +54,10 @@ export class MonitorResource implements vscode.Disposable {
     this.onDidChangeStateEmitter.fire(state)
   }
 
+  isPortDetected(): boolean {
+    return this.monitorManager.isPortDetected(this.port)
+  }
+
   dispose(): void {
     while (this.disposables.length) {
       this.disposables.pop()?.dispose()
