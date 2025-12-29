@@ -44,7 +44,7 @@ export async function updateProfile(
   let profilesNode = doc.get('profiles')
   if (!profilesNode) {
     profilesNode = doc.createNode<Profiles>({})
-    doc.add(profilesNode)
+    doc.set('profiles', profilesNode)
   }
   if (!isMap(profilesNode)) {
     throw new Error('expected a map')
@@ -52,7 +52,7 @@ export async function updateProfile(
   let profileNode = profilesNode.get(profileName)
   if (!profileNode) {
     profileNode = doc.createNode({})
-    profilesNode.add(profileNode as any)
+    profilesNode.set(profileName, profileNode)
   }
   if (!isMap(profileNode)) {
     throw new Error('expected a map')
@@ -64,14 +64,8 @@ export async function updateProfile(
   for (const property of scalarProperties) {
     const newValue = newProfile[property]
     const propertyNode = profileNode.get(property)
-    if (!propertyNode && newValue) {
-      profileNode.add({ key: property, value: newValue })
-    } else if (typeof propertyNode === 'string') {
-      if (propertyNode === newValue) {
-        // noop
-      } else if (newValue) {
-        profileNode.set(property, newValue)
-      }
+    if (newValue && (!propertyNode || propertyNode !== newValue)) {
+      profileNode.set(property, newValue)
     }
   }
   await fs.writeFile(sketchYamlPath, String(doc), { encoding: 'utf8' })

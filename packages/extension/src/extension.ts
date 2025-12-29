@@ -54,6 +54,7 @@ import { MonitorResourceStore } from './monitor/monitorResources'
 import { MonitorSelectionCoordinator } from './monitor/monitorSelections'
 import { formatMonitorUri, MONITOR_URI_SCHEME } from './monitor/monitorUri'
 import { collectCliDiagnostics } from './profile/cliDiagnostics'
+import { readProfile, readProfiles, updateProfile } from './profile/profiles'
 import { ProfilesCodeActionProvider } from './profile/codeActions'
 import { validateProfilesYAML } from './profile/validation'
 import { registerProfilesYamlValidation } from './profile/validationHost'
@@ -69,6 +70,7 @@ import {
 } from './sketch/newSketchWizard'
 import { registerSketchbookReadonlyFs } from './sketch/sketchbookFs'
 import { SketchbookView } from './sketch/sketchbookView'
+import { SketchFolderImpl } from './sketch/sketchFolder'
 import type { Resource as SketchResource } from './sketch/types'
 import { BoardLabTasks } from './tasks'
 import { PlatformMissingStatusBar } from './platformMissingStatusBar'
@@ -129,6 +131,179 @@ export function activate(context: vscode.ExtensionContext) {
   const sketchbook = new SketchbookView(context, boardlabContext.sketchbooks)
   console.log('Registered sketchbook view')
   registerSketchbookReadonlyFs(context)
+
+  const resolveSketchForProfileCommand = async (
+    arg?: unknown
+  ): Promise<SketchFolderImpl | undefined> => {
+    let sketchPath: string | undefined
+    if (arg && typeof arg === 'object') {
+      const anyArg = arg as any
+      if (typeof anyArg.sketchPath === 'string') {
+        sketchPath = anyArg.sketchPath
+      } else if (typeof anyArg.toolArgs?.sketchPath === 'string') {
+        sketchPath = anyArg.toolArgs.sketchPath
+      } else if (typeof anyArg.sketch?.sketchPath === 'string') {
+        sketchPath = anyArg.sketch.sketchPath
+      }
+    }
+
+    let sketch = boardlabContext.currentSketch
+    if (sketchPath && sketch?.sketchPath !== sketchPath) {
+      const { arduino } = await boardlabContext.client
+      sketch = await boardlabContext.sketchbooks.resolve(sketchPath, arduino)
+    }
+    if (!sketch) {
+      sketch = await boardlabContext.selectSketch()
+    }
+    if (!(sketch instanceof SketchFolderImpl)) {
+      return undefined
+    }
+    return sketch
+  }
+
+  const getSketchBoardSettings = (
+    sketch: SketchFolderImpl
+  ): string | undefined => {
+    const fqbn = sketch.configOptions ?? sketch.board?.fqbn
+    if (!fqbn) {
+      return undefined
+    }
+    try {
+      return new FQBN(fqbn).toString()
+    } catch {
+      return fqbn
+    }
+  }
+
+  const promptNewProfileName = async (
+    existing: string[]
+  ): Promise<string | undefined> => {
+    const name = await vscode.window.showInputBox({
+      title: 'Create Profile',
+      prompt: 'Profile name',
+      validateInput: (value) => {
+        const trimmed = value.trim()
+        if (!trimmed) {
+          return 'Profile name is required.'
+        }
+        if (existing.includes(trimmed)) {
+          return 'Profile already exists.'
+        }
+        return undefined
+      },
+    })
+    const trimmed = name?.trim()
+    return trimmed || undefined
+  }
+
+  const pickProfileForSketch = async (
+    sketchPath: string,
+    options: { allowCreate: boolean; placeHolder: string }
+  ): Promise<{ name: string; isNew: boolean } | undefined> => {
+    let profiles
+    try {
+      profiles = await readProfiles(sketchPath, options.allowCreate)
+    } catch (error) {
+      const err = error as NodeJS.ErrnoException
+      const message =
+        err?.code === 'ENOENT'
+          ? 'No sketch.yaml profile found for this sketch.'
+          : error instanceof Error
+            ? error.message
+            : String(error)
+      vscode.window.showErrorMessage(
+        `Failed to read sketch profiles: ${message}`
+      )
+      return undefined
+    }
+
+    const profileNames = Object.keys(profiles.profiles ?? {})
+    if (!options.allowCreate && profileNames.length === 0) {
+      vscode.window.showInformationMessage('No profiles found for this sketch.')
+      return undefined
+    }
+
+    const activeProfile =
+      await boardlabContext.getValidatedActiveProfileForSketch(sketchPath)
+    const items: (vscode.QuickPickItem & {
+      value?: string
+      isCreate?: boolean
+    })[] = []
+
+    if (options.allowCreate) {
+      items.push({
+        label: '$(add) Create profile...',
+        isCreate: true,
+      })
+    }
+
+    for (const name of profileNames) {
+      items.push({
+        label: name,
+        description: name === activeProfile ? 'Active profile' : undefined,
+        value: name,
+      })
+    }
+
+    const picked = await vscode.window.showQuickPick(items, {
+      placeHolder: options.placeHolder,
+    })
+    if (!picked) {
+      return undefined
+    }
+
+    if (picked.isCreate) {
+      const name = await promptNewProfileName(profileNames)
+      if (!name) {
+        return undefined
+      }
+      return { name, isNew: true }
+    }
+
+    if (!picked.value) {
+      return undefined
+    }
+    return { name: picked.value, isNew: false }
+  }
+
+  const applyProfileBoardSettingsToSketch = async (
+    sketch: SketchFolderImpl,
+    profileName: string
+  ): Promise<boolean> => {
+    let profile
+    try {
+      profile = await readProfile(sketch.sketchPath, profileName, false)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      vscode.window.showErrorMessage(
+        `Failed to read profile "${profileName}": ${message}`
+      )
+      return false
+    }
+
+    const fqbn = profile.fqbn
+    if (!fqbn) {
+      vscode.window.showErrorMessage(
+        `Profile "${profileName}" does not define board settings.`
+      )
+      return false
+    }
+
+    try {
+      await boardlabContext.applyBoardSettingsFromFqbn(sketch, fqbn)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      vscode.window.showErrorMessage(
+        `Failed to apply board settings from profile "${profileName}": ${message}`
+      )
+      return false
+    }
+
+    vscode.window.showInformationMessage(
+      `Synced board settings from profile "${profileName}" to the current sketch.`
+    )
+    return true
+  }
 
   context.subscriptions.push(platformMissingStatusBar)
 
@@ -675,6 +850,134 @@ export function activate(context: vscode.ExtensionContext) {
         }
         // Ensure Current Sketch view refreshes profile task label
         currentSketchView.refresh()
+      }
+    ),
+    vscode.commands.registerCommand(
+      'boardlab.profiles.syncSketchBoardSettingsToProfile',
+      async (arg?: unknown) => {
+        const sketch = await resolveSketchForProfileCommand(arg)
+        if (!sketch) {
+          return
+        }
+
+        const boardSettings = getSketchBoardSettings(sketch)
+        if (!boardSettings) {
+          vscode.window.showErrorMessage(
+            'The current sketch does not define board settings to sync.'
+          )
+          return
+        }
+
+        const pick = await pickProfileForSketch(sketch.sketchPath, {
+          allowCreate: true,
+          placeHolder:
+            'Select a profile to overwrite with the current sketch board settings',
+        })
+        if (!pick) {
+          return
+        }
+
+        try {
+          await updateProfile(sketch.sketchPath, pick.name, {
+            fqbn: boardSettings,
+          })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          vscode.window.showErrorMessage(
+            `Failed to sync board settings to profile "${pick.name}": ${message}`
+          )
+          return
+        }
+
+        vscode.window.showInformationMessage(
+          `Synced board settings from sketch to profile "${pick.name}".`
+        )
+      }
+    ),
+    vscode.commands.registerCommand(
+      'boardlab.profiles.syncSketchBoardSettingsToActiveProfile',
+      async (arg?: unknown) => {
+        const sketch = await resolveSketchForProfileCommand(arg)
+        if (!sketch) {
+          return
+        }
+
+        const activeProfile =
+          await boardlabContext.getValidatedActiveProfileForSketch(
+            sketch.sketchPath
+          )
+        if (!activeProfile) {
+          vscode.window.showInformationMessage(
+            'No active profile set for this sketch.'
+          )
+          return
+        }
+
+        const boardSettings = getSketchBoardSettings(sketch)
+        if (!boardSettings) {
+          vscode.window.showErrorMessage(
+            'The current sketch does not define board settings to sync.'
+          )
+          return
+        }
+
+        try {
+          await updateProfile(sketch.sketchPath, activeProfile, {
+            fqbn: boardSettings,
+          })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          vscode.window.showErrorMessage(
+            `Failed to sync board settings to profile "${activeProfile}": ${message}`
+          )
+          return
+        }
+
+        vscode.window.showInformationMessage(
+          `Synced board settings from sketch to profile "${activeProfile}".`
+        )
+      }
+    ),
+    vscode.commands.registerCommand(
+      'boardlab.profiles.syncProfileBoardSettingsToSketch',
+      async (arg?: unknown) => {
+        const sketch = await resolveSketchForProfileCommand(arg)
+        if (!sketch) {
+          return
+        }
+
+        const pick = await pickProfileForSketch(sketch.sketchPath, {
+          allowCreate: false,
+          placeHolder:
+            'Select a profile to load board settings into the current sketch',
+        })
+        if (!pick) {
+          return
+        }
+
+        await applyProfileBoardSettingsToSketch(sketch, pick.name)
+      }
+    ),
+    vscode.commands.registerCommand(
+      'boardlab.profiles.syncActiveProfileBoardSettingsToSketch',
+      async (arg?: unknown) => {
+        const sketch = await resolveSketchForProfileCommand(arg)
+        if (!sketch) {
+          return
+        }
+
+        const activeProfile =
+          await boardlabContext.getValidatedActiveProfileForSketch(
+            sketch.sketchPath
+          )
+        if (!activeProfile) {
+          vscode.window.showInformationMessage(
+            'No active profile set for this sketch.'
+          )
+          return
+        }
+
+        await applyProfileBoardSettingsToSketch(sketch, activeProfile)
       }
     ),
     messenger.onRequest(requestConfigureLineEnding, async ({ kind }) => {

@@ -1163,6 +1163,18 @@ export class BoardLabContextImpl implements BoardLabContext {
     return board
   }
 
+  async applyBoardSettingsFromFqbn(
+    sketch: SketchFolderImpl,
+    fqbn: string
+  ): Promise<void> {
+    const boardDetails = await this.getBoardDetails(fqbn)
+    sketch.setBoard(boardDetails)
+    const parsed = new FQBN(fqbn)
+    const hasOptions = parsed.options && Object.keys(parsed.options).length > 0
+    sketch.setConfigOptions(hasOptions ? parsed.toString() : undefined)
+    this.emitSketchChange(sketch, 'board', 'configOptions')
+  }
+
   async pickProgrammer(
     currentSketch: SketchFolder | undefined = this.currentSketch
   ): Promise<Programmer | undefined> {

@@ -81,6 +81,7 @@ export class SketchFolderImpl implements vscode.Disposable, SketchFolder {
   private readonly boardSelectionHistory: BoardSelectionHistory
   private readonly configOptionsHistory: ConfigOptionsHistory
   private readonly _onDidRefresh: vscode.EventEmitter<SketchFolderState>
+  private saveQueue: Promise<void> = Promise.resolve()
 
   private _init: DeferredPromise<SketchFolderState> | undefined
   private _state: SketchFolderState
@@ -247,11 +248,17 @@ export class SketchFolderImpl implements vscode.Disposable, SketchFolder {
     if (update) {
       const snapshot = this.createSnapshot()
       const { sketchPath, port, board } = snapshot
-      await update(sketchScopedMementoKeys(sketchPath), { board, port })
-      await update(
-        sketchProfileMementoKey(sketchPath),
-        toSketchProfile(snapshot)
-      )
+      this.saveQueue = this.saveQueue
+        .catch(() => undefined)
+        .then(() =>
+          update(sketchScopedMementoKeys(sketchPath), { board, port }).then(
+            () =>
+              update(
+                sketchProfileMementoKey(sketchPath),
+                toSketchProfile(snapshot)
+              )
+          )
+        )
     }
   }
 
@@ -260,10 +267,11 @@ export class SketchFolderImpl implements vscode.Disposable, SketchFolder {
     if (update) {
       const snapshot = this.createSnapshot()
       const { sketchPath } = snapshot
-      await update(
-        sketchProfileMementoKey(sketchPath),
-        toSketchProfile(snapshot)
-      )
+      this.saveQueue = this.saveQueue
+        .catch(() => undefined)
+        .then(() =>
+          update(sketchProfileMementoKey(sketchPath), toSketchProfile(snapshot))
+        )
     }
   }
 

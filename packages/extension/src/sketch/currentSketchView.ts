@@ -281,6 +281,9 @@ class ToolsRootItem extends TreeItem {
         : 'Create a sketch.yaml profile for this sketch.',
       'tool'
     )
+    if (profileExists) {
+      profileTask.contextValue = 'profileTool'
+    }
     if (profileExists && this.activeProfileName) {
       profileTask.description = this.activeProfileName
     }

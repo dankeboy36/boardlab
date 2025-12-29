@@ -426,6 +426,26 @@
         "icon": "$(go-to-file)"
       },
       {
+        "command": "boardlab.profiles.syncSketchBoardSettingsToProfile",
+        "title": "Sync Board Settings: Sketch \u2192 Profile...",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.profiles.syncSketchBoardSettingsToActiveProfile",
+        "title": "Sync Board Settings: Sketch \u2192 Active Profile",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.profiles.syncProfileBoardSettingsToSketch",
+        "title": "Sync Board Settings: Profile \u2192 Sketch...",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.profiles.syncActiveProfileBoardSettingsToSketch",
+        "title": "Sync Board Settings: Active Profile \u2192 Sketch",
+        "category": "BoardLab"
+      },
+      {
         "command": "boardlab.libraries.filter.type.Updatable",
         "title": "Updatable"
       },
@@ -839,6 +859,16 @@
           "group": "inline"
         },
         {
+          "command": "boardlab.tool.runFromTree",
+          "when": "view == boardlab.currentSketch && viewItem == profileTool",
+          "group": "inline"
+        },
+        {
+          "submenu": "boardlab.currentSketchProfileMoreActions",
+          "when": "view == boardlab.currentSketch && viewItem == profileTool",
+          "group": "inline@1"
+        },
+        {
           "submenu": "boardlab.sketchbookMoreActions",
           "when": "view == boardlab.sketchbook && viewItem == sketchbookSketch",
           "group": "inline@0"
@@ -859,6 +889,28 @@
           "command": "boardlab.cloneSketch",
           "when": "view == boardlab.sketchbook && viewItem == sketchbookSketch",
           "group": "2_clone"
+        }
+      ],
+      "boardlab.currentSketchProfileMoreActions": [
+        {
+          "command": "boardlab.profiles.syncSketchBoardSettingsToProfile",
+          "when": "view == boardlab.currentSketch && viewItem == profileTool",
+          "group": "1_syncTo@1"
+        },
+        {
+          "command": "boardlab.profiles.syncSketchBoardSettingsToActiveProfile",
+          "when": "view == boardlab.currentSketch && viewItem == profileTool",
+          "group": "1_syncTo@2"
+        },
+        {
+          "command": "boardlab.profiles.syncProfileBoardSettingsToSketch",
+          "when": "view == boardlab.currentSketch && viewItem == profileTool",
+          "group": "2_syncFrom@1"
+        },
+        {
+          "command": "boardlab.profiles.syncActiveProfileBoardSettingsToSketch",
+          "when": "view == boardlab.currentSketch && viewItem == profileTool",
+          "group": "2_syncFrom@2"
         }
       ],
       "commandPalette": [
@@ -1283,6 +1335,11 @@
       },
       {
         "id": "boardlab.sketchbookMoreActions",
+        "icon": "$(ellipsis)",
+        "label": "More Actions..."
+      },
+      {
+        "id": "boardlab.currentSketchProfileMoreActions",
         "icon": "$(ellipsis)",
         "label": "More Actions..."
       }
