@@ -1834,7 +1834,7 @@ export function App(): JSX.Element {
               <VscodeButton onClick={handleAddProfile} disabled={busy}>
                 New Profile
               </VscodeButton>
-              <VscodeButton icon="chevron-down" title="More actions..." />
+              {/* <VscodeButton icon="chevron-down" title="More actions..." /> */}
             </VscodeButtonGroup>
           </div>
           <VscodeScrollable
