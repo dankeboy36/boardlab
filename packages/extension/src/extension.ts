@@ -64,6 +64,7 @@ import {
   openSketch,
   openSketchInNewWindow,
   type AddSketchFolderArgs,
+  type CloneSketchArgs,
   type NewSketchParams,
 } from './sketch/newSketchWizard'
 import { registerSketchbookReadonlyFs } from './sketch/sketchbookFs'
@@ -503,7 +504,7 @@ export function activate(context: vscode.ExtensionContext) {
     ),
     vscode.commands.registerCommand(
       'boardlab.cloneSketch',
-      async (input?: SketchResource) => {
+      async (input?: SketchResource | CloneSketchArgs) => {
         await cloneSketch(boardlabContext, input)
       }
     ),

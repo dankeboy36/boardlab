@@ -21,6 +21,12 @@ export interface AddSketchFolderArgs {
   folderUri: vscode.Uri
   mainFileUri?: vscode.Uri
   openOnly?: boolean
+  confirm?: boolean
+}
+
+export interface CloneSketchArgs {
+  resource?: SketchResource
+  confirm?: boolean
 }
 
 export async function openNewSketchWizard(
@@ -48,6 +54,7 @@ export async function openSketch(
   boardlabContext: BoardLabContextImpl,
   input: SketchResource | AddSketchFolderArgs | undefined
 ): Promise<void> {
+  const shouldConfirm = resolveConfirmFlag(input)
   const args = await normalizeAddSketchArgs(boardlabContext, input)
   if (!args) {
     return
@@ -66,6 +73,17 @@ export async function openSketch(
   }
 
   const existing = getWorkspaceFolderByUri(folderUri)
+  const needsWorkspaceAdd = !existing && !openOnly
+  if (shouldConfirm) {
+    const confirmAction = needsWorkspaceAdd ? 'Add' : 'Open'
+    const message = needsWorkspaceAdd
+      ? `Add sketch "${path.basename(folderUri.fsPath)}" to this workspace and open it?`
+      : `Open sketch "${path.basename(folderUri.fsPath)}"?`
+    const confirmed = await promptUser(message, confirmAction)
+    if (!confirmed) {
+      return
+    }
+  }
   if (existing || openOnly) {
     await openSketchDocument(resolvedMainFile)
     return
@@ -113,9 +131,11 @@ export async function openSketchInNewWindow(
 
 export async function cloneSketch(
   boardlabContext: BoardLabContextImpl,
-  input: SketchResource | undefined
+  input: SketchResource | CloneSketchArgs | undefined
 ): Promise<void> {
-  const args = await normalizeImportArgs(boardlabContext, input)
+  const shouldConfirm = resolveConfirmFlag(input)
+  const resource = isCloneSketchArgs(input) ? input.resource : input
+  const args = await normalizeImportArgs(boardlabContext, resource)
   if (!args) {
     return
   }
@@ -123,7 +143,8 @@ export async function cloneSketch(
   await importSketchFolderToWorkspace(
     boardlabContext,
     args.folderUri,
-    args.mainFileUri
+    args.mainFileUri,
+    shouldConfirm
   )
 }
 
@@ -450,6 +471,7 @@ async function normalizeAddSketchArgs(
       folderUri,
       mainFileUri,
       openOnly: input.openOnly ?? false,
+      confirm: input.confirm,
     }
   }
 
@@ -515,14 +537,33 @@ async function promptSketchbookImport(
 async function importSketchFolderToWorkspace(
   boardlabContext: BoardLabContextImpl,
   folderUri: vscode.Uri,
-  mainFileUri?: vscode.Uri
-): Promise<void> {
+  mainFileUri?: vscode.Uri,
+  confirm = false
+): Promise<
+  | {
+      destinationFolder: string
+      mainSketchPath?: string
+    }
+  | undefined
+> {
   const sourceFolder = folderUri.fsPath
   if (isPathInWorkspace(sourceFolder)) {
-    await openSketchDocument(
+    if (confirm) {
+      const confirmed = await promptUser(
+        'Sketch is already in this workspace. Open it?',
+        'Open'
+      )
+      if (!confirmed) {
+        return
+      }
+    }
+    const resolvedMainFile =
       mainFileUri ?? guessMainSketchUri(vscode.Uri.file(sourceFolder))
-    )
-    return
+    await openSketchDocument(resolvedMainFile)
+    return {
+      destinationFolder: sourceFolder,
+      mainSketchPath: resolvedMainFile.fsPath,
+    }
   }
 
   const destinationRoot = await pickWorkspaceImportRoot()
@@ -546,6 +587,16 @@ async function importSketchFolderToWorkspace(
     }
     targetName = resolved
     destinationFolder = path.join(destinationRoot, targetName)
+  }
+
+  if (confirm) {
+    const confirmed = await promptUser(
+      `Clone sketch "${sourceName}" to "${destinationFolder}"?`,
+      'Clone'
+    )
+    if (!confirmed) {
+      return
+    }
   }
 
   try {
@@ -590,6 +641,10 @@ async function importSketchFolderToWorkspace(
 
   if (mainSketchPath) {
     await openSketchDocument(vscode.Uri.file(mainSketchPath))
+  }
+  return {
+    destinationFolder,
+    mainSketchPath: mainSketchPath ?? undefined,
   }
 }
 
@@ -772,4 +827,40 @@ async function pathExists(targetPath: string): Promise<boolean> {
     }
     throw error
   }
+}
+
+function isCloneSketchArgs(
+  input: SketchResource | CloneSketchArgs | undefined
+): input is CloneSketchArgs {
+  if (!input || typeof input !== 'object') {
+    return false
+  }
+  if (isSketchbookSketch(input) || isSketchbookFolder(input)) {
+    return false
+  }
+  return 'resource' in input || 'confirm' in input
+}
+
+function resolveConfirmFlag(
+  input: SketchResource | AddSketchFolderArgs | CloneSketchArgs | undefined
+): boolean {
+  if (!input || typeof input !== 'object') {
+    return false
+  }
+  if ('confirm' in input && typeof input.confirm === 'boolean') {
+    return input.confirm
+  }
+  return isSketchbookSketch(input) || isSketchbookFolder(input)
+}
+
+async function promptUser(
+  message: string,
+  confirmAction: string
+): Promise<boolean> {
+  const picked = await vscode.window.showInformationMessage(
+    message,
+    { modal: true },
+    confirmAction
+  )
+  return picked === confirmAction
 }
