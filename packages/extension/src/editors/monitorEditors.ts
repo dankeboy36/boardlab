@@ -194,6 +194,7 @@ abstract class MonitorBaseEditorProvider<
       readonly titlePrefix: string
       readonly viewType: string
       readonly lineEndingSection: string
+      readonly iconPath: { light: vscode.Uri; dark: vscode.Uri }
       readonly notifyToolbarAction: NotificationType<{ action: TToolbar }>
       readonly notifyLineEndingChanged: NotificationType<{
         lineEnding: LineEnding
@@ -237,8 +238,7 @@ abstract class MonitorBaseEditorProvider<
         state: document.state,
       },
     })
-    // VS Code currently ignores custom icons set from custom editors.
-    // See https://github.com/microsoft/vscode/issues/105028.
+    panel.iconPath = this.stateConfig.iconPath
     const participant = this.messenger.registerWebviewPanel(panel)
     this.configureWebview(panel)
     panel.webview.html = html
@@ -468,6 +468,20 @@ export class MonitorEditors extends MonitorBaseEditorProvider<
         titlePrefix: 'Monitor',
         viewType: 'boardlab.monitorEditor',
         lineEndingSection: 'boardlab.monitor',
+        iconPath: {
+          light: vscode.Uri.joinPath(
+            extensionUri,
+            'resources',
+            'icons',
+            'monitor-light.svg'
+          ),
+          dark: vscode.Uri.joinPath(
+            extensionUri,
+            'resources',
+            'icons',
+            'monitor-dark.svg'
+          ),
+        },
         notifyToolbarAction: notifyMonitorToolbarAction,
         notifyLineEndingChanged: notifyMonitorLineEndingChanged,
       }
@@ -519,6 +533,20 @@ export class PlotterEditors extends MonitorBaseEditorProvider<
         titlePrefix: 'Plotter',
         viewType: 'boardlab.plotterEditor',
         lineEndingSection: 'boardlab.monitor',
+        iconPath: {
+          light: vscode.Uri.joinPath(
+            extensionUri,
+            'resources',
+            'icons',
+            'plotter-light.svg'
+          ),
+          dark: vscode.Uri.joinPath(
+            extensionUri,
+            'resources',
+            'icons',
+            'plotter-dark.svg'
+          ),
+        },
         notifyToolbarAction: notifyPlotterToolbarAction,
         notifyLineEndingChanged: notifyPlotterLineEndingChanged,
       }
