@@ -427,22 +427,22 @@
       },
       {
         "command": "boardlab.profiles.syncSketchBoardSettingsToProfile",
-        "title": "Sync Board Settings: Sketch \u2192 Profile...",
+        "title": "Sync Board Settings: Sketch → Profile...",
         "category": "BoardLab"
       },
       {
         "command": "boardlab.profiles.syncSketchBoardSettingsToActiveProfile",
-        "title": "Sync Board Settings: Sketch \u2192 Active Profile",
+        "title": "Sync Board Settings: Sketch → Active Profile",
         "category": "BoardLab"
       },
       {
         "command": "boardlab.profiles.syncProfileBoardSettingsToSketch",
-        "title": "Sync Board Settings: Profile \u2192 Sketch...",
+        "title": "Sync Board Settings: Profile → Sketch...",
         "category": "BoardLab"
       },
       {
         "command": "boardlab.profiles.syncActiveProfileBoardSettingsToSketch",
-        "title": "Sync Board Settings: Active Profile \u2192 Sketch",
+        "title": "Sync Board Settings: Active Profile → Sketch",
         "category": "BoardLab"
       },
       {
