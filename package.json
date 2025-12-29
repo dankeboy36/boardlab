@@ -57,7 +57,7 @@
     "release": "semantic-release",
     "prereset": "npm run reset --workspaces",
     "reset": "rimraf schemas out node_modules .vscode-test",
-    "test": "vitest run --config packages/extension/vitest.config.ts",
+    "test": "vitest run --config ./packages/extension/vitest.config.ts",
     "test:ci": "npm run test:ci --workspaces --if-present && npm test && npm run test:vsix",
     "pretest:vsix": "npm run compile",
     "test:vsix": "node ./out/test/runTest.js",
@@ -83,7 +83,7 @@
       },
       {
         "command": "boardlab.openNewSketchWizard",
-        "title": "New Sketch",
+        "title": "Create Sketch",
         "icon": "$(add)",
         "category": "BoardLab"
       },
@@ -177,8 +177,21 @@
         "category": "BoardLab"
       },
       {
-        "command": "boardlab.importSketchFromSketchbook",
-        "title": "Import Sketch from Sketchbook",
+        "command": "boardlab.cloneSketch",
+        "title": "Clone Sketch",
+        "icon": "$(repo-clone)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.openSketch",
+        "title": "Open Sketch",
+        "icon": "$(folder-opened)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.openSketchInNewWindow",
+        "title": "Open Sketch in New Window",
+        "icon": "$(empty-window)",
         "category": "BoardLab"
       },
       {
@@ -662,7 +675,6 @@
         "displayName": "Monitor",
         "selector": [
           {
-            "scheme": "monitor",
             "filenamePattern": "**/*"
           }
         ],
@@ -673,7 +685,6 @@
         "displayName": "Plotter",
         "selector": [
           {
-            "scheme": "monitor",
             "filenamePattern": "**/*"
           }
         ],
@@ -684,7 +695,6 @@
         "displayName": "Profiles",
         "selector": [
           {
-            "scheme": "file",
             "filenamePattern": "**/sketch.yaml"
           }
         ],
@@ -829,14 +839,26 @@
           "group": "inline"
         },
         {
-          "command": "boardlab.importSketchFromSketchbook",
-          "when": "view == boardlab.sketchbook && viewItem == sketchbookFolder",
-          "group": "inline"
+          "submenu": "boardlab.sketchbookMoreActions",
+          "when": "view == boardlab.sketchbook && viewItem == sketchbookSketch",
+          "group": "inline@0"
+        }
+      ],
+      "boardlab.sketchbookMoreActions": [
+        {
+          "command": "boardlab.openSketchInNewWindow",
+          "when": "view == boardlab.sketchbook && viewItem == sketchbookSketch",
+          "group": "1_open"
         },
         {
-          "command": "boardlab.importSketchFromSketchbook",
+          "command": "boardlab.openSketch",
           "when": "view == boardlab.sketchbook && viewItem == sketchbookSketch",
-          "group": "inline"
+          "group": "1_open"
+        },
+        {
+          "command": "boardlab.cloneSketch",
+          "when": "view == boardlab.sketchbook && viewItem == sketchbookSketch",
+          "group": "2_clone"
         }
       ],
       "commandPalette": [
@@ -1258,6 +1280,11 @@
       {
         "id": "boardlab.platforms.filter.type",
         "label": "Type"
+      },
+      {
+        "id": "boardlab.sketchbookMoreActions",
+        "icon": "$(ellipsis)",
+        "label": "More Actions..."
       }
     ],
     "taskDefinitions": [
@@ -1361,7 +1388,7 @@
       },
       {
         "view": "boardlab.currentSketch",
-        "contents": "No sketch folders have been detected in the workspace.\n[New Sketch](command:boardlab.openNewSketchWizard)\n[Import from Sketchbook](command:boardlab.importSketchFromSketchbook)\nTo learn more about sketches [read the docs](https://arduino.github.io/arduino-cli/latest/sketch-specification).",
+        "contents": "No sketches were detected in this workspace.\n[Create Sketch](command:boardlab.openNewSketchWizard)\n\nOpen an existing sketch by adding it to this workspace.\n[Open Sketch](command:boardlab.openSketch)\n\nClone a sketch into this workspace. The original sketch remains unchanged in its source location.\n[Clone Sketch](command:boardlab.cloneSketch)\n\nTo learn more about how sketches are structured, [read the documentation](https://arduino.github.io/arduino-cli/latest/sketch-specification).",
         "when": "!boardlab.sketchbooks.loading && boardlab.sketchbooks.empty"
       }
     ]

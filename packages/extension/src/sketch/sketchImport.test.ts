@@ -25,23 +25,6 @@ describe('renameMainSketchFile', () => {
     await expect(fs.stat(path.join(tempDir, 'OldName.ino'))).rejects.toThrow()
   })
 
-  it('renames the main pde file when present', async () => {
-    const tempDir = await createTempDir()
-    const original = path.join(tempDir, 'Legacy.pde')
-    await fs.writeFile(original, 'void setup() {}\n')
-
-    const renamed = await renameMainSketchFile(
-      tempDir,
-      'Legacy',
-      'LegacyRenamed'
-    )
-
-    expect(renamed).toBe(path.join(tempDir, 'LegacyRenamed.pde'))
-    await expect(
-      fs.stat(path.join(tempDir, 'LegacyRenamed.pde'))
-    ).resolves.toBeDefined()
-  })
-
   it('returns the current path when the names are unchanged', async () => {
     const tempDir = await createTempDir()
     const original = path.join(tempDir, 'KeepName.ino')

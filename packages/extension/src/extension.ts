@@ -59,8 +59,10 @@ import { validateProfilesYAML } from './profile/validation'
 import { registerProfilesYamlValidation } from './profile/validationHost'
 import { CurrentSketchView } from './sketch/currentSketchView'
 import {
-  importSketchFromSketchbook,
+  cloneSketch,
   openNewSketchWizard,
+  openSketch,
+  openSketchInNewWindow,
   type AddSketchFolderArgs,
   type NewSketchParams,
 } from './sketch/newSketchWizard'
@@ -500,15 +502,21 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand(
-      'boardlab.importSketchFromSketchbook',
-      async (input?: SketchResource | AddSketchFolderArgs) => {
-        await importSketchFromSketchbook(boardlabContext, input)
+      'boardlab.cloneSketch',
+      async (input?: SketchResource) => {
+        await cloneSketch(boardlabContext, input)
       }
     ),
     vscode.commands.registerCommand(
-      'boardlab.addSketchFolderToWorkspace',
+      'boardlab.openSketch',
       async (input?: SketchResource | AddSketchFolderArgs) => {
-        await importSketchFromSketchbook(boardlabContext, input)
+        await openSketch(boardlabContext, input)
+      }
+    ),
+    vscode.commands.registerCommand(
+      'boardlab.openSketchInNewWindow',
+      async (input?: SketchResource | AddSketchFolderArgs) => {
+        await openSketchInNewWindow(boardlabContext, input)
       }
     ),
     vscode.commands.registerCommand(

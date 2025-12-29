@@ -1,5 +1,5 @@
 import { Dirent, readdirSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { basename, dirname, extname, join } from 'node:path'
 
 import {
   SketchbookTree,
@@ -120,6 +120,20 @@ export class Sketchbooks implements vscode.Disposable {
       }),
       this._onDidChangeUserSketchbook,
       this._onDidRefresh,
+      vscode.workspace.onDidDeleteFiles((event) => {
+        if (shouldRefreshForUris(event.files)) {
+          this.refresh()
+        }
+      }),
+      vscode.workspace.onDidRenameFiles((event) => {
+        const changedUris = event.files.flatMap((file) => [
+          file.oldUri,
+          file.newUri,
+        ])
+        if (shouldRefreshForUris(changedUris)) {
+          this.refresh()
+        }
+      }),
       vscode.workspace.onDidChangeWorkspaceFolders(() => this.refresh()),
     ]
     this.refresh()
@@ -148,13 +162,16 @@ export class Sketchbooks implements vscode.Disposable {
     return false
   }
 
-  refresh(): Promise<void> {
+  refresh(options: { showLoading?: boolean } = {}): Promise<void> {
     if (!this.refreshPromise) {
       this.refreshPromise = new Promise((resolve) => {
         this.refreshResolve = resolve
       })
     }
-    this.setSketchbooksLoading(true)
+    const showLoading = options.showLoading ?? this._sketchbooks === undefined
+    if (showLoading) {
+      this.setSketchbooksLoading(true)
+    }
     this.refreshDebounced()
     return this.refreshPromise
   }
@@ -537,6 +554,21 @@ function resolveChildren(
       visited
     )
     return { uri, children, label, type: 'folder' } as Folder
+  })
+}
+
+function shouldRefreshForUris(uris: readonly vscode.Uri[]): boolean {
+  return uris.some((uri) => {
+    if (uri.scheme !== 'file') {
+      return false
+    }
+    const extension = extname(uri.fsPath)
+    if (extension !== '.ino') {
+      return false
+    }
+    const folderName = basename(dirname(uri.fsPath))
+    const fileName = basename(uri.fsPath, extension)
+    return fileName === folderName
   })
 }
 

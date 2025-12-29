@@ -99,9 +99,9 @@ class ExampleLensProvider implements vscode.CodeLensProvider {
       lenses.push(
         new vscode.CodeLens(range, {
           title: inWorkspace
-            ? '$(folder-opened) Open Sketch Folder in Workspace'
-            : '$(folder-add) Add Sketch Folder to Workspace',
-          command: 'boardlab.importSketchFromSketchbook',
+            ? '$(folder-opened) Open Sketch'
+            : '$(folder-add) Open Sketch in Workspace',
+          command: 'boardlab.openSketch',
           arguments: [
             {
               folderUri: resolved.sketchUri,

@@ -27,13 +27,7 @@ export async function renameMainSketchFile(
   targetName: string,
   preferredExtension?: string
 ): Promise<string | undefined> {
-  const knownExtensions = ['.ino', '.pde']
-  const extensions = preferredExtension
-    ? [
-        preferredExtension,
-        ...knownExtensions.filter((ext) => ext !== preferredExtension),
-      ]
-    : knownExtensions
+  const extensions = ['.ino']
 
   for (const ext of extensions) {
     const originalPath = path.join(destinationFolder, `${originalName}${ext}`)

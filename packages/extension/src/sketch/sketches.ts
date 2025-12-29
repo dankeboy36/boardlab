@@ -117,6 +117,6 @@ class SketchQuickPickItem implements vscode.QuickPickItem {
 }
 
 class CreateSketchQuickPickItem implements vscode.QuickPickItem {
-  label = '$(add) New Sketch...'
-  description = 'Create a sketch in the workspace or sketchbook'
+  label = '$(add) Create Sketch...'
+  description = 'Create a sketch in the workspace'
 }
