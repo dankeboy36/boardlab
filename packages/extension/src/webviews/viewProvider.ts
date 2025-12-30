@@ -202,7 +202,7 @@ export class ExamplesViewProvider extends WebviewViewProvider {
     try {
       this.messenger.sendNotification(
         notifyExamplesToolbarAction,
-        { type: 'webview', webviewType: 'boardlabExamples' },
+        { type: 'webview', webviewType: 'boardlab.examples' },
         { action }
       )
     } catch (error) {

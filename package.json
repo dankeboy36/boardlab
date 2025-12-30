@@ -799,7 +799,7 @@
         },
         {
           "command": "boardlab.examples.refresh",
-          "when": "view == boardlabExamples",
+          "when": "view == boardlab.examples",
           "group": "navigation@1"
         },
         {
@@ -1393,7 +1393,7 @@
           "icon": "$(file-submodule)"
         },
         {
-          "id": "boardlabExamples",
+          "id": "boardlab.examples",
           "name": "Examples",
           "contextualTitle": "Examples",
           "icon": "$(book)",

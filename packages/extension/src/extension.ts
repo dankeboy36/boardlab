@@ -1186,7 +1186,7 @@ export function activate(context: vscode.ExtensionContext) {
       librariesViewProvider
     ),
     vscode.window.registerWebviewViewProvider(
-      'boardlabExamples',
+      'boardlab.examples',
       examplesViewProvider
     ),
     vscode.commands.registerCommand('boardlab.examples.refresh', async () => {
