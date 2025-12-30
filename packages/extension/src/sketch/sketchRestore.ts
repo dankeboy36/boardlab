@@ -38,7 +38,11 @@ export async function restoreCurrentSketch(
     return handlers.updateCurrentSketch(candidate)
   }
 
-  const restored = await tryRestore()
+  const initialState = getState()
+  const initialCandidate = pickRestoreSketchPath(initialState)
+  const restored = initialCandidate
+    ? await handlers.updateCurrentSketch(initialCandidate)
+    : false
   if (restored) {
     return
   }
