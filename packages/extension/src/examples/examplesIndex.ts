@@ -61,6 +61,7 @@ export class ExamplesIndex implements ExampleLocator, vscode.Disposable {
   private lastFqbn?: string
   private loading?: Promise<void>
   private builtinLibrariesPromise?: Promise<readonly BuiltinLibraryDefinition[]>
+  private sketchbooksLoading?: Promise<void>
   private readonly _onDidChange = new vscode.EventEmitter<void>()
   readonly onDidChange = this._onDidChange.event
 
@@ -137,9 +138,28 @@ export class ExamplesIndex implements ExampleLocator, vscode.Disposable {
 
   private async ensureLoaded(): Promise<void> {
     if (!this.loading && !this.cache.size) {
+      await this.waitForSketchbooks()
+      this.updateFqbn(getCurrentFqbn(this.context))
       this.loading = this.load()
     }
     await this.loading
+  }
+
+  private async waitForSketchbooks(): Promise<void> {
+    if (!this.context.sketchbooks.isLoading) {
+      return
+    }
+    if (!this.sketchbooksLoading) {
+      this.sketchbooksLoading = new Promise((resolve) => {
+        const disposable = this.context.sketchbooks.onDidRefresh(() => {
+          disposable.dispose()
+          this.sketchbooksLoading = undefined
+          resolve()
+        })
+        this.disposables.push(disposable)
+      })
+    }
+    await this.sketchbooksLoading
   }
 
   private async load(): Promise<void> {
