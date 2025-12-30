@@ -268,8 +268,11 @@ export class ExamplesIndex implements ExampleLocator, vscode.Disposable {
       const examples = await this.normalizeExamples(lib)
       if (!examples.length) continue
 
-      const location = lib.location ?? LibraryLocation.LIBRARY_LOCATION_USER
+      // gRPC omits enum fields that are at the default (BUILTIN = 0), so treat
+      // missing locations as built-in to align with Arduino CLI/IDE grouping.
+      const location = lib.location ?? LibraryLocation.LIBRARY_LOCATION_BUILTIN
       const source: ExampleSource =
+        location === LibraryLocation.LIBRARY_LOCATION_BUILTIN ||
         location === LibraryLocation.LIBRARY_LOCATION_PLATFORM_BUILTIN ||
         location ===
           LibraryLocation.LIBRARY_LOCATION_REFERENCED_PLATFORM_BUILTIN
