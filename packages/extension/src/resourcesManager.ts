@@ -1,10 +1,12 @@
 import type {
   Library,
+  LibraryDependencyStatus,
   LibraryInstallResponse,
   LibraryUninstallResponse,
   PlatformInstallResponse,
   PlatformUninstallResponse,
 } from 'ardunno-cli'
+import { ClientError, Status } from 'nice-grpc-common'
 import defer from 'p-defer'
 import { compareLoose } from 'semver'
 import * as vscode from 'vscode'
@@ -531,7 +533,50 @@ export class LibrariesManager extends ResourcesManager {
         label: name,
       })
     }
-    return libraries
+
+    const typeFilter = this.typePredicate(params.filter)
+    const topicFilter = this.topicPredicate(params.filter)
+    const all = libraries.length
+    const filtered = libraries.filter(
+      (lib) => typeFilter(lib) && topicFilter(lib)
+    )
+    if (all !== filtered.length) {
+      console.log('filtered', filtered, 'all', all)
+    }
+    return filtered
+  }
+
+  private typePredicate(
+    options?: SearchFilterParams
+  ): (item: ProtocolLibrary) => boolean {
+    const type = options?.type
+    if (!type || type === 'All') {
+      return () => true
+    }
+    switch (options.type) {
+      case 'Installed':
+        return installedResource
+      case 'Updatable':
+        return updatableResource
+      case 'Arduino':
+      case 'Partner':
+      case 'Recommended':
+      case 'Contributed':
+      case 'Retired':
+        return ({ types }: ProtocolLibrary) => !!types && types.includes(type)
+      default:
+        throw new Error(`Unhandled type: ${options.type}`)
+    }
+  }
+
+  private topicPredicate(
+    options?: SearchFilterParams
+  ): (item: ProtocolLibrary) => boolean {
+    const topic = options?.topic
+    if (!topic || topic === 'All') {
+      return () => true
+    }
+    return (item: ProtocolLibrary) => item.category === topic
   }
 
   /** Quick lookup for validation: available + installed version for a library. */
@@ -1195,4 +1240,26 @@ async function modifyInstallation<
   } finally {
     disposeAll(...toDispose)
   }
+}
+
+export const installedResource = <T extends Resource>({
+  installedVersion,
+}: T): boolean => {
+  return !!installedVersion
+}
+
+export const updatableResource = <T extends Resource>(item: T): boolean => {
+  const { installedVersion } = item
+  if (!installedVersion) {
+    return false
+  }
+  const latestVersion = item.availableVersions[0]
+  if (!latestVersion) {
+    console.warn(
+      `Installed version ${installedVersion} is available for ${item.name}, but no available versions were available. Skipping.`
+    )
+    return false
+  }
+  const result = compareLoose(latestVersion, installedVersion)
+  return result > 0
 }
