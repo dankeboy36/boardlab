@@ -48,10 +48,27 @@ export async function restoreCurrentSketch(
     return
   }
 
-  const disposable = handlers.onDidRefresh(async () => {
-    const refreshed = await tryRestore()
-    if (refreshed || !getState().isLoading) {
-      disposable.dispose()
+  await new Promise<void>((resolve) => {
+    let resolved = false
+    let disposable = { dispose: () => {} }
+    const finalize = () => {
+      if (resolved) {
+        return
+      }
+      resolved = true
+      disposable?.dispose()
+      resolve()
+    }
+
+    disposable = handlers.onDidRefresh(async () => {
+      const refreshed = await tryRestore()
+      if (refreshed || !getState().isLoading) {
+        finalize()
+      }
+    })
+
+    if (!getState().isLoading) {
+      tryRestore().finally(() => finalize())
     }
   })
 }

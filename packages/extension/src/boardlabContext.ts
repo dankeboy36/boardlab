@@ -123,6 +123,11 @@ const arduinoCliConfigMapping: Record<
 export interface BoardLabContext extends ArduinoContext {
   readonly cliContext: CliContext
   readonly sketchbooks: Sketchbooks
+  /**
+   * Resolves once the initial sketchbook refresh completes and the first
+   * current-sketch restore attempt has finished.
+   */
+  readonly whenCurrentSketchReady: Promise<void>
   readonly client: Promise<Client>
   readonly platformsManager: PlatformsManager
   readonly librariesManager: LibrariesManager
@@ -155,6 +160,7 @@ export function createBoardLabContext(
 export class BoardLabContextImpl implements BoardLabContext {
   readonly cliContext: CliContext
   readonly sketchbooks: Sketchbooks
+  readonly whenCurrentSketchReady: Promise<void>
   readonly outputChannel: vscode.OutputChannel
   revealSketch: (sketch: Sketch | SketchFolder) => Promise<void> = async () => {
     /* NOOP */
@@ -462,29 +468,8 @@ export class BoardLabContextImpl implements BoardLabContext {
       LAST_CURRENT_SKETCH_WORKSPACE_KEY
     )
 
-    this.handleActiveTextEditorDidChange(vscode.window.activeTextEditor).then(
-      async (currentSketchFound) => {
-        if (currentSketchFound) {
-          return
-        }
-
-        await restoreCurrentSketch(
-          () => ({
-            lastSelectedSketchPath,
-            openedSketchPaths: this.getWorkspaceOpenedSketchPaths(),
-            resolvedSketchPaths: this.getWorkspaceResolvedSketches().map(
-              (sketch) => sketch.sketchPath
-            ),
-            isLoading: this.sketchbooks.isLoading,
-            isEmpty: this.sketchbooks.isEmpty,
-          }),
-          {
-            updateCurrentSketch: (sketchPath) =>
-              this.updateCurrentSketch(sketchPath),
-            onDidRefresh: (listener) => this.sketchbooks.onDidRefresh(listener),
-          }
-        )
-      }
+    this.whenCurrentSketchReady = this.initializeCurrentSketch(
+      lastSelectedSketchPath
     )
   }
 
@@ -760,6 +745,66 @@ export class BoardLabContextImpl implements BoardLabContext {
       }
     }
     return false
+  }
+
+  private async initializeCurrentSketch(
+    lastSelectedSketchPath: string | undefined
+  ): Promise<void> {
+    try {
+      const currentSketchFound = await this.handleActiveTextEditorDidChange(
+        vscode.window.activeTextEditor
+      )
+      if (!currentSketchFound) {
+        await restoreCurrentSketch(
+          () => ({
+            lastSelectedSketchPath,
+            openedSketchPaths: this.getWorkspaceOpenedSketchPaths(),
+            resolvedSketchPaths: this.getWorkspaceResolvedSketches().map(
+              (sketch) => sketch.sketchPath
+            ),
+            isLoading: this.sketchbooks.isLoading,
+            isEmpty: this.sketchbooks.isEmpty,
+          }),
+          {
+            updateCurrentSketch: (sketchPath) =>
+              this.updateCurrentSketch(sketchPath),
+            onDidRefresh: (listener) => this.sketchbooks.onDidRefresh(listener),
+          }
+        )
+      }
+      await this.waitForSketchbooksReady()
+    } catch (error) {
+      console.warn('Failed to restore initial sketch selection', error)
+    }
+  }
+
+  private async waitForSketchbooksReady(): Promise<void> {
+    if (!this.sketchbooks.isLoading) {
+      return
+    }
+    await new Promise<void>((resolve) => {
+      let resolved = false
+      let disposable = new vscode.Disposable(() => {
+        /* noop */
+      })
+      const finalize = () => {
+        if (resolved) {
+          return
+        }
+        resolved = true
+        disposable?.dispose()
+        resolve()
+      }
+      disposable = this.sketchbooks.onDidRefresh(() => {
+        if (!this.sketchbooks.isLoading) {
+          finalize()
+        }
+      })
+      this.context.subscriptions.push(disposable)
+      if (!this.sketchbooks.isLoading) {
+        finalize()
+      }
+    })
   }
 
   get extensionUri(): vscode.Uri {

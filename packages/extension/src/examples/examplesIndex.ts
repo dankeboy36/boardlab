@@ -137,7 +137,7 @@ export class ExamplesIndex implements ExampleLocator, vscode.Disposable {
 
   private async ensureLoaded(): Promise<void> {
     if (!this.loading && !this.cache.size) {
-      // TODO: there is an unnecessary lib list without the fqbn before current sketch restore
+      await this.context.whenCurrentSketchReady
       this.updateFqbn(getCurrentFqbn(this.context))
       this.loading = this.load()
     }

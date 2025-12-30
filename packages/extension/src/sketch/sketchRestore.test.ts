@@ -57,7 +57,7 @@ describe('restoreCurrentSketch', () => {
     let onRefreshListener: (() => void) | undefined
     const dispose = vi.fn()
 
-    await restoreCurrentSketch(() => state, {
+    const restorePromise = restoreCurrentSketch(() => state, {
       updateCurrentSketch,
       onDidRefresh: (listener) => {
         onRefreshListener = listener
@@ -75,7 +75,8 @@ describe('restoreCurrentSketch', () => {
       resolvedSketchPaths: ['/workspace/new'],
     }
 
-    await onRefreshListener?.()
+    onRefreshListener?.()
+    await restorePromise
 
     expect(updateCurrentSketch).toHaveBeenCalledWith('/workspace/new')
     expect(dispose).toHaveBeenCalled()
