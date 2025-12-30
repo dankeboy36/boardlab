@@ -136,6 +136,10 @@ function View<T extends Resource = Resource>(params: ViewParams) {
   const [selectedItem, setSelectedItem] =
     useState<SelectedItem<T>>(noSelectedItem())
   const [busyItems, setBusyItems] = useState<string[]>([])
+  const triggerRefresh = useCallback(
+    () => setRefreshSearch((prev) => prev + 1),
+    []
+  )
 
   const search = useCallback(
     async (
@@ -230,6 +234,7 @@ function View<T extends Resource = Resource>(params: ViewParams) {
         const { id, version } = event
         markIdle(id)
         markInstalled({ id, version })
+        triggerRefresh()
       }),
       resources.onDidErrorInstall((event) => markIdle(event.id)),
       resources.onWillUninstall((event) => markBusy(event.id)),
@@ -237,9 +242,10 @@ function View<T extends Resource = Resource>(params: ViewParams) {
         const { id } = event
         markIdle(id)
         markAbsent({ id })
+        triggerRefresh()
       }),
       resources.onDidErrorUninstall((event) => markIdle(event.id)),
-      resources.onDidUpdateIndex(() => setRefreshSearch((prev) => prev + 1)),
+      resources.onDidUpdateIndex(triggerRefresh),
     ]
     loadBusyItems()
     return function () {
@@ -253,7 +259,7 @@ function View<T extends Resource = Resource>(params: ViewParams) {
         disposable = toDispose.pop()
       }
     }
-  }, [resources, loadBusyItems, markIdle, markBusy])
+  }, [resources, loadBusyItems, markIdle, markBusy, triggerRefresh])
 
   return (
     <div className="view">
