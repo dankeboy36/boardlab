@@ -832,9 +832,7 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
       : undefined
 
     if (currentSketch) {
-      const configureLabel = sketchLabel
-        ? `$(settings) Configure '${sketchLabel}'`
-        : '$(settings) Configure current sketch'
+      const configureLabel = '$(settings) Configure current sketch'
       const configureDescription = this.formatContextLine({
         includePort: false,
         includeProgrammer: false,
@@ -1075,7 +1073,11 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
       line = line ? `${line} on ${port}` : `On ${port}`
     }
 
-    return line || 'No sketch selected'
+    if (!line && options.includeSketchPath !== false) {
+      return 'No sketch selected'
+    }
+
+    return line
   }
 
   private programmerLabel(
