@@ -30,26 +30,17 @@ import {
   openExampleSketch as openExampleSketchRequest,
 } from '@boardlab/protocol'
 
+import {
+  matchesSearchConfig,
+  type ActiveSearchConfig,
+  type SearchConfig,
+} from './search'
+
 import '../../base/styles/tree.css'
 import './App.css'
 
 type BucketKey = ExampleLibrary['source']
 type GroupedLibraries = Record<BucketKey, ExampleLibrary[]>
-
-type SearchConfig =
-  | { mode: 'all' }
-  | { mode: 'invalid'; error: string }
-  | { mode: 'regex'; regex: RegExp }
-  | {
-      mode: 'substring' | 'whole'
-      tokens: string[]
-      caseSensitive: boolean
-    }
-
-type ActiveSearchConfig = Exclude<
-  SearchConfig,
-  { mode: 'all' } | { mode: 'invalid' }
->
 
 const BUCKET_DEFINITIONS: ReadonlyArray<{
   readonly key: BucketKey
@@ -534,7 +525,9 @@ function filterNode(
   config: ActiveSearchConfig
 ): ExampleTreeNode | undefined {
   const path = buildNodePath(library.label, node)
-  const matched = matchesSearchConfig(config, path)
+  const matched = matchesSearchConfig(config, path, {
+    stripFileExtension: node.kind === 'resource',
+  })
 
   if (node.kind === 'resource') {
     return matched ? node : undefined
@@ -556,31 +549,6 @@ function filterNode(
   }
 
   return undefined
-}
-
-function matchesSearchConfig(
-  config: ActiveSearchConfig,
-  text: string
-): boolean {
-  switch (config.mode) {
-    case 'regex':
-      return config.regex.test(text)
-    case 'substring': {
-      const target = config.caseSensitive ? text : text.toLowerCase()
-      return config.tokens.every((token) => target.includes(token))
-    }
-    case 'whole': {
-      const segments = text.split(/[\\/._\s-]+/).filter(Boolean)
-      const normalized = config.caseSensitive
-        ? segments
-        : segments.map((segment) => segment.toLowerCase())
-      return config.tokens.every((token) =>
-        normalized.some((segment) => segment === token)
-      )
-    }
-    default:
-      return false
-  }
 }
 
 function buildNodePath(label: string, node: ExampleTreeNode): string {

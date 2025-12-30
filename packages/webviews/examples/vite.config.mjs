@@ -1,7 +1,7 @@
 import path from 'node:path'
 
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 
 import { singleCssBundlePlugin } from '../base/vite/singleCssBundlePlugin.mjs'
 import { getWebviewBuildConfig } from '../base/vite/webviewBuildConfig.mjs'
@@ -49,5 +49,8 @@ export default defineConfig({
         },
       },
     },
+  },
+  test: {
+    environment: 'node',
   },
 })
