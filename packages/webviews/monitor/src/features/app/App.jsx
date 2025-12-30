@@ -6,16 +6,41 @@ import { useMonitorClientSync } from '@boardlab/monitor-shared/hooks'
 import {
   MonitorProvider,
   MonitorSendBar,
+  useMonitorController,
 } from '@boardlab/monitor-shared/serial-monitor'
 import {
   notifyMonitorLineEndingChanged,
   notifyMonitorThemeChanged,
   notifyMonitorToolbarAction,
+  requestMonitorEditorContent,
 } from '@boardlab/protocol'
 
 import { applyNonce } from '../../utils/csp.js'
 import TerminalPanel from '../terminal/TerminalPanel.jsx'
 import Shell from './Shell.jsx'
+
+function MonitorToolbarActionHandler({ terminalRef }) {
+  const { play, stop } = useMonitorController()
+
+  useEffect(() => {
+    const messenger = vscode.messenger
+    if (!messenger) return
+    messenger.onNotification(notifyMonitorToolbarAction, ({ action }) => {
+      const terminal = terminalRef.current
+      if (action === 'play') {
+        play()
+      } else if (action === 'stop') {
+        stop()
+      } else if (action === 'clear') {
+        terminal?.clear?.()
+      } else if (action === 'toggleScrollLock') {
+        terminal?.toggleScrollLock?.()
+      }
+    })
+  }, [play, stop, terminalRef])
+
+  return null
+}
 
 function App() {
   useCodiconStylesheet()
@@ -50,35 +75,6 @@ function App() {
   useEffect(() => {
     const messenger = vscode.messenger
     if (!messenger) return
-    messenger.onNotification(notifyMonitorToolbarAction, ({ action }) => {
-      const terminal = terminalPanelRef.current
-      if (!terminal) return
-      try {
-        switch (action) {
-          case 'copyAll':
-            terminal.copyAll?.()
-            break
-          case 'saveToFile':
-            terminal.saveToFile?.()
-            break
-          case 'clear':
-            terminal.clear?.()
-            break
-          case 'toggleScrollLock':
-            terminal.toggleScrollLock?.()
-            break
-          default:
-            break
-        }
-      } catch (error) {
-        console.error('Monitor toolbar action failed', action, error)
-      }
-    })
-  }, [])
-
-  useEffect(() => {
-    const messenger = vscode.messenger
-    if (!messenger) return
     messenger.onNotification(
       notifyMonitorLineEndingChanged,
       ({ lineEnding: next }) => {
@@ -99,6 +95,14 @@ function App() {
     })
   }, [])
 
+  useEffect(() => {
+    const messenger = vscode.messenger
+    if (!messenger) return
+    messenger.onRequest(requestMonitorEditorContent, () => ({
+      text: terminalPanelRef.current?.getText?.() ?? '',
+    }))
+  }, [])
+
   return (
     <Shell
       header={null}
@@ -112,6 +116,7 @@ function App() {
               minHeight: 0,
             }}
           >
+            <MonitorToolbarActionHandler terminalRef={terminalPanelRef} />
             <div
               style={{
                 display: 'flex',

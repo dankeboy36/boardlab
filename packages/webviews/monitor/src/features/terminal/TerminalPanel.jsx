@@ -29,8 +29,7 @@ const MAX_PERSISTED_CHARS = 20000
 
 /**
  * @typedef {Object} TerminalPanelHandle
- * @property {() => Promise<void>} copyAll
- * @property {() => void} saveToFile
+ * @property {() => string} getText
  * @property {() => void} clear
  * @property {() => void} toggleScrollLock
  * @property {() => boolean} isScrollLock
@@ -131,29 +130,6 @@ const TerminalPanel = forwardRef(function TerminalPanel(
       persistNow()
     }, 500)
   }, [persistNow])
-
-  const handleCopyAll = useCallback(async () => {
-    const text = getTerminalText()
-    try {
-      await navigator.clipboard?.writeText(text)
-    } catch {}
-  }, [getTerminalText])
-
-  const handleSaveToFile = useCallback(() => {
-    const text = getTerminalText()
-    try {
-      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
-      const url = URL.createObjectURL(blob)
-      const ts = new Date().toISOString().replace(/[:.]/g, '-')
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `serial-log-${ts}.txt`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
-    } catch {}
-  }, [getTerminalText])
 
   const handleClearAll = useCallback(() => {
     xtermRef.current?.clear()
@@ -298,8 +274,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(
   useImperativeHandle(
     ref,
     () => ({
-      copyAll: handleCopyAll,
-      saveToFile: handleSaveToFile,
+      getText: () => getTerminalText(),
       clear: handleClearAll,
       toggleScrollLock: () => setScrollLock((prev) => !prev),
       isScrollLock: () => scrollLock,
@@ -309,7 +284,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(
         } catch {}
       },
     }),
-    [handleCopyAll, handleSaveToFile, handleClearAll, scrollLock]
+    [getTerminalText, handleClearAll, scrollLock]
   )
 
   useEffect(() => {

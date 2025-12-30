@@ -4,9 +4,6 @@ import { useEffect, useState } from 'react'
 import { useSelector } from 'react-redux'
 import { VscodeIcon } from 'vscode-react-elements-x'
 
-import { vscode } from '@boardlab/base'
-import { notifyMonitorToolbarAction } from '@boardlab/protocol'
-
 import MonitorPlayStopButton from './MonitorPlayStopButton.jsx'
 import { useMonitorController } from './MonitorProvider.jsx'
 import SendPanel from './SendPanel.jsx'
@@ -23,18 +20,6 @@ import { selectSerialMonitor } from './serialMonitorSelectors.js'
 function MonitorSendBar({ client, lineEnding }) {
   const serialState = useSelector(selectSerialMonitor)
   const { play, stop } = useMonitorController()
-
-  useEffect(() => {
-    const messenger = vscode.messenger
-    if (!messenger) return
-    messenger.onNotification(notifyMonitorToolbarAction, ({ action }) => {
-      if (action === 'play') {
-        play()
-      } else if (action === 'stop') {
-        stop()
-      }
-    })
-  }, [play, stop])
 
   const selectedPort = serialState.selectedPort
   const selectedKey = selectedPort ? createPortKey(selectedPort) : undefined

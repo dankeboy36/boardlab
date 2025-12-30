@@ -1586,17 +1586,26 @@ export function activate(context: vscode.ExtensionContext) {
         )
         return
       }
-      await monitorEditors.sendToolbarAction('copyAll', active)
+      const snapshot = await monitorEditors.requestEditorContent(active)
+      if (!snapshot) {
+        if (!snapshot) {
+          vscode.window.showErrorMessage(
+            'Failed to read monitor output from the editor.'
+          )
+          return
+        }
+      }
+      await vscode.env.clipboard.writeText(snapshot.text)
     }),
     vscode.commands.registerCommand('boardlab.monitor.saveToFile', async () => {
       const active = monitorEditors.getActiveDocument()
       if (!active) {
         vscode.window.showInformationMessage(
-          'Open a monitor editor to save output.'
+          'Open a monitor editor to capture an output snapshot.'
         )
         return
       }
-      await monitorEditors.sendToolbarAction('saveToFile', active)
+      await openMonitorOutput(active)
     }),
     vscode.commands.registerCommand('boardlab.monitor.clear', async () => {
       const active = monitorEditors.getActiveDocument()
@@ -1703,6 +1712,50 @@ export function activate(context: vscode.ExtensionContext) {
         }`
       )
     }
+  }
+
+  async function openMonitorOutput(
+    document: ReturnType<typeof monitorEditors.getActiveDocument>
+  ): Promise<void> {
+    if (!document) {
+      return
+    }
+    const snapshot = await monitorEditors.requestEditorContent(document)
+    if (!snapshot) {
+      vscode.window.showErrorMessage(
+        'Failed to read monitor output from the editor.'
+      )
+      return
+    }
+    const port = document.port
+    const trimmedText = trimBlankLines(snapshot.text ?? '')
+    const headerLines = [
+      'BoardLab Monitor Output',
+      `Port: ${port.protocol} ${port.address}`,
+    ]
+    if (document.baudrate) {
+      headerLines.push(`Baudrate: ${document.baudrate}`)
+    }
+    headerLines.push(`Captured: ${new Date().toISOString()}`)
+    const content = `${headerLines.join('\n')}\n\n${trimmedText}`
+    const outputDoc = await vscode.workspace.openTextDocument({
+      language: 'plaintext',
+      content,
+    })
+    await vscode.window.showTextDocument(outputDoc, { preview: false })
+  }
+
+  function trimBlankLines(text: string): string {
+    const lines = text.split(/\r?\n/)
+    let start = 0
+    while (start < lines.length && lines[start].trim() === '') {
+      start += 1
+    }
+    let end = lines.length - 1
+    while (end >= start && lines[end].trim() === '') {
+      end -= 1
+    }
+    return lines.slice(start, end + 1).join('\n')
   }
 
   // --- Libraries filter menu & context wiring ---

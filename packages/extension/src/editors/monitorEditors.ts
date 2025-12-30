@@ -3,6 +3,7 @@ import * as vscode from 'vscode'
 import { Messenger } from 'vscode-messenger'
 import type {
   NotificationType,
+  RequestType,
   WebviewIdMessageParticipant,
 } from 'vscode-messenger-common'
 
@@ -14,7 +15,10 @@ import {
   notifyPlotterLineEndingChanged,
   notifyPlotterEditorStatus,
   notifyPlotterToolbarAction,
+  requestMonitorEditorContent,
+  requestPlotterEditorContent,
   type LineEnding,
+  type MonitorEditorContent,
   type MonitorEditorStatus,
   type MonitorEditorStatusNotification,
   type MonitorSelectionNotification,
@@ -212,6 +216,7 @@ abstract class MonitorBaseEditorProvider<
         lineEnding: LineEnding
       }>
       readonly notifyEditorStatus: NotificationType<MonitorEditorStatusNotification>
+      readonly requestEditorContent: RequestType<void, MonitorEditorContent>
     }
   ) {}
 
@@ -306,6 +311,10 @@ abstract class MonitorBaseEditorProvider<
       }
     })
 
+    if (panel.active || !this.activeDocument) {
+      this.activeDocument = document
+    }
+
     document.markConnected()
     document.ensureRunning()
     this.updatePanelPresentation(panel, document, binding, document.state)
@@ -314,7 +323,23 @@ abstract class MonitorBaseEditorProvider<
   }
 
   getActiveDocument(): TDocument | undefined {
-    return this.activeDocument
+    if (this.activeDocument) {
+      return this.activeDocument
+    }
+    for (const binding of this.panelBindings.values()) {
+      if (binding.panel.active) {
+        this.activeDocument = binding.document
+        return binding.document
+      }
+    }
+    if (this.panelBindings.size === 1) {
+      const first = this.panelBindings.values().next().value
+      if (first) {
+        this.activeDocument = first.document
+        return first.document
+      }
+    }
+    return undefined
   }
 
   protected forEachBinding(
@@ -353,6 +378,28 @@ abstract class MonitorBaseEditorProvider<
         }
       })
     )
+  }
+
+  async requestEditorContent(
+    target: TDocument
+  ): Promise<MonitorEditorContent | undefined> {
+    const binding = this.pickBinding(target)
+    if (!binding) {
+      return undefined
+    }
+    try {
+      return await this.messenger.sendRequest(
+        this.stateConfig.requestEditorContent,
+        binding.participant,
+        undefined
+      )
+    } catch (error) {
+      console.error('Failed to request editor content', {
+        viewType: this.stateConfig.viewType,
+        error,
+      })
+      return undefined
+    }
   }
 
   pushLineEnding(target?: TDocument): void {
@@ -402,6 +449,16 @@ abstract class MonitorBaseEditorProvider<
     if (this.activeDocument === binding.document) {
       this.activeDocument = undefined
     }
+  }
+
+  private pickBinding(
+    document: TDocument
+  ): EditorPanelBinding<TDocument> | undefined {
+    const bindings = Array.from(this.documentBindings.get(document) ?? [])
+    if (!bindings.length) {
+      return undefined
+    }
+    return bindings.find((binding) => binding.panel.active) ?? bindings[0]
   }
 
   private configureWebview(panel: vscode.WebviewPanel): void {
@@ -534,6 +591,7 @@ export class MonitorEditors extends MonitorBaseEditorProvider<
         notifyToolbarAction: notifyMonitorToolbarAction,
         notifyLineEndingChanged: notifyMonitorLineEndingChanged,
         notifyEditorStatus: notifyMonitorEditorStatus,
+        requestEditorContent: requestMonitorEditorContent,
       }
     )
   }
@@ -600,6 +658,7 @@ export class PlotterEditors extends MonitorBaseEditorProvider<
         notifyToolbarAction: notifyPlotterToolbarAction,
         notifyLineEndingChanged: notifyPlotterLineEndingChanged,
         notifyEditorStatus: notifyPlotterEditorStatus,
+        requestEditorContent: requestPlotterEditorContent,
       }
     )
   }

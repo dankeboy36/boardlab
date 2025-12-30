@@ -165,6 +165,10 @@ export interface MonitorEditorStatusNotification {
   readonly status: MonitorEditorStatus
 }
 
+export interface MonitorEditorContent {
+  readonly text: string
+}
+
 export const notifyMonitorSelectionChanged: MessengerNotificationType<MonitorSelectionNotification> =
   {
     method: 'boardlab/monitor/selectionChanged',
@@ -284,3 +288,17 @@ export const notifyPlotterEditorStatus: MessengerNotificationType<MonitorEditorS
   {
     method: 'boardlab/plotter/editor/status',
   }
+
+export const requestMonitorEditorContent: MessengerRequestType<
+  void,
+  MonitorEditorContent
+> = {
+  method: 'boardlab/monitor/editor/get-content',
+}
+
+export const requestPlotterEditorContent: MessengerRequestType<
+  void,
+  MonitorEditorContent
+> = {
+  method: 'boardlab/plotter/editor/get-content',
+}

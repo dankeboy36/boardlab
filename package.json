@@ -254,9 +254,9 @@
       },
       {
         "command": "boardlab.monitor.saveToFile",
-        "title": "Save Output",
+        "title": "Capture Output Snapshot",
         "category": "BoardLab",
-        "icon": "$(save)"
+        "icon": "$(new-file)"
       },
       {
         "command": "boardlab.monitor.clear",

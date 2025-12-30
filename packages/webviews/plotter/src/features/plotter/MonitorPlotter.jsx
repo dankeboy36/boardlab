@@ -148,6 +148,7 @@ const MonitorPlotter = forwardRef(function MonitorPlotter(
   const lastSizeRef = useRef({ w: 0, h: 0 })
   const extInitDoneRef = useRef(false)
   const hiddenSeriesRef = useRef(new Set())
+  const seriesUpdateMutedRef = useRef(false)
   const hasFixedX = typeof xWindow === 'number' && xWindow > 0
 
   // Persist last manual Y scale (survives autoscale on/off & session restarts)
@@ -213,6 +214,15 @@ const MonitorPlotter = forwardRef(function MonitorPlotter(
     } catch {}
   }
 
+  function withSeriesUpdateMuted(fn) {
+    seriesUpdateMutedRef.current = true
+    try {
+      fn()
+    } finally {
+      seriesUpdateMutedRef.current = false
+    }
+  }
+
   // Ensure there are exactly `count` series (including x at index 0)
   function ensureSeriesCount(count) {
     try {
@@ -228,22 +238,24 @@ const MonitorPlotter = forwardRef(function MonitorPlotter(
           fill: () => withAlpha(colorForSeries(idx - 1), 0.12),
         })
       }
-      // Ensure required series reflect toggle state (idx 1..count-1) without churn
-      for (let i = 1; i < count; i++) {
-        const shouldShow = !hiddenSeriesRef.current.has(i)
-        const curShown = u.series?.[i]?.show !== false
-        if (curShown !== shouldShow) {
+      withSeriesUpdateMuted(() => {
+        // Ensure required series reflect toggle state (idx 1..count-1) without churn
+        for (let i = 1; i < count; i++) {
+          const shouldShow = !hiddenSeriesRef.current.has(i)
+          const curShown = u.series?.[i]?.show !== false
+          if (curShown !== shouldShow) {
+            try {
+              u.setSeries?.(i, { show: shouldShow }, true)
+            } catch {}
+          }
+        }
+        // We don't remove extra series; if more than needed, hide extras
+        for (let i = count; i < (u.series?.length || 0); i++) {
           try {
-            u.setSeries?.(i, { show: shouldShow }, true)
+            u.setSeries?.(i, { show: false }, true)
           } catch {}
         }
-      }
-      // We don't remove extra series; if more than needed, hide extras
-      for (let i = count; i < (u.series?.length || 0); i++) {
-        try {
-          u.setSeries?.(i, { show: false }, true)
-        } catch {}
-      }
+      })
     } catch {}
   }
 
@@ -267,6 +279,7 @@ const MonitorPlotter = forwardRef(function MonitorPlotter(
           /** @param {uPlot} u */
           (u, si) => {
             try {
+              if (seriesUpdateMutedRef.current) return
               if (typeof si === 'number' && si > 0) {
                 const shown = u.series?.[si]?.show !== false
                 if (shown) hiddenSeriesRef.current.delete(si)
@@ -899,11 +912,13 @@ const MonitorPlotter = forwardRef(function MonitorPlotter(
       hiddenSeriesRef.current.clear()
       const u = plotRef.current
       if (u) {
-        for (let i = 1; i < (u.series?.length || 0); i++) {
-          try {
-            u.setSeries?.(i, { show: true }, true)
-          } catch {}
-        }
+        withSeriesUpdateMuted(() => {
+          for (let i = 1; i < (u.series?.length || 0); i++) {
+            try {
+              u.setSeries?.(i, { show: true }, true)
+            } catch {}
+          }
+        })
       }
     } catch {}
   }
@@ -949,9 +964,11 @@ const MonitorPlotter = forwardRef(function MonitorPlotter(
 
       // Show all series again (1..n)
       try {
-        for (let i = 1; i < (u.series?.length || 0); i++) {
-          u.setSeries?.(i, { show: true }, true)
-        }
+        withSeriesUpdateMuted(() => {
+          for (let i = 1; i < (u.series?.length || 0); i++) {
+            u.setSeries?.(i, { show: true }, true)
+          }
+        })
       } catch {}
 
       // Reset Y autoscale explicitly
