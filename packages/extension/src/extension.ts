@@ -2167,7 +2167,7 @@ async function resolveSketchTaskParams(
   }
 
   if (resolvedOptions.needFqbn && !fqbn) {
-    const board = await boardlabContext.selectBoard(current)
+    const board = current?.board ?? (await boardlabContext.selectBoard(current))
     if (typeof board === 'object' && 'fqbn' in board) {
       fqbn = board.fqbn
     } else if (typeof board === 'object' && 'board' in board) {
