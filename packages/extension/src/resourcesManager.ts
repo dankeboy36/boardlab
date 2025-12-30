@@ -620,11 +620,21 @@ export class LibrariesManager extends ResourcesManager {
   ): Promise<InstallResourceParams | undefined> {
     const label = params.name || params.id
     const arduino = await this.arduino()
-    const response = await arduino.resolveLibraryDependencies({
-      name: params.id,
-      version: params.version,
-      doNotUpdateInstalledLibraries: true,
-    })
+    const response = await arduino
+      .resolveLibraryDependencies({
+        name: params.id,
+        version: params.version,
+        doNotUpdateInstalledLibraries: true,
+      })
+      .catch((err) => {
+        if (err instanceof ClientError) {
+          // With doNotUpdateInstalledLibraries: true for example when updating ArduinoJson from 7.4.0 to 7.4.2
+          if (err.code === Status.FAILED_PRECONDITION) {
+            return { dependencies: [] as LibraryDependencyStatus[] }
+          }
+        }
+        throw err
+      })
     const dependencies = (response.dependencies ?? []).filter(
       (dep) => dep.name !== params.id
     )
