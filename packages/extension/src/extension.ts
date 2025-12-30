@@ -1018,8 +1018,8 @@ export function activate(context: vscode.ExtensionContext) {
     ),
     vscode.commands.registerCommand(
       'boardlab.addAdditionalPackageIndexUrlToArduinoCliConfig',
-      async (params: Partial<AddAdditionalPackageIndexUrlParams>) => {
-        let { url } = params
+      async (params?: Partial<AddAdditionalPackageIndexUrlParams>) => {
+        let url = params?.url
         if (!url) {
           url = await vscode.window.showInputBox({
             title:
