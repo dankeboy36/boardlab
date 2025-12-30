@@ -1025,15 +1025,19 @@ export function activate(context: vscode.ExtensionContext) {
             title:
               'Platform package index URL to add to the Arduino CLI configuration',
             prompt:
-              'Enter an additional platform package index URL (http/https).',
+              'Enter an additional platform package index URL (http/https/file).',
             placeHolder: 'https://example.com/package_index.json',
             validateInput: (value) => {
               const trimmed = value.trim()
               if (!trimmed) return 'URL is required'
               try {
                 const url = new URL(trimmed)
-                if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-                  return 'Only http/https URLs are supported'
+                if (
+                  url.protocol !== 'http:' &&
+                  url.protocol !== 'https:' &&
+                  url.protocol !== 'file:'
+                ) {
+                  return 'Only http/https/file URLs are supported'
                 }
                 return null
               } catch {
