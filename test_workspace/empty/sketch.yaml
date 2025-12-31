@@ -1,0 +1,6 @@
+profiles:
+  wroom:
+    fqbn: esp32:esp32:esp32da:FlashFreq=40,FlashMode=dio,FlashSize=16M,DebugLevel=none,LoopCore=1,EventsCore=1,EraseFlash=all,CPUFreq=20,PartitionScheme=noota_3g
+    platforms:
+      - platform: arduino:mbed_edge (3.0.1)
+      - platform: arduino:mbed_giga

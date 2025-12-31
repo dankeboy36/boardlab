@@ -1,0 +1,156 @@
+.uplot {
+  font-family: var(--vscode-font-family, sans-serif);
+  font-size: var(--vscode-font-size, 13px);
+  font-weight: var(--vscode-font-weight, normal);
+  color: var(--vscode-charts-foreground, #3b3b3b);
+  background: var(--vscode-editor-background, #ffffff);
+}
+
+.uplot canvas {
+  background: var(--vscode-editor-background, #ffffff);
+}
+
+.uplot .u-title,
+.uplot .u-axis text {
+  fill: var(--vscode-charts-foreground, #3b3b3b);
+}
+
+.uplot .u-axis path,
+.uplot .u-axis line {
+  stroke: var(--vscode-chart-axis, rgba(0, 0, 0, 0.6));
+  stroke-width: 1;
+}
+
+.uplot .u-grid path {
+  stroke: var(--vscode-chart-guide, rgba(0, 0, 0, 0.2));
+}
+
+.uplot .u-cursor-x,
+.uplot .u-cursor-y {
+  background: var(--vscode-charts-lines, rgba(59, 59, 59, 0.5));
+}
+
+/* default grab on Y axis (last axis in horizontal layout) */
+.uplot.u-hz .u-axis:last-child {
+  cursor: grab;
+}
+
+/* show resize cursor while Shift is held (before dragging) */
+.uplot.u-hz.uplot-shift .u-axis:last-child {
+  cursor: ns-resize;
+}
+
+/* show row-resize cursor while actively dragging with Shift */
+.uplot.u-hz.uplot-shift.uplot-dragging-axis .u-axis:last-child {
+  cursor: row-resize;
+}
+
+/* show grabbing cursor while dragging without Shift */
+.uplot.u-hz.uplot-dragging-axis:not(.uplot-shift) .u-axis:last-child {
+  cursor: grabbing;
+}
+
+.uplot.u-hz .u-cursor-x,
+.uplot.u-vt .u-cursor-y {
+  border-right: 1px dashed var(--vscode-charts-lines, rgba(59, 59, 59, 0.5));
+}
+
+.uplot.u-hz .u-cursor-y,
+.uplot.u-vt .u-cursor-x {
+  border-bottom: 1px dashed var(--vscode-charts-lines, rgba(59, 59, 59, 0.5));
+}
+
+.uplot .u-cursor-pt {
+  background: var(--vscode-chart-line, #236b8e);
+  border: 2px solid var(--vscode-editor-background, #ffffff);
+  border-radius: 50%;
+}
+
+.uplot .u-select {
+  background: rgba(var(--vscode-charts-blue-rgb, 26, 133, 255), 0.08);
+  border: 1px solid rgba(var(--vscode-charts-blue-rgb, 26, 133, 255), 0.4);
+}
+
+.plot-legend-host {
+  width: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  overflow: auto;
+  background: var(
+    --vscode-editorWidget-background,
+    var(--vscode-sideBar-background, rgba(0, 0, 0, 0.03))
+  );
+  border-left: 1px solid
+    var(--vscode-settings-dropdownBorder, rgba(0, 0, 0, 0.12));
+  color: var(--vscode-charts-foreground, #3b3b3b);
+}
+
+.plot-legend-host .u-legend th {
+  font-family: var(--vscode-font-family, sans-serif);
+  font-size: var(--vscode-font-size, 13px);
+  font-weight: var(--vscode-font-weight, normal);
+}
+
+.plot-legend-host .u-legend {
+  margin: 0;
+  font-family: var(--vscode-font-family, sans-serif);
+  font-size: 12px;
+  color: inherit;
+}
+
+.plot-legend-host .u-legend.u-inline {
+  display: block;
+}
+
+.plot-legend-host .u-legend.u-inline tbody {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.plot-legend-host .u-legend table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.plot-legend-host .u-legend th,
+.plot-legend-host .u-legend td {
+  color: inherit;
+  padding: 2px 4px;
+  border: none;
+}
+
+.plot-legend-host .u-legend tr {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin: 0;
+}
+
+.plot-legend-host .u-legend th {
+  display: flex;
+  align-items: center;
+}
+
+.plot-legend-host .u-legend .u-marker {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.08);
+}
+
+/* hide the legend marker for the first series (x axis) */
+.plot-legend-host .u-legend tr:first-child .u-marker {
+  display: none;
+}
+
+.plot-legend-host .u-legend .u-label,
+.plot-legend-host .u-legend .u-value {
+  color: inherit;
+}
+
+.plot-legend-host .u-legend tr.u-off {
+  opacity: 0.4;
+}

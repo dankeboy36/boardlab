@@ -1,0 +1,1568 @@
+{
+  "name": "boardlab",
+  "displayName": "BoardLab",
+  "version": "0.0.2",
+  "description": "Vendor-independent board development for Visual Studio Code, powered by Arduino CLI.",
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "arduino",
+    "embedded",
+    "microcontroller",
+    "boards",
+    "firmware",
+    "serial",
+    "monitor",
+    "iot",
+    "sketch"
+  ],
+  "homepage": "https://github.com/dankeboy36/boardlab",
+  "bugs": {
+    "url": "https://github.com/dankeboy36/boardlab/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dankeboy36/boardlab.git"
+  },
+  "license": "MIT",
+  "qna": "https://github.com/dankeboy36/boardlab/discussions",
+  "author": "dankeboy36",
+  "publisher": "dankeboy36",
+  "main": "./extension-entry.js",
+  "workspaces": [
+    "packages/protocol",
+    "packages/servers/*",
+    "packages/webviews/*"
+  ],
+  "scripts": {
+    "prebundle": "rimraf dist && npm run compile",
+    "bundle": "webpack --mode production --devtool hidden-source-map",
+    "precompile": "npm run build --workspaces",
+    "compile": "tsc -p ./",
+    "postcompile": "copyfiles -u 3 \"packages/servers/portino-bridge/out/**\" out/portino-bridge",
+    "download:builtins": "scripts/fetch-builtins.sh --tag 1.10.2 --target resources/arduino-examples",
+    "download:builtins:verify": "cd resources/arduino-examples/01.Basics/Blink",
+    "format": "npm run format:js && npm run format:ino",
+    "format:ino": "node scripts/clang-format.cjs",
+    "format:js": "prettier --write .",
+    "generate:editor-icons": "node scripts/generate-editor-icons.cjs",
+    "postinstall": "copyfiles -f ./node_modules/ardunno-cli/schemas/arduino-cli-schema.json ./schemas",
+    "lint": "npm run lint:js && npm run lint:md",
+    "lint:fix": "eslint packages --ext js,jsx,ts,tsx --fix",
+    "lint:js": "eslint packages --ext js,jsx,ts,tsx",
+    "lint:md": "markdown-link-check README.md",
+    "prepackage": "npm run bundle && npm run download:builtins:verify",
+    "package": "vsce package",
+    "release": "semantic-release",
+    "prereset": "npm run reset --workspaces",
+    "reset": "rimraf schemas out node_modules .vscode-test",
+    "test": "vitest run --config ./packages/extension/vitest.config.ts",
+    "test:ci": "npm run test:ci --workspaces --if-present && npm test && npm run test:vsix",
+    "pretest:vsix": "npm run compile",
+    "test:vsix": "node ./out/test/runTest.js",
+    "watch": "tsc -watch -p ./"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "boardlab.openArduinoCliConfig",
+        "title": "Open Arduino CLI Configuration",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.addAdditionalPackageIndexUrlToArduinoCliConfig",
+        "title": "Add Additional Package Index URL to Arduino CLI config",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.selectSketch",
+        "title": "Select Sketch",
+        "icon": "$(file-submodule)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.openNewSketchWizard",
+        "title": "Create Sketch",
+        "icon": "$(add)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.openMainSketchFile",
+        "title": "Open Main Sketch File",
+        "icon": "$(go-to-file)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.configureCurrentSketch",
+        "title": "Configure Current Sketch",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.compile",
+        "title": "Compile Sketch",
+        "icon": "$(check)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.upload",
+        "title": "Upload Sketch",
+        "icon": "$(arrow-right)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.uploadUsingProgrammer",
+        "title": "Upload Using Programmer",
+        "icon": "$(server-process)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.exportBinary",
+        "title": "Export Compiled Binary",
+        "icon": "$(file-binary)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.openMonitor",
+        "title": "Open Monitor",
+        "icon": "$(terminal)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.burnBootloader",
+        "title": "Burn Bootloader",
+        "icon": "$(flame)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.getBoardInfo",
+        "title": "Get Board Info",
+        "icon": "$(info)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.archiveSketch",
+        "title": "Archive Sketch",
+        "icon": "$(file-zip)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.extensions.searchBoardLab",
+        "title": "Search Marketplace for BoardLab Extensions",
+        "icon": "$(extensions)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.tool.runFromTree",
+        "title": "Open Resource",
+        "icon": "$(go-to-file)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.task.runFromTree",
+        "title": "Run Sketch Task",
+        "icon": "$(play)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.task.stopFromTree",
+        "title": "Stop Sketch Task",
+        "icon": "$(debug-stop)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.tool.runFromTree",
+        "title": "Open Resource",
+        "icon": "$(go-to-file)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.cloneSketch",
+        "title": "Clone Sketch",
+        "icon": "$(repo-clone)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.openSketch",
+        "title": "Open Sketch",
+        "icon": "$(folder-opened)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.openSketchInNewWindow",
+        "title": "Open Sketch in New Window",
+        "icon": "$(empty-window)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.selectBoard",
+        "title": "Select Board",
+        "icon": "$(pencil)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.selectPort",
+        "title": "Select Port",
+        "icon": "$(pencil)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.configureBoard",
+        "title": "Configure Board",
+        "icon": "$(pencil)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.selectProgrammer",
+        "title": "Select Programmer",
+        "icon": "$(pencil)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.selectConfigOption",
+        "title": "Select Config Option",
+        "icon": "$(pencil)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.resetConfigOption",
+        "title": "Reset Config Option to Default",
+        "icon": "$(discard)",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.openCommandCenter",
+        "title": "Open Command Center",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.platformMissingActions",
+        "title": "Resolve Missing Platform",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.monitor.focus",
+        "title": "Open Monitor",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.monitor.copyAll",
+        "title": "Copy Output",
+        "category": "BoardLab",
+        "icon": "$(clippy)"
+      },
+      {
+        "command": "boardlab.monitor.saveToFile",
+        "title": "Capture Output Snapshot",
+        "category": "BoardLab",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "boardlab.monitor.clear",
+        "title": "Clear Output",
+        "category": "BoardLab",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "boardlab.monitor.toggleScrollLock",
+        "title": "Toggle Scroll Lock",
+        "category": "BoardLab",
+        "icon": "$(lock)"
+      },
+      {
+        "command": "boardlab.monitor.configureLineEnding",
+        "title": "Select Line Ending",
+        "category": "BoardLab",
+        "icon": "$(whitespace)"
+      },
+      {
+        "command": "boardlab.monitor.configureBaudrate",
+        "title": "Configure Baudrate",
+        "category": "BoardLab",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "boardlab.plotter.focus",
+        "title": "Open Plotter",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.plotter.clear",
+        "title": "Clear Plot",
+        "category": "BoardLab",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "boardlab.plotter.resetYScale",
+        "title": "Reset Y Scale",
+        "category": "BoardLab",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "boardlab.plotter.configureLineEnding",
+        "title": "Select Line Ending",
+        "category": "BoardLab",
+        "icon": "$(whitespace)"
+      },
+      {
+        "command": "boardlab.examples.refresh",
+        "title": "Refresh Examples",
+        "category": "BoardLab",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "boardlab.examples.importToWorkspace",
+        "title": "Import Example to Folder…",
+        "category": "BoardLab",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "boardlab.examples.openTemp",
+        "title": "Open Example in New Window",
+        "category": "BoardLab",
+        "icon": "$(new-window)"
+      },
+      {
+        "command": "boardlab.examples.openPreview",
+        "title": "Open Example Preview",
+        "category": "BoardLab",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "boardlab.examples.openReadme",
+        "title": "Open Library README",
+        "category": "BoardLab",
+        "icon": "$(book)"
+      },
+      {
+        "command": "boardlab.pickSketch",
+        "title": "Pick Sketch",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.pickBoard",
+        "title": "Pick Board",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.pickPort",
+        "title": "Pick Port",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.installPlatform",
+        "title": "Install",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.installLatestPlatform",
+        "title": "Install Latest",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.updatePlatform",
+        "title": "Update",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.uninstallPlatform",
+        "title": "Remove",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.installLibrary",
+        "title": "Install",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.installLatestLibrary",
+        "title": "Install Latest",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.updateLibrary",
+        "title": "Update",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.uninstallLibrary",
+        "title": "Remove",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.moreInfo",
+        "title": "More Info",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.profiles.setDefault",
+        "title": "Set as Default",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.profiles.delete",
+        "title": "Delete Profile",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.profiles.setActive",
+        "title": "Set as Active",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.profiles.openSketchProfile",
+        "title": "Open Sketch Profile",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.profiles.createSketchProfile",
+        "title": "Create Sketch Profile",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.profiles.openTextEditor",
+        "title": "Open Sketch Profile (YAML)",
+        "category": "BoardLab",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "boardlab.profiles.syncSketchBoardSettingsToProfile",
+        "title": "Sync Board Settings: Sketch → Profile...",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.profiles.syncSketchBoardSettingsToActiveProfile",
+        "title": "Sync Board Settings: Sketch → Active Profile",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.profiles.syncProfileBoardSettingsToSketch",
+        "title": "Sync Board Settings: Profile → Sketch...",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.profiles.syncActiveProfileBoardSettingsToSketch",
+        "title": "Sync Board Settings: Active Profile → Sketch",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.libraries.filter.type.Updatable",
+        "title": "Updatable"
+      },
+      {
+        "command": "boardlab.libraries.filter.type.Updatable.checked",
+        "title": "✓ Updatable"
+      },
+      {
+        "command": "boardlab.libraries.filter.type.Installed",
+        "title": "Installed"
+      },
+      {
+        "command": "boardlab.libraries.filter.type.Installed.checked",
+        "title": "✓ Installed"
+      },
+      {
+        "command": "boardlab.libraries.filter.type.Arduino",
+        "title": "Arduino"
+      },
+      {
+        "command": "boardlab.libraries.filter.type.Arduino.checked",
+        "title": "✓ Arduino"
+      },
+      {
+        "command": "boardlab.libraries.filter.type.Partner",
+        "title": "Partner"
+      },
+      {
+        "command": "boardlab.libraries.filter.type.Partner.checked",
+        "title": "✓ Partner"
+      },
+      {
+        "command": "boardlab.libraries.filter.type.Recommended",
+        "title": "Recommended"
+      },
+      {
+        "command": "boardlab.libraries.filter.type.Recommended.checked",
+        "title": "✓ Recommended"
+      },
+      {
+        "command": "boardlab.libraries.filter.type.Contributed",
+        "title": "Contributed"
+      },
+      {
+        "command": "boardlab.libraries.filter.type.Contributed.checked",
+        "title": "✓ Contributed"
+      },
+      {
+        "command": "boardlab.libraries.filter.type.Retired",
+        "title": "Retired"
+      },
+      {
+        "command": "boardlab.libraries.filter.type.Retired.checked",
+        "title": "✓ Retired"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.Communication",
+        "title": "Communication"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.Communication.checked",
+        "title": "✓ Communication"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.DataProcessing",
+        "title": "Data Processing"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.DataProcessing.checked",
+        "title": "✓ Data Processing"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.DataStorage",
+        "title": "Data Storage"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.DataStorage.checked",
+        "title": "✓ Data Storage"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.DeviceControl",
+        "title": "Device Control"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.DeviceControl.checked",
+        "title": "✓ Device Control"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.Display",
+        "title": "Display"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.Display.checked",
+        "title": "✓ Display"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.Other",
+        "title": "Other"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.Other.checked",
+        "title": "✓ Other"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.Sensors",
+        "title": "Sensors"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.Sensors.checked",
+        "title": "✓ Sensors"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.SignalInputOutput",
+        "title": "Signal Input/Output"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.SignalInputOutput.checked",
+        "title": "✓ Signal Input/Output"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.Timing",
+        "title": "Timing"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.Timing.checked",
+        "title": "✓ Timing"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.Uncategorized",
+        "title": "Uncategorized"
+      },
+      {
+        "command": "boardlab.libraries.filter.topic.Uncategorized.checked",
+        "title": "✓ Uncategorized"
+      },
+      {
+        "command": "boardlab.platforms.filter.type.Updatable",
+        "title": "Updatable"
+      },
+      {
+        "command": "boardlab.platforms.filter.type.Updatable.checked",
+        "title": "✓ Updatable"
+      },
+      {
+        "command": "boardlab.platforms.filter.type.Arduino",
+        "title": "Arduino"
+      },
+      {
+        "command": "boardlab.platforms.filter.type.Arduino.checked",
+        "title": "✓ Arduino"
+      },
+      {
+        "command": "boardlab.platforms.filter.type.Contributed",
+        "title": "Contributed"
+      },
+      {
+        "command": "boardlab.platforms.filter.type.Contributed.checked",
+        "title": "✓ Contributed"
+      },
+      {
+        "command": "boardlab.platforms.filter.type.ArduinoCertified",
+        "title": "Arduino Certified"
+      },
+      {
+        "command": "boardlab.platforms.filter.type.ArduinoCertified.checked",
+        "title": "✓ Arduino Certified"
+      },
+      {
+        "command": "boardlab.platforms.filter.type.Partner",
+        "title": "Partner"
+      },
+      {
+        "command": "boardlab.platforms.filter.type.Partner.checked",
+        "title": "✓ Partner"
+      },
+      {
+        "command": "boardlab.platforms.filter.type.ArduinoHeart",
+        "title": "Arduino@Heart"
+      },
+      {
+        "command": "boardlab.platforms.filter.type.ArduinoHeart.checked",
+        "title": "✓ Arduino@Heart"
+      }
+    ],
+    "configuration": {
+      "title": "BoardLab",
+      "properties": {
+        "boardlab.monitor.lineEnding": {
+          "type": "string",
+          "enum": [
+            "none",
+            "lf",
+            "cr",
+            "crlf"
+          ],
+          "default": "crlf",
+          "markdownDescription": "Line ending appended to messages sent from the Monitor and Plotter inputs."
+        },
+        "boardlab.monitor.bridgePort": {
+          "type": "number",
+          "default": 55888,
+          "markdownDescription": "Preferred TCP port for the BoardLab monitor bridge server used to connect Visual Studio Code instances. If another process responds on this port with an unexpected protocol, the extension will warn and will not start its own bridge.",
+          "minimum": 55000,
+          "tags": [
+            "advanced"
+          ]
+        },
+        "boardlab.monitor.bridgeMode": {
+          "type": "string",
+          "enum": [
+            "external-process",
+            "in-process"
+          ],
+          "default": "external-process",
+          "markdownDescription": "Controls how the BoardLab monitor bridge server is started. Use 'in-process' to run it inside the Visual Studio Code extension host for easier debugging. Changing this setting requires reloading the window.",
+          "tags": [
+            "advanced"
+          ]
+        },
+        "boardlab.cli.daemonDebug": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Start the Arduino CLI daemon with the `--debug` flag. Changing this setting requires reloading the window.",
+          "tags": [
+            "advanced"
+          ]
+        },
+        "boardlab.cli.configPath": {
+          "type": "string",
+          "markdownDescription": "Absolute path to the Arduino CLI configuration file used by BoardLab. Leave empty to auto-detect."
+        },
+        "boardlab.sketch.inoBlueprint": {
+          "type": "string",
+          "markdownDescription": "Absolute filesystem path to the default `.ino` blueprint file. If specified, the content of the blueprint file will be used for every new sketch created by BoardLab. The sketches will be generated with the default Arduino content if not specified. Unaccessible blueprint files are ignored."
+        },
+        "boardlab.compile.verbose": {
+          "type": "boolean",
+          "markdownDescription": "True for verbose compile output. False by default",
+          "default": false
+        },
+        "boardlab.compile.warnings": {
+          "enum": [
+            "None",
+            "Default",
+            "More",
+            "All"
+          ],
+          "default": "None",
+          "markdownDescription": "Tells gcc which warning level to use. It's 'None' by default"
+        },
+        "boardlab.upload.verbose": {
+          "type": "boolean",
+          "markdownDescription": "True for verbose upload output. False by default.",
+          "default": false
+        }
+      }
+    },
+    "customEditors": [
+      {
+        "viewType": "boardlab.monitorEditor",
+        "displayName": "Monitor",
+        "selector": [
+          {
+            "filenamePattern": "**/*"
+          }
+        ],
+        "priority": "option"
+      },
+      {
+        "viewType": "boardlab.plotterEditor",
+        "displayName": "Plotter",
+        "selector": [
+          {
+            "filenamePattern": "**/*"
+          }
+        ],
+        "priority": "option"
+      },
+      {
+        "viewType": "boardlab.profilesEditor",
+        "displayName": "Profiles",
+        "selector": [
+          {
+            "filenamePattern": "**/sketch.yaml"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": "arduino-cli.json",
+        "url": "./schemas/arduino-cli-schema.json"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "boardlab.monitor.copyAll",
+          "when": "activeCustomEditorId == boardlab.monitorEditor",
+          "group": "navigation@1"
+        },
+        {
+          "command": "boardlab.monitor.saveToFile",
+          "when": "activeCustomEditorId == boardlab.monitorEditor",
+          "group": "navigation@2"
+        },
+        {
+          "command": "boardlab.monitor.clear",
+          "when": "activeCustomEditorId == boardlab.monitorEditor",
+          "group": "navigation@3"
+        },
+        {
+          "command": "boardlab.monitor.toggleScrollLock",
+          "when": "activeCustomEditorId == boardlab.monitorEditor",
+          "group": "navigation@4"
+        },
+        {
+          "command": "boardlab.monitor.configureLineEnding",
+          "when": "activeCustomEditorId == boardlab.monitorEditor",
+          "group": "navigation@5"
+        },
+        {
+          "command": "boardlab.plotter.clear",
+          "when": "activeCustomEditorId == boardlab.plotterEditor",
+          "group": "navigation@1"
+        },
+        {
+          "command": "boardlab.plotter.resetYScale",
+          "when": "activeCustomEditorId == boardlab.plotterEditor",
+          "group": "navigation@2"
+        },
+        {
+          "command": "boardlab.plotter.configureLineEnding",
+          "when": "activeCustomEditorId == boardlab.plotterEditor",
+          "group": "navigation@3"
+        },
+        {
+          "command": "boardlab.profiles.openTextEditor",
+          "when": "activeCustomEditorId == boardlab.profilesEditor",
+          "group": "navigation@99"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "boardlab.selectSketch",
+          "when": "view == boardlab.currentSketch",
+          "group": "navigation@1"
+        },
+        {
+          "command": "boardlab.openMainSketchFile",
+          "when": "view == boardlab.currentSketch",
+          "group": "navigation@2"
+        },
+        {
+          "command": "boardlab.openNewSketchWizard",
+          "when": "view == boardlab.currentSketch",
+          "group": "navigation@3"
+        },
+        {
+          "command": "boardlab.extensions.searchBoardLab",
+          "when": "view == boardlab.currentSketch",
+          "group": "extensions@99"
+        },
+        {
+          "command": "boardlab.examples.refresh",
+          "when": "view == boardlab.examples",
+          "group": "navigation@1"
+        },
+        {
+          "command": "boardlab.plotter.clear",
+          "when": "view == boardlab.plotter",
+          "group": "navigation@1"
+        },
+        {
+          "command": "boardlab.plotter.resetYScale",
+          "when": "view == boardlab.plotter",
+          "group": "navigation@2"
+        },
+        {
+          "command": "boardlab.plotter.configureLineEnding",
+          "when": "view == boardlab.plotter",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "boardlab.selectBoard",
+          "when": "view == boardlab.currentSketch && viewItem == board",
+          "group": "inline"
+        },
+        {
+          "command": "boardlab.selectPort",
+          "when": "view == boardlab.currentSketch && viewItem == port",
+          "group": "inline"
+        },
+        {
+          "command": "boardlab.selectProgrammer",
+          "when": "view == boardlab.currentSketch && viewItem == programmer",
+          "group": "inline"
+        },
+        {
+          "command": "boardlab.selectConfigOption",
+          "when": "view == boardlab.currentSketch && (viewItem == configOption || viewItem == dirtyConfigOption)",
+          "group": "inline"
+        },
+        {
+          "command": "boardlab.resetConfigOption",
+          "when": "view == boardlab.currentSketch && viewItem == dirtyConfigOption",
+          "group": "inline"
+        },
+        {
+          "command": "boardlab.task.runFromTree",
+          "when": "view == boardlab.currentSketch && viewItem == taskIdle",
+          "group": "inline"
+        },
+        {
+          "command": "boardlab.task.stopFromTree",
+          "when": "view == boardlab.currentSketch && viewItem == taskRunning",
+          "group": "inline"
+        },
+        {
+          "command": "boardlab.tool.runFromTree",
+          "when": "view == boardlab.currentSketch && viewItem == tool",
+          "group": "inline"
+        },
+        {
+          "command": "boardlab.tool.runFromTree",
+          "when": "view == boardlab.currentSketch && viewItem == profileTool",
+          "group": "inline"
+        },
+        {
+          "submenu": "boardlab.currentSketchProfileMoreActions",
+          "when": "view == boardlab.currentSketch && viewItem == profileTool",
+          "group": "inline@1"
+        },
+        {
+          "submenu": "boardlab.sketchbookMoreActions",
+          "when": "view == boardlab.sketchbook && viewItem == sketchbookSketch",
+          "group": "inline@0"
+        }
+      ],
+      "boardlab.sketchbookMoreActions": [
+        {
+          "command": "boardlab.openSketchInNewWindow",
+          "when": "view == boardlab.sketchbook && viewItem == sketchbookSketch",
+          "group": "1_open"
+        },
+        {
+          "command": "boardlab.openSketch",
+          "when": "view == boardlab.sketchbook && viewItem == sketchbookSketch",
+          "group": "1_open"
+        },
+        {
+          "command": "boardlab.cloneSketch",
+          "when": "view == boardlab.sketchbook && viewItem == sketchbookSketch",
+          "group": "2_clone"
+        }
+      ],
+      "boardlab.currentSketchProfileMoreActions": [
+        {
+          "command": "boardlab.profiles.syncSketchBoardSettingsToProfile",
+          "when": "view == boardlab.currentSketch && viewItem == profileTool",
+          "group": "1_syncTo@1"
+        },
+        {
+          "command": "boardlab.profiles.syncSketchBoardSettingsToActiveProfile",
+          "when": "view == boardlab.currentSketch && viewItem == profileTool",
+          "group": "1_syncTo@2"
+        },
+        {
+          "command": "boardlab.profiles.syncProfileBoardSettingsToSketch",
+          "when": "view == boardlab.currentSketch && viewItem == profileTool",
+          "group": "2_syncFrom@1"
+        },
+        {
+          "command": "boardlab.profiles.syncActiveProfileBoardSettingsToSketch",
+          "when": "view == boardlab.currentSketch && viewItem == profileTool",
+          "group": "2_syncFrom@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "boardlab.pickSketch",
+          "when": "false"
+        },
+        {
+          "command": "boardlab.pickBoard",
+          "when": "false"
+        },
+        {
+          "command": "boardlab.pickPort",
+          "when": "false"
+        },
+        {
+          "command": "boardlab.installPlatform",
+          "when": "false"
+        },
+        {
+          "command": "boardlab.installLatestPlatform",
+          "when": "false"
+        },
+        {
+          "command": "boardlab.updatePlatform",
+          "when": "false"
+        },
+        {
+          "command": "boardlab.uninstallPlatform",
+          "when": "false"
+        },
+        {
+          "command": "boardlab.installLibrary",
+          "when": "false"
+        },
+        {
+          "command": "boardlab.installLatestLibrary",
+          "when": "false"
+        },
+        {
+          "command": "boardlab.updateLibrary",
+          "when": "false"
+        },
+        {
+          "command": "boardlab.uninstallLibrary",
+          "when": "false"
+        },
+        {
+          "command": "boardlab.moreInfo",
+          "when": "false"
+        },
+        {
+          "command": "boardlab.selectBoard",
+          "when": "currentSketchPath != ''"
+        },
+        {
+          "command": "boardlab.selectConfigOption",
+          "when": "false"
+        },
+        {
+          "command": "boardlab.resetConfigOption",
+          "when": "false"
+        }
+      ],
+      "webview/context": [
+        {
+          "command": "boardlab.moreInfo",
+          "when": "(webviewId == 'boardlab.platformsManager' || webviewId == 'boardlab.librariesManager') && webviewSection == 'toolbar'",
+          "group": "info@1"
+        },
+        {
+          "command": "boardlab.installLatestPlatform",
+          "when": "webviewId == 'boardlab.platformsManager' && webviewSection == 'toolbar' && canInstallLatest",
+          "group": "manage@1"
+        },
+        {
+          "command": "boardlab.installPlatform",
+          "when": "webviewId == 'boardlab.platformsManager' && webviewSection == 'toolbar' && canInstallSelected",
+          "group": "manage@2"
+        },
+        {
+          "command": "boardlab.updatePlatform",
+          "when": "webviewId == 'boardlab.platformsManager' && webviewSection == 'toolbar' && canUpdate",
+          "group": "manage@3"
+        },
+        {
+          "command": "boardlab.uninstallPlatform",
+          "when": "webviewId == 'boardlab.platformsManager' && webviewSection == 'toolbar' && canRemove",
+          "group": "manage@4"
+        },
+        {
+          "command": "boardlab.installLatestLibrary",
+          "when": "webviewId == 'boardlab.librariesManager' && webviewSection == 'toolbar' && canInstallLatest",
+          "group": "manage@1"
+        },
+        {
+          "command": "boardlab.installLibrary",
+          "when": "webviewId == 'boardlab.librariesManager' && webviewSection == 'toolbar' && canInstallSelected",
+          "group": "manage@2"
+        },
+        {
+          "command": "boardlab.updateLibrary",
+          "when": "webviewId == 'boardlab.librariesManager' && webviewSection == 'toolbar' && canUpdate",
+          "group": "manage@3"
+        },
+        {
+          "command": "boardlab.uninstallLibrary",
+          "when": "webviewId == 'boardlab.librariesManager' && webviewSection == 'toolbar' && canRemove",
+          "group": "manage@4"
+        },
+        {
+          "submenu": "boardlab.libraries.filter.type",
+          "when": "webviewId == 'boardlab.librariesManager' && webviewSection == 'search-filter'",
+          "group": "filter@1"
+        },
+        {
+          "submenu": "boardlab.libraries.filter.topic",
+          "when": "webviewId == 'boardlab.librariesManager' && webviewSection == 'search-filter'",
+          "group": "filter@2"
+        },
+        {
+          "submenu": "boardlab.platforms.filter.type",
+          "when": "webviewId == 'boardlab.platformsManager' && webviewSection == 'search-filter'",
+          "group": "filter@1"
+        },
+        {
+          "command": "boardlab.profiles.setDefault",
+          "when": "webviewType == 'boardlab.profilesEditor' && webviewSection == 'profiles-master' && canSetDefault",
+          "group": "manage@1"
+        },
+        {
+          "command": "boardlab.profiles.delete",
+          "when": "webviewType == 'boardlab.profilesEditor' && webviewSection == 'profiles-master' && canDelete",
+          "group": "manage@99"
+        },
+        {
+          "command": "boardlab.profiles.setActive",
+          "when": "webviewType == 'boardlab.profilesEditor' && webviewSection == 'profiles-master' && canSetActive",
+          "group": "manage@2"
+        },
+        {
+          "command": "boardlab.profiles.setDefault",
+          "when": "webviewId == 'boardlab.profilesEditor' && webviewSection == 'profiles-master' && canSetDefault",
+          "group": "manage@1"
+        },
+        {
+          "command": "boardlab.profiles.delete",
+          "when": "webviewId == 'boardlab.profilesEditor' && webviewSection == 'profiles-master' && canDelete",
+          "group": "manage@99"
+        },
+        {
+          "command": "boardlab.profiles.setActive",
+          "when": "webviewId == 'boardlab.profilesEditor' && webviewSection == 'profiles-master' && canSetActive",
+          "group": "manage@2"
+        }
+      ],
+      "boardlab.libraries.filter.type": [
+        {
+          "command": "boardlab.libraries.filter.type.Updatable",
+          "when": "boardlab.librariesFilter:type != 'Updatable'",
+          "group": "type@1"
+        },
+        {
+          "command": "boardlab.libraries.filter.type.Updatable.checked",
+          "when": "boardlab.librariesFilter:type == 'Updatable'",
+          "group": "type@1"
+        },
+        {
+          "command": "boardlab.libraries.filter.type.Installed",
+          "when": "boardlab.librariesFilter:type != 'Installed'",
+          "group": "type@2"
+        },
+        {
+          "command": "boardlab.libraries.filter.type.Installed.checked",
+          "when": "boardlab.librariesFilter:type == 'Installed'",
+          "group": "type@2"
+        },
+        {
+          "command": "boardlab.libraries.filter.type.Arduino",
+          "when": "boardlab.librariesFilter:type != 'Arduino'",
+          "group": "type@3"
+        },
+        {
+          "command": "boardlab.libraries.filter.type.Arduino.checked",
+          "when": "boardlab.librariesFilter:type == 'Arduino'",
+          "group": "type@3"
+        },
+        {
+          "command": "boardlab.libraries.filter.type.Partner",
+          "when": "boardlab.librariesFilter:type != 'Partner'",
+          "group": "type@4"
+        },
+        {
+          "command": "boardlab.libraries.filter.type.Partner.checked",
+          "when": "boardlab.librariesFilter:type == 'Partner'",
+          "group": "type@4"
+        },
+        {
+          "command": "boardlab.libraries.filter.type.Recommended",
+          "when": "boardlab.librariesFilter:type != 'Recommended'",
+          "group": "type@5"
+        },
+        {
+          "command": "boardlab.libraries.filter.type.Recommended.checked",
+          "when": "boardlab.librariesFilter:type == 'Recommended'",
+          "group": "type@5"
+        },
+        {
+          "command": "boardlab.libraries.filter.type.Contributed",
+          "when": "boardlab.librariesFilter:type != 'Contributed'",
+          "group": "type@6"
+        },
+        {
+          "command": "boardlab.libraries.filter.type.Contributed.checked",
+          "when": "boardlab.librariesFilter:type == 'Contributed'",
+          "group": "type@6"
+        },
+        {
+          "command": "boardlab.libraries.filter.type.Retired",
+          "when": "boardlab.librariesFilter:type != 'Retired'",
+          "group": "type@7"
+        },
+        {
+          "command": "boardlab.libraries.filter.type.Retired.checked",
+          "when": "boardlab.librariesFilter:type == 'Retired'",
+          "group": "type@7"
+        }
+      ],
+      "boardlab.libraries.filter.topic": [
+        {
+          "command": "boardlab.libraries.filter.topic.Communication",
+          "when": "boardlab.librariesFilter:topic != 'Communication'",
+          "group": "topic@1"
+        },
+        {
+          "command": "boardlab.libraries.filter.topic.Communication.checked",
+          "when": "boardlab.librariesFilter:topic == 'Communication'",
+          "group": "topic@1"
+        },
+        {
+          "command": "boardlab.libraries.filter.topic.DataProcessing",
+          "when": "boardlab.librariesFilter:topic != 'Data Processing'",
+          "group": "topic@2"
+        },
+        {
+          "command": "boardlab.libraries.filter.topic.DataProcessing.checked",
+          "when": "boardlab.librariesFilter:topic == 'Data Processing'",
+          "group": "topic@2"
+        },
+        {
+          "command": "boardlab.libraries.filter.topic.DataStorage",
+          "when": "boardlab.librariesFilter:topic != 'Data Storage'",
+          "group": "topic@3"
+        },
+        {
+          "command": "boardlab.libraries.filter.topic.DataStorage.checked",
+          "when": "boardlab.librariesFilter:topic == 'Data Storage'",
+          "group": "topic@3"
+        },
+        {
+          "command": "boardlab.libraries.filter.topic.DeviceControl",
+          "when": "boardlab.librariesFilter:topic != 'Device Control'",
+          "group": "topic@4"
+        },
+        {
+          "command": "boardlab.libraries.filter.topic.DeviceControl.checked",
+          "when": "boardlab.librariesFilter:topic == 'Device Control'",
+          "group": "topic@4"
+        },
+        {
+          "command": "boardlab.libraries.filter.topic.Display",
+          "when": "boardlab.librariesFilter:topic != 'Display'",
+          "group": "topic@5"
+        },
+        {
+          "command": "boardlab.libraries.filter.topic.Display.checked",
+          "when": "boardlab.librariesFilter:topic == 'Display'",
+          "group": "topic@5"
+        },
+        {
+          "command": "boardlab.libraries.filter.topic.Other",
+          "when": "boardlab.librariesFilter:topic != 'Other'",
+          "group": "topic@6"
+        },
+        {
+          "command": "boardlab.libraries.filter.topic.Other.checked",
+          "when": "boardlab.librariesFilter:topic == 'Other'",
+          "group": "topic@6"
+        },
+        {
+          "command": "boardlab.libraries.filter.topic.Sensors",
+          "when": "boardlab.librariesFilter:topic != 'Sensors'",
+          "group": "topic@7"
+        },
+        {
+          "command": "boardlab.libraries.filter.topic.Sensors.checked",
+          "when": "boardlab.librariesFilter:topic == 'Sensors'",
+          "group": "topic@7"
+        },
+        {
+          "command": "boardlab.libraries.filter.topic.SignalInputOutput",
+          "when": "boardlab.librariesFilter:topic != 'Signal Input/Output'",
+          "group": "topic@8"
+        },
+        {
+          "command": "boardlab.libraries.filter.topic.SignalInputOutput.checked",
+          "when": "boardlab.librariesFilter:topic == 'Signal Input/Output'",
+          "group": "topic@8"
+        },
+        {
+          "command": "boardlab.libraries.filter.topic.Timing",
+          "when": "boardlab.librariesFilter:topic != 'Timing'",
+          "group": "topic@9"
+        },
+        {
+          "command": "boardlab.libraries.filter.topic.Timing.checked",
+          "when": "boardlab.librariesFilter:topic == 'Timing'",
+          "group": "topic@9"
+        },
+        {
+          "command": "boardlab.libraries.filter.topic.Uncategorized",
+          "when": "boardlab.librariesFilter:topic != 'Uncategorized'",
+          "group": "topic@10"
+        },
+        {
+          "command": "boardlab.libraries.filter.topic.Uncategorized.checked",
+          "when": "boardlab.librariesFilter:topic == 'Uncategorized'",
+          "group": "topic@10"
+        }
+      ],
+      "boardlab.platforms.filter.type": [
+        {
+          "command": "boardlab.platforms.filter.type.Updatable",
+          "when": "boardlab.platformsFilter:type != 'Updatable'",
+          "group": "type@1"
+        },
+        {
+          "command": "boardlab.platforms.filter.type.Updatable.checked",
+          "when": "boardlab.platformsFilter:type == 'Updatable'",
+          "group": "type@1"
+        },
+        {
+          "command": "boardlab.platforms.filter.type.Arduino",
+          "when": "boardlab.platformsFilter:type != 'Arduino'",
+          "group": "type@2"
+        },
+        {
+          "command": "boardlab.platforms.filter.type.Arduino.checked",
+          "when": "boardlab.platformsFilter:type == 'Arduino'",
+          "group": "type@2"
+        },
+        {
+          "command": "boardlab.platforms.filter.type.Contributed",
+          "when": "boardlab.platformsFilter:type != 'Contributed'",
+          "group": "type@3"
+        },
+        {
+          "command": "boardlab.platforms.filter.type.Contributed.checked",
+          "when": "boardlab.platformsFilter:type == 'Contributed'",
+          "group": "type@3"
+        },
+        {
+          "command": "boardlab.platforms.filter.type.ArduinoCertified",
+          "when": "boardlab.platformsFilter:type != 'Arduino Certified'",
+          "group": "type@4"
+        },
+        {
+          "command": "boardlab.platforms.filter.type.ArduinoCertified.checked",
+          "when": "boardlab.platformsFilter:type == 'Arduino Certified'",
+          "group": "type@4"
+        },
+        {
+          "command": "boardlab.platforms.filter.type.Partner",
+          "when": "boardlab.platformsFilter:type != 'Partner'",
+          "group": "type@5"
+        },
+        {
+          "command": "boardlab.platforms.filter.type.Partner.checked",
+          "when": "boardlab.platformsFilter:type == 'Partner'",
+          "group": "type@5"
+        },
+        {
+          "command": "boardlab.platforms.filter.type.ArduinoHeart",
+          "when": "boardlab.platformsFilter:type != 'Arduino@Heart'",
+          "group": "type@6"
+        },
+        {
+          "command": "boardlab.platforms.filter.type.ArduinoHeart.checked",
+          "when": "boardlab.platformsFilter:type == 'Arduino@Heart'",
+          "group": "type@6"
+        }
+      ]
+    },
+    "problemMatchers": [
+      {
+        "name": "boardlab",
+        "fileLocation": "absolute",
+        "source": "ino",
+        "pattern": {
+          "regexp": "^(.*?):(\\d+):(\\d*):?\\s+(?:fatal\\s+)?(note|warning|error):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5,
+          "loop": true
+        }
+      }
+    ],
+    "submenus": [
+      {
+        "id": "boardlab.libraries.filter.type",
+        "label": "Type"
+      },
+      {
+        "id": "boardlab.libraries.filter.topic",
+        "label": "Topic"
+      },
+      {
+        "id": "boardlab.platforms.filter.type",
+        "label": "Type"
+      },
+      {
+        "id": "boardlab.sketchbookMoreActions",
+        "icon": "$(ellipsis)",
+        "label": "More Actions..."
+      },
+      {
+        "id": "boardlab.currentSketchProfileMoreActions",
+        "icon": "$(ellipsis)",
+        "label": "More Actions..."
+      }
+    ],
+    "taskDefinitions": [
+      {
+        "type": "boardlab",
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "The BoardLab command to execute. Supported commands are 'compile', 'upload', 'burn-bootloader', 'export-binary', 'archive-sketch', 'upload-using-programmer', 'get-board-info', and 'reload-board-data'."
+          },
+          "sketchPath": {
+            "type": "string",
+            "description": "The path to the sketch to compile.",
+            "default": "${command:boardlab.pickSketch}"
+          },
+          "fqbn": {
+            "type": "string",
+            "description": "Fully Qualified Board Name (FQBN) for the compilation and upload or to disambiguate if more than one platform provides the pluggable monitor for a given port protocol. For example, 'arduino:avr:uno'.",
+            "default": "${command:boardlab.pickBoard}"
+          },
+          "port": {
+            "type": "string",
+            "description": "TODO! The qualified name of the port. The port protocol and the port address separated by a colon (`:`). The address can consists of the host and port separated by an additional colon. For example, 'serial:/dev/cu.usbmodem14201' or 'teensy:/usb:14300000'",
+            "default": "${command:boardlab.pickPort}"
+          },
+          "programmer": {
+            "type": "string",
+            "description": "The technical ID of the programmer to use"
+          }
+        }
+      }
+    ],
+    "views": {
+      "boardlabSketches": [
+        {
+          "id": "boardlab.currentSketch",
+          "name": "Current Sketch",
+          "contextualTitle": "Current Sketch",
+          "icon": "$(circuit-board)"
+        },
+        {
+          "id": "boardlab.sketchbook",
+          "name": "Sketchbook",
+          "contextualTitle": "Sketchbook",
+          "icon": "$(file-submodule)"
+        },
+        {
+          "id": "boardlab.examples",
+          "name": "Examples",
+          "contextualTitle": "Examples",
+          "icon": "$(book)",
+          "type": "webview"
+        }
+      ],
+      "boardlabPlatforms": [
+        {
+          "id": "boardlab.platformsManager",
+          "type": "webview",
+          "name": "Boards Manager",
+          "contextualTitle": "Boards Manager",
+          "icon": "$(package)"
+        }
+      ],
+      "boardlabLibraries": [
+        {
+          "id": "boardlab.librariesManager",
+          "type": "webview",
+          "name": "Library Manager",
+          "contextualTitle": "Library Manager",
+          "icon": "$(library)"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "title": "Sketches",
+          "id": "boardlabSketches",
+          "icon": "$(file-submodule)"
+        },
+        {
+          "title": "Boards",
+          "id": "boardlabPlatforms",
+          "icon": "$(package)"
+        },
+        {
+          "title": "Libraries",
+          "id": "boardlabLibraries",
+          "icon": "$(library)"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "boardlab.currentSketch",
+        "contents": "Loading sketches…",
+        "when": "boardlab.sketchbooks.loading"
+      },
+      {
+        "view": "boardlab.currentSketch",
+        "contents": "No sketches were detected in this workspace.\n[Create Sketch](command:boardlab.openNewSketchWizard)\n\nOpen an existing sketch by adding it to this workspace.\n[Open Sketch](command:boardlab.openSketch)\n\nClone a sketch into this workspace. The original sketch remains unchanged in its source location.\n[Clone Sketch](command:boardlab.cloneSketch)\n\nTo learn more about how sketches are structured, [read the documentation](https://arduino.github.io/arduino-cli/latest/sketch-specification).",
+        "when": "!boardlab.sketchbooks.loading && boardlab.sketchbooks.empty"
+      }
+    ]
+  },
+  "activationEvents": [
+    "workspaceContains:**/*.ino",
+    "onLanguage:ino",
+    "onTaskType:boardlab",
+    "onFileSystem:boardlab-example",
+    "onFileSystem:boardlab-example-md",
+    "onFileSystem:boardlab-sketchbook",
+    "onFile:sketch.yaml"
+  ],
+  "dependencies": {
+    "@grpc/grpc-js": "^1.7.2",
+    "@types/semver": "^7.3.13",
+    "abort-controller-x": "^0.4.1",
+    "ajv": "^8.12.0",
+    "ardunno-cli": "^0.1.12",
+    "ardunno-sketch": "^0.1.0-beta.3",
+    "boards-list": "^1.1.0",
+    "cors": "^2.8.5",
+    "ellipsize": "^0.6.2",
+    "express": "^5.1.0",
+    "fast-deep-equal": "^3.1.3",
+    "filename-reserved-regex": "^4.0.0",
+    "fqbn": "^1.3.0",
+    "fuse.js": "^7.1.0",
+    "get-arduino-tools": "^1.2.1",
+    "lodash.debounce": "^4.0.8",
+    "nice-grpc": "^2.1.7",
+    "nice-grpc-common": "^2.0.2",
+    "p-defer": "^3.0.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "rfdc": "^1.3.0",
+    "semver": "^7.5.4",
+    "tinyexec": "^1.0.1",
+    "vscode-messenger": "^0.5.1",
+    "vscode-messenger-common": "^0.5.1",
+    "vscode-ws-jsonrpc": "^3.4.0",
+    "ws": "^8.18.3",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^12.0.2",
+    "@semantic-release/release-notes-generator": "^14.1.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/filename-reserved-regex": "^3.0.0",
+    "@types/lodash.debounce": "^4.0.9",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "@types/temp": "^0.9.4",
+    "@types/vscode": "^1.107.0",
+    "@types/ws": "^8.18.1",
+    "@typescript-eslint/eslint-plugin": "^8.44.1",
+    "@typescript-eslint/parser": "^8.44.1",
+    "@vscode/test-electron": "^2.3.8",
+    "@vscode/vsce": "^3.7.1",
+    "clang-format-node": "^2.0.7",
+    "copyfiles": "^2.4.1",
+    "eslint": "^9.31.0",
+    "eslint-config-prettier": "^10.1.5",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-prettier": "^5.5.1",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "eslint-plugin-workspaces": "^0.10.0",
+    "glob": "^13.0.0",
+    "markdown-link-check": "^3.14.2",
+    "mocha": "^11.7.5",
+    "neostandard": "^0.12.2",
+    "prettier": "^3.6.2",
+    "prettier-plugin-jsdoc": "^1.3.3",
+    "prettier-plugin-organize-imports": "^4.1.0",
+    "prettier-plugin-packagejson": "^2.5.18",
+    "rimraf": "^6.0.1",
+    "semantic-release": "^25.0.2",
+    "semantic-release-vsce": "^6.0.20",
+    "temp": "^0.9.4",
+    "ts-loader": "^9.5.4",
+    "typescript": "^5.1.x",
+    "vitest": "^4.0.16",
+    "vscode-arduino-api": "^0.2.1",
+    "webpack": "^5.104.1",
+    "webpack-cli": "^6.0.1"
+  },
+  "engines": {
+    "vscode": "^1.107.0"
+  },
+  "icon": "resources/images/boardlab_large.png",
+  "galleryBanner": {
+    "color": "#fff",
+    "theme": "light"
+  },
+  "preview": true,
+  "extensionKind": [
+    "ui"
+  ]
+}

@@ -1,0 +1,152 @@
+html,
+body {
+  padding: 0;
+  height: 100%;
+}
+
+#root {
+  height: 100%;
+}
+
+.examples-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  color: var(--vscode-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: 13px;
+}
+
+.examples-view__search {
+  padding: 8px 12px 4px;
+}
+
+.examples-view__search vscode-textfield,
+.examples-view__search input[type='search']::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+.examples-view__search vscode-textfield {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.examples-search__icon {
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  overflow: hidden;
+  transform: scale(0.85);
+  transform-origin: center;
+}
+
+.examples-search__icon[data-active='true'] {
+  color: var(--vscode-inputOption-activeForeground, var(--vscode-focusBorder));
+  border-color: var(
+    --vscode-inputOption-activeBorder,
+    var(--vscode-focusBorder)
+  );
+  background-color: var(--vscode-inputOption-activeBackground, transparent);
+}
+
+.examples-search__icon:not([data-active='true']):hover {
+  color: var(--vscode-inputOption-hoverBorder, var(--vscode-foreground));
+}
+
+.examples-view__search-error {
+  margin-top: 4px;
+  color: var(
+    --vscode-inputValidation-errorForeground,
+    var(--vscode-errorForeground)
+  );
+  font-size: 12px;
+}
+
+.examples-view__body {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.examples-view__tree-container {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.examples-tree {
+  width: 100%;
+}
+
+.file {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.filename {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-meta {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.file-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 80ms ease-in-out;
+}
+
+.file:hover .file-actions,
+.file:focus-within .file-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.file-actions__icon {
+  cursor: pointer;
+}
+
+.examples-view__status {
+  padding: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.examples-view__status--error {
+  color: var(--vscode-errorForeground);
+}
+
+vscode-badge[variant='counter'] {
+  margin-left: auto;
+}
+
+.message {
+  align-items: center;
+  color: var(--vscode-descriptionForeground);
+  display: flex;
+  gap: 6px;
+  min-height: 20px;
+}
+
+.message-raw {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

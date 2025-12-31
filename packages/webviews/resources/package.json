@@ -1,0 +1,33 @@
+{
+  "name": "@boardlab/resources",
+  "version": "0.0.0",
+  "private": true,
+  "description": "",
+  "keywords": [],
+  "license": "MIT",
+  "author": "dankeboy36",
+  "main": "./out/index.js",
+  "types": "./out/index.d.ts",
+  "scripts": {
+    "build": "tsc -p ./",
+    "reset": "rimraf out node_modules",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "@boardlab/base": "0.0.0",
+    "@boardlab/protocol": "0.0.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-virtuoso": "^4.14.1",
+    "vscode-elements-x": "^0.1.3",
+    "vscode-messenger-common": "^0.5.1",
+    "vscode-messenger-webview": "^0.5.1",
+    "vscode-react-elements-x": "^0.1.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.x",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@types/vscode-webview": "^1.57.0"
+  }
+}

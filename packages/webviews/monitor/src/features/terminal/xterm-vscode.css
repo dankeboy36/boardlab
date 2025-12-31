@@ -1,0 +1,456 @@
+/* MIT License */
+/* https://github.com/microsoft/vscode/blob/3f25a2dc283a0c05101af22d6c990175b411064f/src/vs/workbench/contrib/terminal/browser/media/xterm.css */
+/* VS Code–style xterm surface, driven by --vscode-* tokens */
+
+.xterm {
+  cursor: text;
+  position: relative;
+  user-select: none;
+  -ms-user-select: none;
+  -webkit-user-select: none;
+
+  /* VS Code font + size defaults */
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size);
+
+  /* Background/foreground from terminal tokens; fall back to area/editor */
+  background-color: var(
+    --vscode-terminal-background,
+    var(--vscode-editor-background)
+  );
+  color: var(--vscode-terminal-foreground, var(--vscode-editor-foreground));
+}
+
+.xterm .xterm-decoration-top .xterm-decoration-overview-mark.find-active {
+  background-color: var(
+    --vscode-terminal-findMatchBackground,
+    rgba(81, 92, 106, 0.45)
+  );
+}
+
+.xterm .xterm-decoration-top .xterm-decoration-overview-mark.find {
+  background-color: var(
+    --vscode-terminal-findMatchHighlightBackground,
+    rgba(234, 92, 0, 0.33)
+  );
+}
+
+.xterm
+  .xterm-decoration-container
+  .xterm-decoration.xterm-find-result-decoration {
+  background-color: var(
+    --vscode-terminal-findMatchHighlightBackground,
+    rgba(234, 92, 0, 0.33)
+  );
+}
+
+.xterm
+  .xterm-decoration-container
+  .xterm-decoration.xterm-find-active-result-decoration {
+  background-color: var(
+    --vscode-terminal-findMatchBackground,
+    rgba(81, 92, 106, 0.45)
+  );
+}
+
+.monitor-terminal-search {
+  position: absolute;
+  top: 0;
+  right: 22px;
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.35));
+  border-bottom-left-radius: 4px;
+  border-bottom-right-radius: 4px;
+  background-color: var(--vscode-editorWidget-background, rgba(0, 0, 0, 0.6));
+  color: var(
+    --vscode-editorWidget-foreground,
+    var(--vscode-foreground, #cccccc)
+  );
+  box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.35));
+  z-index: 10;
+  opacity: 0;
+  transform: translateY(-12px);
+  pointer-events: none;
+  visibility: hidden;
+  font-size: 12px;
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease,
+    visibility 0s linear 0.2s;
+}
+
+.monitor-terminal-search.is-open {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+  visibility: visible;
+  transition-delay: 0s, 0s, 0s;
+}
+
+.monitor-terminal-search__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  padding: 1px;
+  margin-right: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  transform: scale(0.9);
+  transform-origin: center;
+  color: var(
+    --vscode-editorWidget-foreground,
+    var(--vscode-foreground, #cccccc)
+  );
+}
+
+.monitor-terminal-search__icon[data-active='true'] {
+  color: var(--vscode-inputOption-activeForeground);
+  border-color: var(
+    --vscode-inputOption-activeBorder,
+    var(--vscode-focusBorder, #0078d4)
+  );
+  background-color: var(
+    --vscode-inputOption-activeBackground,
+    rgba(0, 120, 212, 0.15)
+  );
+}
+
+.monitor-terminal-search__icon:not([data-active='true']):hover {
+  color: var(--vscode-inputOption-hoverBorder, var(--vscode-foreground));
+}
+
+.xterm .xterm-fg-0 {
+  color: var(--vscode-terminal-ansiBlack, #000000) !important;
+}
+.xterm .xterm-bg-0 {
+  background-color: var(--vscode-terminal-ansiBlack, #000000) !important;
+}
+.xterm .xterm-fg-1 {
+  color: var(--vscode-terminal-ansiRed, #cd3131) !important;
+}
+.xterm .xterm-bg-1 {
+  background-color: var(--vscode-terminal-ansiRed, #cd3131) !important;
+}
+.xterm .xterm-fg-2 {
+  color: var(--vscode-terminal-ansiGreen, #0dbc79) !important;
+}
+.xterm .xterm-bg-2 {
+  background-color: var(--vscode-terminal-ansiGreen, #0dbc79) !important;
+}
+.xterm .xterm-fg-3 {
+  color: var(--vscode-terminal-ansiYellow, #e5e510) !important;
+}
+.xterm .xterm-bg-3 {
+  background-color: var(--vscode-terminal-ansiYellow, #e5e510) !important;
+}
+.xterm .xterm-fg-4 {
+  color: var(--vscode-terminal-ansiBlue, #2472c8) !important;
+}
+.xterm .xterm-bg-4 {
+  background-color: var(--vscode-terminal-ansiBlue, #2472c8) !important;
+}
+.xterm .xterm-fg-5 {
+  color: var(--vscode-terminal-ansiMagenta, #bc3fbc) !important;
+}
+.xterm .xterm-bg-5 {
+  background-color: var(--vscode-terminal-ansiMagenta, #bc3fbc) !important;
+}
+.xterm .xterm-fg-6 {
+  color: var(--vscode-terminal-ansiCyan, #11a8cd) !important;
+}
+.xterm .xterm-bg-6 {
+  background-color: var(--vscode-terminal-ansiCyan, #11a8cd) !important;
+}
+.xterm .xterm-fg-7 {
+  color: var(--vscode-terminal-ansiWhite, #e5e5e5) !important;
+}
+.xterm .xterm-bg-7 {
+  background-color: var(--vscode-terminal-ansiWhite, #e5e5e5) !important;
+}
+.xterm .xterm-fg-8 {
+  color: var(--vscode-terminal-ansiBrightBlack, #666666) !important;
+}
+.xterm .xterm-bg-8 {
+  background-color: var(--vscode-terminal-ansiBrightBlack, #666666) !important;
+}
+.xterm .xterm-fg-9 {
+  color: var(--vscode-terminal-ansiBrightRed, #f14c4c) !important;
+}
+.xterm .xterm-bg-9 {
+  background-color: var(--vscode-terminal-ansiBrightRed, #f14c4c) !important;
+}
+.xterm .xterm-fg-10 {
+  color: var(--vscode-terminal-ansiBrightGreen, #23d18b) !important;
+}
+.xterm .xterm-bg-10 {
+  background-color: var(--vscode-terminal-ansiBrightGreen, #23d18b) !important;
+}
+.xterm .xterm-fg-11 {
+  color: var(--vscode-terminal-ansiBrightYellow, #f5f543) !important;
+}
+.xterm .xterm-bg-11 {
+  background-color: var(--vscode-terminal-ansiBrightYellow, #f5f543) !important;
+}
+.xterm .xterm-fg-12 {
+  color: var(--vscode-terminal-ansiBrightBlue, #3b8eea) !important;
+}
+.xterm .xterm-bg-12 {
+  background-color: var(--vscode-terminal-ansiBrightBlue, #3b8eea) !important;
+}
+.xterm .xterm-fg-13 {
+  color: var(--vscode-terminal-ansiBrightMagenta, #d670d6) !important;
+}
+.xterm .xterm-bg-13 {
+  background-color: var(
+    --vscode-terminal-ansiBrightMagenta,
+    #d670d6
+  ) !important;
+}
+.xterm .xterm-fg-14 {
+  color: var(--vscode-terminal-ansiBrightCyan, #29b8db) !important;
+}
+.xterm .xterm-bg-14 {
+  background-color: var(--vscode-terminal-ansiBrightCyan, #29b8db) !important;
+}
+.xterm .xterm-fg-15 {
+  color: var(--vscode-terminal-ansiBrightWhite, #ffffff) !important;
+}
+.xterm .xterm-bg-15 {
+  background-color: var(--vscode-terminal-ansiBrightWhite, #ffffff) !important;
+}
+
+.xterm.focus,
+.xterm:focus {
+  outline: none;
+}
+
+/* Helpers layer must float above canvases for IME */
+.xterm .xterm-helpers {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 5;
+}
+
+.xterm .xterm-helper-textarea {
+  padding: 0;
+  border: 0;
+  margin: 0;
+  position: absolute;
+  opacity: 0;
+  left: -9999em;
+  top: 0;
+  width: 0;
+  height: 0;
+  z-index: -5;
+  white-space: nowrap;
+  overflow: hidden;
+  resize: none;
+}
+
+.xterm .composition-view {
+  display: none;
+  position: absolute;
+  white-space: nowrap;
+  z-index: 1;
+  background: var(--vscode-editorWidget-background, #000);
+  color: var(--vscode-editorWidget-foreground, #fff);
+}
+.xterm .composition-view.active {
+  display: block;
+}
+
+.xterm .xterm-viewport {
+  position: absolute;
+  inset: 0;
+  /* match terminal background so scrollbar lane looks right */
+  background-color: inherit;
+}
+
+.xterm .xterm-screen {
+  position: relative;
+}
+.xterm .xterm-screen canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.xterm-char-measure-element {
+  display: inline-block;
+  visibility: hidden;
+  position: absolute;
+  top: 0;
+  left: -9999em;
+  line-height: normal;
+}
+
+.xterm.enable-mouse-events {
+  cursor: default;
+} /* eg. tmux */
+.xterm.xterm-cursor-pointer,
+.xterm .xterm-cursor-pointer {
+  cursor: pointer;
+}
+.xterm.column-select.focus {
+  cursor: crosshair;
+}
+
+/* Accessibility overlays */
+.xterm .xterm-accessibility:not(.debug),
+.xterm .xterm-message {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  color: transparent;
+  pointer-events: none;
+}
+.xterm .xterm-accessibility-tree {
+  font-family: monospace;
+  user-select: text;
+  white-space: pre;
+}
+.xterm .xterm-accessibility-tree > div {
+  transform-origin: left;
+  width: fit-content;
+}
+.xterm .live-region {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* Decorations */
+.xterm-screen .xterm-decoration-container .xterm-decoration {
+  z-index: 6;
+  position: absolute;
+}
+.xterm-screen
+  .xterm-decoration-container
+  .xterm-decoration.xterm-decoration-top-layer {
+  z-index: 7;
+}
+.xterm-decoration-overview-ruler {
+  z-index: 8;
+  position: absolute;
+  top: 0;
+  right: 0;
+  pointer-events: none;
+}
+.xterm-decoration-top {
+  z-index: 2;
+  position: relative;
+}
+
+/* Scrollbar look (mapped to VS Code tokens) */
+.xterm .xterm-scrollable-element > .scrollbar {
+  cursor: default;
+}
+.xterm .xterm-scrollable-element > .visible {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0); /* allow clicks on IE9 era nodes */
+  transition: opacity 100ms linear;
+  z-index: 11;
+}
+.xterm .xterm-scrollable-element > .invisible {
+  opacity: 0;
+  pointer-events: none;
+}
+.xterm .xterm-scrollable-element > .invisible.fade {
+  transition: opacity 800ms linear;
+}
+
+/* Scrollbar shadows */
+.xterm .xterm-scrollable-element > .shadow {
+  position: absolute;
+  display: none;
+}
+.xterm .xterm-scrollable-element > .shadow.top {
+  display: block;
+  top: 0;
+  left: 3px;
+  height: 3px;
+  width: 100%;
+  box-shadow: var(--vscode-scrollbar-shadow, #000) 0 6px 6px -6px inset;
+}
+.xterm .xterm-scrollable-element > .shadow.left {
+  display: block;
+  top: 3px;
+  left: 0;
+  height: 100%;
+  width: 3px;
+  box-shadow: var(--vscode-scrollbar-shadow, #000) 6px 0 6px -6px inset;
+}
+.xterm .xterm-scrollable-element > .shadow.top-left-corner {
+  display: block;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 3px;
+}
+
+/* Slider colors */
+.xterm .xterm-scrollbar .xterm-scrollbar-slider {
+  background: var(
+    --vscode-scrollbarSlider-background,
+    rgba(121, 121, 121, 0.4)
+  );
+}
+.xterm .xterm-scrollbar .xterm-scrollbar-slider:hover {
+  background: var(
+    --vscode-scrollbarSlider-hoverBackground,
+    rgba(100, 100, 100, 0.7)
+  );
+}
+.xterm .xterm-scrollbar .xterm-scrollbar-slider.active {
+  background: var(
+    --vscode-scrollbarSlider-activeBackground,
+    rgba(191, 191, 191, 0.4)
+  );
+}
+
+/* Text decorations */
+.xterm-underline-1 {
+  text-decoration: underline;
+}
+.xterm-underline-2 {
+  text-decoration: double underline;
+}
+.xterm-underline-3 {
+  text-decoration: wavy underline;
+}
+.xterm-underline-4 {
+  text-decoration: dotted underline;
+}
+.xterm-underline-5 {
+  text-decoration: dashed underline;
+}
+.xterm-overline {
+  text-decoration: overline;
+}
+.xterm-overline.xterm-underline-1 {
+  text-decoration: overline underline;
+}
+.xterm-overline.xterm-underline-2 {
+  text-decoration: overline double underline;
+}
+.xterm-overline.xterm-underline-3 {
+  text-decoration: overline wavy underline;
+}
+.xterm-overline.xterm-underline-4 {
+  text-decoration: overline dotted underline;
+}
+.xterm-overline.xterm-underline-5 {
+  text-decoration: overline dashed underline;
+}
+.xterm-strikethrough {
+  text-decoration: line-through;
+}

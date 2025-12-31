@@ -1,0 +1,17 @@
+.github/**
+.vscode/**
+.vscode-test/**
+node_modules/**
+packages/**
+out/**
+src/**
+scripts/**
+test_workspace/**
+**/tsconfig.json
+**/*.map
+**/*.ts
+.prettierignore
+.gitignore
+vsc-extension-quickstart.md
+AGENTS.md
+*.config.*
