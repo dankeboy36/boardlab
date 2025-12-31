@@ -649,7 +649,10 @@
           "type": "number",
           "default": 55888,
           "markdownDescription": "Preferred TCP port for the BoardLab monitor bridge server used to connect Visual Studio Code instances. If another process responds on this port with an unexpected protocol, the extension will warn and will not start its own bridge.",
-          "minimum": 55000
+          "minimum": 55000,
+          "tags": [
+            "advanced"
+          ]
         },
         "boardlab.monitor.bridgeMode": {
           "type": "string",
@@ -658,7 +661,10 @@
             "in-process"
           ],
           "default": "external-process",
-          "markdownDescription": "Controls how the BoardLab monitor bridge server is started. Use 'in-process' to run it inside the Visual Studio Code extension host for easier debugging. Changing this setting requires reloading the window."
+          "markdownDescription": "Controls how the BoardLab monitor bridge server is started. Use 'in-process' to run it inside the Visual Studio Code extension host for easier debugging. Changing this setting requires reloading the window.",
+          "tags": [
+            "advanced"
+          ]
         },
         "boardlab.cli.configPath": {
           "type": "string",
