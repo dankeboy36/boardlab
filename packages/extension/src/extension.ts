@@ -1956,8 +1956,27 @@ export function activate(context: vscode.ExtensionContext) {
     platformsViewProvider.onDidResolve(() => pushPlatformsFilter())
   )
 
+  let bridgeModeReloadPrompted = false
+  const promptBridgeModeReload = async () => {
+    if (bridgeModeReloadPrompted) {
+      return
+    }
+    bridgeModeReloadPrompted = true
+    const choice = await vscode.window.showInformationMessage(
+      'BoardLab needs to reload the window to apply the monitor bridge mode change.',
+      'Reload now',
+      'Later'
+    )
+    if (choice === 'Reload now') {
+      await vscode.commands.executeCommand('workbench.action.reloadWindow')
+    }
+  }
+
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration('boardlab.monitor.bridgeMode')) {
+        promptBridgeModeReload()
+      }
       if (event.affectsConfiguration('boardlab.monitor.lineEnding')) {
         monitorEditors.pushLineEnding()
         plotterEditors.pushLineEnding()
