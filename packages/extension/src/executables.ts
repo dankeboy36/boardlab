@@ -106,7 +106,7 @@ export class ExecutableContext {
   private async promptDownload(): Promise<boolean> {
     const { tool, version } = this.params
     const answer = await vscode.window.showInformationMessage(
-      `Welcome! In order to use this extension, you need to download '${tool}' version '${version}'. Would you like to download it from the official Arduino servers?`,
+      `Welcome to BoardLab! BoardLab needs the ${tool} (version ${version}) to work. It can be downloaded automatically from the official Arduino servers. Would you like to download it now?`,
       'Yes',
       'Later'
     )
