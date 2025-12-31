@@ -666,6 +666,14 @@
             "advanced"
           ]
         },
+        "boardlab.cli.daemonDebug": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Start the Arduino CLI daemon with the `--debug` flag. Changing this setting requires reloading the window.",
+          "tags": [
+            "advanced"
+          ]
+        },
         "boardlab.cli.configPath": {
           "type": "string",
           "markdownDescription": "Absolute path to the Arduino CLI configuration file used by BoardLab. Leave empty to auto-detect."

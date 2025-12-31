@@ -1,4 +1,5 @@
-import { spawn } from 'child_process'
+import { spawn } from 'node:child_process'
+import process from 'node:process'
 
 import defer from 'p-defer'
 import * as vscode from 'vscode'
@@ -65,10 +66,16 @@ export class Daemon implements vscode.Disposable {
     await this.cliContext.cliConfig.ready()
     this._deferredAddress = defer()
     const cliConfigPath = this.cliContext.cliConfig.uri?.fsPath
+    const debugEnabled = vscode.workspace
+      .getConfiguration('boardlab.cli')
+      .get<boolean>('daemonDebug', false)
     setTimeout(async () => {
       try {
-        const process = await spawnDaemon(command, cliConfigPath, (data) =>
-          this.outputChannel.append(data)
+        const process = await spawnDaemon(
+          command,
+          cliConfigPath,
+          (data) => this.outputChannel.append(data.trim()),
+          debugEnabled
         )
         this._process = process
         this.onDidChangeAddressEmitter.fire(this._process.address)
@@ -84,7 +91,7 @@ async function spawnDaemon(
   command: string,
   cliConfigPath: string | undefined,
   onStdOut: (data: string) => void = console.log,
-  debug = true,
+  debug = false,
   onStdErr?: (data: string) => void
 ): Promise<{ address: DaemonAddress } & vscode.Disposable> {
   return new Promise((resolve, reject) => {
@@ -96,8 +103,10 @@ async function spawnDaemon(
     if (cliConfigPath) {
       args.push('--config-file', cliConfigPath)
     }
-    const process = spawn(command, args)
-    process.stdout.on('data', (data) => {
+    const cp = spawn(command, args, {
+      env: { ...process.env, NO_COLOR: String(true) },
+    })
+    cp.stdout.on('data', (data) => {
       const chunk: string = data.toString()
       onStdOut(chunk)
       if (!address) {
@@ -108,8 +117,8 @@ async function spawnDaemon(
             resolve({
               address,
               dispose: () => {
-                if (!process.killed) {
-                  process.kill()
+                if (!cp.killed) {
+                  cp.kill()
                 }
               },
             })
@@ -118,11 +127,11 @@ async function spawnDaemon(
         }
       }
     })
-    process.stderr.on('data', (data) =>
+    cp.stderr.on('data', (data) =>
       onStdErr ? onStdErr(data.toString()) : onStdOut(data.toString())
     )
-    process.on('error', (err) => reject(err))
-    process.on('exit', (code, signal) => {
+    cp.on('error', (err) => reject(err))
+    cp.on('exit', (code, signal) => {
       let err: Error | undefined
       if (signal) {
         err = new Error(`Exited with signal ${signal}`)

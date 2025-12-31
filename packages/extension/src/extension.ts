@@ -1957,6 +1957,7 @@ export function activate(context: vscode.ExtensionContext) {
   )
 
   let bridgeModeReloadPrompted = false
+  let daemonDebugReloadPrompted = false
   const promptBridgeModeReload = async () => {
     if (bridgeModeReloadPrompted) {
       return
@@ -1971,11 +1972,28 @@ export function activate(context: vscode.ExtensionContext) {
       await vscode.commands.executeCommand('workbench.action.reloadWindow')
     }
   }
+  const promptDaemonDebugReload = async () => {
+    if (daemonDebugReloadPrompted) {
+      return
+    }
+    daemonDebugReloadPrompted = true
+    const choice = await vscode.window.showInformationMessage(
+      'BoardLab needs to reload the window to apply the Arduino CLI daemon debug setting change.',
+      'Reload now',
+      'Later'
+    )
+    if (choice === 'Reload now') {
+      await vscode.commands.executeCommand('workbench.action.reloadWindow')
+    }
+  }
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('boardlab.monitor.bridgeMode')) {
         promptBridgeModeReload()
+      }
+      if (event.affectsConfiguration('boardlab.cli.daemonDebug')) {
+        promptDaemonDebugReload()
       }
       if (event.affectsConfiguration('boardlab.monitor.lineEnding')) {
         monitorEditors.pushLineEnding()
