@@ -65,7 +65,7 @@ import { DaemonAddress } from './cli/daemon'
 import { toCompileSummary } from './compile'
 import { computeConfigOverrides } from './configOptions'
 import { MonitorManager } from './monitor/monitorManager'
-import { getPlatformRequirement } from './platformMissing'
+import { getPlatformRequirement, PlatformInfo } from './platformMissing'
 import {
   collectHistoryUpdates,
   matchesPlatformId,
@@ -1169,17 +1169,36 @@ export class BoardLabContextImpl implements BoardLabContext {
     if (picked && 'port' in picked && isPortIdentifier(picked.port)) {
       port = picked.port
     }
+
+    let platformRequirement: Required<PlatformInfo> | undefined
     if (board.fqbn) {
       const { arduino } = await this.client
       const boardDetails = await getBoardDetails(board.fqbn, arduino)
       if (boardDetails) {
         board = boardDetails
+      } else {
+        try {
+          // for attached + detected Arduino boards when fqbn is available but platform is missing
+          const fqbn = new FQBN(board.fqbn)
+          const platformId = `${fqbn.vendor}:${fqbn.arch}`
+          const platform =
+            await this.platformsManager.lookupPlatformQuick(platformId)
+          if (platform) {
+            platformRequirement = {
+              id: platformId,
+              name: platform.label,
+              version: platform.availableVersions[0],
+            }
+          }
+        } catch {}
       }
     }
-    const platformRequirement =
-      !isBoardDetails(board) && board
-        ? getPlatformRequirement(board)
-        : undefined
+    if (!platformRequirement) {
+      platformRequirement =
+        !isBoardDetails(board) && board
+          ? getPlatformRequirement(board)
+          : undefined
+    }
 
     if (platformRequirement && board) {
       const { id, name, version } = platformRequirement
