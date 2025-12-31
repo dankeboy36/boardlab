@@ -10,6 +10,8 @@ Arduino libraries, board packages, and toolchain binaries are downloaded exclusi
 
 BoardLab is **not affiliated with Arduino**. It uses the official Arduino CLI.
 
+![BoardLab](resources/static/boardlab.gif)
+
 ---
 
 ## Features
