@@ -11,6 +11,7 @@ export interface DaemonAddress {
 }
 
 export class Daemon implements vscode.Disposable {
+  private readonly outputChannel: vscode.OutputChannel
   private readonly onDidChangeAddressEmitter: vscode.EventEmitter<
     DaemonAddress | undefined
   >
@@ -20,14 +21,22 @@ export class Daemon implements vscode.Disposable {
 
   constructor(
     context: vscode.ExtensionContext,
-    private readonly cliContext: CliContext,
-    private readonly outputChannel: vscode.OutputChannel
+    private readonly cliContext: CliContext
   ) {
     this.onDidChangeAddressEmitter = new vscode.EventEmitter<
       DaemonAddress | undefined
     >()
-    context.subscriptions.push(this.onDidChangeAddressEmitter)
-    context.subscriptions.push(this)
+    this.outputChannel = vscode.window.createOutputChannel(
+      'BoardLab - Arduino CLI',
+      {
+        log: true,
+      }
+    )
+    context.subscriptions.push(
+      this.outputChannel,
+      this.onDidChangeAddressEmitter,
+      this
+    )
   }
 
   dispose(): void {

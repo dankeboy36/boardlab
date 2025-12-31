@@ -74,13 +74,13 @@ import { readProfiles } from './profile/profiles'
 import { LibrariesManager, PlatformsManager } from './resourcesManager'
 import { ConfigOptionItem } from './sketch/currentSketchView'
 import { SketchFolderImpl } from './sketch/sketchFolder'
+import { restoreCurrentSketch } from './sketch/sketchRestore'
 import {
   SketchPathLike,
   Sketchbooks,
   hasSketchFolder,
   sketchPathEquals,
 } from './sketch/sketchbooks'
-import { restoreCurrentSketch } from './sketch/sketchRestore'
 import { pickSketch } from './sketch/sketches'
 import { Sketch } from './sketch/types'
 import { BaseRecentItems, RecentItems, disposeAll, mementoKey } from './utils'
@@ -221,7 +221,7 @@ export class BoardLabContextImpl implements BoardLabContext {
   ) {
     this.outputChannel = outputChannel
     this.workspaceState = context.workspaceState
-    this.cliContext = new CliContext(context, outputChannel)
+    this.cliContext = new CliContext(context)
     this._client = createClient(this.cliContext)
     this._currentCliConfig = this.snapshotCliConfig(
       this.cliContext.cliConfig.data
