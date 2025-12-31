@@ -11,6 +11,7 @@ import {
   BoardsList,
   BoardsListItemWithBoard,
   DetectedPorts,
+  PortIdentifier,
   boardIdentifierEquals,
   createBoardsList,
   isBoardIdentifier,
@@ -124,12 +125,12 @@ export async function pickBoard(
             }
             let result: PickBoardResult | undefined
             let selectedBoardForHistory: BoardIdentifier | undefined
-            if (item instanceof BoardQuickPickItem) {
-              result = item.data
-              selectedBoardForHistory = item.data
-            } else if (item instanceof BoardsListQuickPickItem) {
+            if (item instanceof BoardsListQuickPickItem) {
               result = item.item
               selectedBoardForHistory = item.item.board
+            } else if (item instanceof BoardQuickPickItem) {
+              result = item.data
+              selectedBoardForHistory = item.data
             }
             if (selectedBoardForHistory) {
               // Fire and forget; history update is persisted via memento.
@@ -381,7 +382,9 @@ class BoardQuickPickItem extends BaseQuickPickItem<BoardIdentifier> {
 }
 
 class BoardsListQuickPickItem extends BoardQuickPickItem {
-  constructor(readonly item: BoardsListItemWithBoard) {
+  constructor(
+    readonly item: BoardsListItemWithBoard & { port?: PortIdentifier }
+  ) {
     super(item.board)
   }
 }

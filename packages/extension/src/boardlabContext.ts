@@ -12,9 +12,11 @@ import {
   BoardsConfig,
   BoardsListItemWithBoard,
   Defined,
+  PortIdentifier,
   boardIdentifierEquals,
   isBoardIdentifier,
   isBoardsListItem,
+  isPortIdentifier,
 } from 'boards-list'
 import { FQBN } from 'fqbn'
 import defer from 'p-defer'
@@ -1158,10 +1160,14 @@ export class BoardLabContextImpl implements BoardLabContext {
       return undefined
     }
     let board: BoardIdentifier | ApiBoardDetails | undefined
+    let port: PortIdentifier | undefined
     if (isBoardIdentifier(picked)) {
       board = picked
     } else {
       board = picked.board
+    }
+    if (picked && 'port' in picked && isPortIdentifier(picked.port)) {
+      port = picked.port
     }
     if (board.fqbn) {
       const { arduino } = await this.client
@@ -1196,6 +1202,9 @@ export class BoardLabContextImpl implements BoardLabContext {
         })
     }
     sketch.setBoard(board)
+    if (port) {
+      sketch.setPort(port)
+    }
     this.emitSketchChange(sketch, 'port', 'board')
 
     // TODO: move this somewhere else
