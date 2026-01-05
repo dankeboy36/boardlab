@@ -2,7 +2,6 @@ import {
   BoardDetailsResponse,
   BoardListItem,
   Platform,
-  Port,
   ToolsDependencies,
 } from 'ardunno-cli'
 import {
@@ -11,11 +10,11 @@ import {
   BoardsList,
   BoardsListItemWithBoard,
   DetectedPorts,
+  Port,
   PortIdentifier,
   boardIdentifierEquals,
   createBoardsList,
   isBoardIdentifier,
-  Port as BoardListPort,
 } from 'boards-list'
 import { FQBN } from 'fqbn'
 import { ClientError, Status } from 'nice-grpc-common'
@@ -389,10 +388,7 @@ class BoardsListQuickPickItem extends BoardQuickPickItem {
     super(item.board)
   }
 }
-export function portQuickItemLabel(
-  port: BoardListPort,
-  selected = false
-): string {
+export function portQuickItemLabel(port: Port, selected = false): string {
   const icon = portProtocolIcon(port)
   return `${selected ? '$(check) ' : ''}${icon} ${port.label}`
 }
