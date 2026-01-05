@@ -32,6 +32,7 @@
     "fqbn": "^1.3.1",
     "nanoid": "^5.1.5",
     "p-defer": "^3.0.0",
+    "perfect-scrollbar": "^1.5.6",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-redux": "^9.2.0",

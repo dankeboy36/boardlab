@@ -13,13 +13,13 @@ const hexWithAlphaRegex = /^#([0-9a-f]{4}|[0-9a-f]{8})$/i
 const rgbRegex = /^rgb\(\s*([0-9]+)[\s,]+([0-9]+)[\s,]+([0-9]+)\s*\)$/i
 const slashAlphaRegex = /\/\s*[\d.]+\s*\)$/ // rgb(255 255 255 / 0.5)
 
-const hasExplicitAlpha = (value) =>
+const hasExplicitAlpha = (/** @type {string} */ value) =>
   /rgba|hsla/i.test(value) ||
   hexWithAlphaRegex.test(value) ||
   slashAlphaRegex.test(value) ||
   value.trim().toLowerCase() === 'transparent'
 
-const hexToRgb = (value) => {
+const hexToRgb = (/** @type {string} */ value) => {
   let hex = value.replace('#', '')
   if (hex.length === 3) {
     hex = hex
@@ -35,6 +35,7 @@ const hexToRgb = (value) => {
   return [r, g, b]
 }
 
+/** @param {string | null} value */
 export function normalizeAlpha(value, alpha = FIND_MATCH_ALPHA) {
   const color = value?.trim()
   if (!color) return ''
@@ -56,8 +57,10 @@ function buildXtermThemeFromCSS({ area = detectArea() } = {}) {
   const cs = getComputedStyle(document.documentElement)
 
   // Helpers
-  const v = (name) => cs.getPropertyValue(name).trim() || ''
-  const first = (...vals) => vals.find(Boolean)
+  const v = (/** @type {string} */ name) =>
+    cs.getPropertyValue(name).trim() || ''
+  const first = (/** @type {(string | undefined)[]} */ ...vals) =>
+    vals.find(Boolean)
 
   // Tokens from VS Code themes (converted to CSS vars by your theming layer):
   const termBg = v('--vscode-terminal-background')
@@ -82,9 +85,12 @@ function buildXtermThemeFromCSS({ area = detectArea() } = {}) {
         : v('--vscode-sideBar-foreground')
 
   // ANSI palette (use terminal.ansi* tokens if present; fall back to editor colors reasonably)
-  const ansi = (name, fallback) =>
-    first(v(`--vscode-terminal-ansi${name}`), fallback)
-  const gentle = (tok, def) => first(v(tok), def) // helper for bright fallbacks
+  const ansi = (
+    /** @type {string} */ name,
+    /** @type {string | undefined} */ fallback
+  ) => first(v(`--vscode-terminal-ansi${name}`), fallback)
+  const gentle = (/** @type {string} */ tok, /** @type {string} */ def) =>
+    first(v(tok), def) // helper for bright fallbacks
 
   /** @type {import('@xterm/xterm').ITerminalOptions['theme']} */
   const theme = {
@@ -168,7 +174,11 @@ export function attachXtermTheme(terminal, options = {}) {
     if (typeof document !== 'undefined') {
       const root = document.documentElement
       if (root) {
-        const ensureToken = (name, fallback, { enforceAlpha = false } = {}) => {
+        const ensureToken = (
+          /** @type {string} */ name,
+          /** @type {string | null} */ fallback,
+          { enforceAlpha = false } = {}
+        ) => {
           try {
             const current = getComputedStyle(root).getPropertyValue(name).trim()
             if (!current) {

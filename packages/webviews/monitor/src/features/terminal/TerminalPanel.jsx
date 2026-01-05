@@ -9,6 +9,8 @@ import {
   useState,
 } from 'react'
 import { useSelector } from 'react-redux'
+import PerfectScrollbar from 'perfect-scrollbar'
+import 'perfect-scrollbar/css/perfect-scrollbar.css'
 
 import { useMonitorStream } from '@boardlab/monitor-shared/serial-monitor'
 
@@ -74,6 +76,12 @@ const TerminalPanel = forwardRef(function TerminalPanel(
     persistedTerminal.current.scrollLock
   )
   const scrollLockRef = useRef(scrollLock)
+  const scrollableRef = useRef(
+    /** @type {HTMLDivElement | null} */ (null)
+  )
+  const psRef = useRef(
+    /** @type {PerfectScrollbar | null} */ (null)
+  )
   const persistTimerRef = useRef(
     /** @type {ReturnType<typeof setTimeout> | null} */ (null)
   )
@@ -131,11 +139,50 @@ const TerminalPanel = forwardRef(function TerminalPanel(
     }, 500)
   }, [persistNow])
 
+  const refreshScrollbar = useCallback(() => {
+    try {
+      psRef.current?.update()
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    let disposed = false
+    let rafId = /** @type {number | null} */ (null)
+    let psInstance = /** @type {PerfectScrollbar | null} */ (null)
+
+    const attach = () => {
+      if (disposed) return
+      const container = scrollableRef.current
+      const viewport = container?.querySelector('.xterm-viewport')
+      if (!(viewport instanceof HTMLElement)) {
+        rafId = requestAnimationFrame(attach)
+        return
+      }
+      psInstance = new PerfectScrollbar(viewport, {
+        wheelPropagation: false,
+      })
+      psRef.current = psInstance
+      refreshScrollbar()
+    }
+
+    attach()
+
+    return () => {
+      disposed = true
+      if (rafId != null) {
+        cancelAnimationFrame(rafId)
+      }
+      psInstance?.destroy()
+      psRef.current = null
+    }
+  }, [refreshScrollbar])
+
   const handleClearAll = useCallback(() => {
     xtermRef.current?.clear()
     bufferRef.current = ''
     schedulePersist()
-  }, [schedulePersist])
+    refreshScrollbar()
+  }, [refreshScrollbar, schedulePersist])
 
   useMonitorStream({
     onStart: () => {
@@ -193,11 +240,13 @@ const TerminalPanel = forwardRef(function TerminalPanel(
           xtermRef.current?.write(bufferRef.current)
         } catch {}
         bufferRef.current = ''
+        refreshScrollbar()
       } else {
         bufferRef.current = ''
         bufferSessionRef.current = sid
       }
       xtermRef.current?.write(chunk)
+      refreshScrollbar()
       schedulePersist()
     },
   })
@@ -234,6 +283,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(
             xtermRef.current?.write(bufferRef.current)
           } catch {}
           bufferRef.current = ''
+          refreshScrollbar()
         } else {
           bufferRef.current = ''
           bufferSessionRef.current = sessionRef.current
@@ -254,6 +304,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(
           xtermRef.current?.write(bufferRef.current)
         } catch {}
         bufferRef.current = ''
+        refreshScrollbar()
       } else {
         bufferRef.current = ''
         bufferSessionRef.current = sessionRef.current
@@ -324,6 +375,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(
       try {
         xtermRef.current.clear()
         xtermRef.current.write(initialText)
+        refreshScrollbar()
       } catch {}
       persistedTerminal.current.text = ''
     }
@@ -353,6 +405,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(
       }}
     >
       <div
+        ref={scrollableRef}
         style={{
           flex: 1,
           minHeight: 0,
@@ -360,6 +413,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(
           background:
             'var(--vscode-terminal-background, var(--vscode-editor-background))',
           overflow: 'hidden',
+          position: 'relative',
         }}
       >
         <XtermView

@@ -2,6 +2,12 @@
 /* https://github.com/microsoft/vscode/blob/3f25a2dc283a0c05101af22d6c990175b411064f/src/vs/workbench/contrib/terminal/browser/media/xterm.css */
 /* VS Code–style xterm surface, driven by --vscode-* tokens */
 
+:root {
+  --vscode-scrollbarSlider-background: rgba(100, 100, 100, 0.4);
+  --vscode-scrollbarSlider-hoverBackground: rgba(100, 100, 100, 0.7);
+  --vscode-scrollbarSlider-activeBackground: rgba(0, 0, 0, 0.6);
+}
+
 .xterm {
   cursor: text;
   position: relative;
@@ -226,231 +232,45 @@
   background-color: var(--vscode-terminal-ansiBrightWhite, #ffffff) !important;
 }
 
-.xterm.focus,
-.xterm:focus {
-  outline: none;
+.ps__rail-y {
+  width: 14px;
+  right: 4px;
+  opacity: 1 !important;
+  transition: background 200ms ease;
+  background: transparent !important;
 }
 
-/* Helpers layer must float above canvases for IME */
-.xterm .xterm-helpers {
-  position: absolute;
-  inset: 0 0 auto 0;
-  z-index: 5;
+.ps__rail-y.ps--clicking,
+.ps__rail-y:hover,
+.ps__rail-y.ps--focus {
+  background: transparent !important;
 }
 
-.xterm .xterm-helper-textarea {
-  padding: 0;
-  border: 0;
-  margin: 0;
-  position: absolute;
-  opacity: 0;
-  left: -9999em;
-  top: 0;
-  width: 0;
-  height: 0;
-  z-index: -5;
-  white-space: nowrap;
-  overflow: hidden;
-  resize: none;
+.ps__thumb-y {
+  width: 14px;
+  min-height: 14px;
+  border-radius: 0 !important;
+  background: var(--vscode-scrollbarSlider-background);
+  opacity: 1 !important;
+  transition: background 150ms ease;
 }
 
-.xterm .composition-view {
-  display: none;
-  position: absolute;
-  white-space: nowrap;
-  z-index: 1;
-  background: var(--vscode-editorWidget-background, #000);
-  color: var(--vscode-editorWidget-foreground, #fff);
-}
-.xterm .composition-view.active {
-  display: block;
+.ps:hover > .ps__thumb-y,
+.ps:hover .ps__thumb-y,
+.ps--focus > .ps__thumb-y,
+.ps--focus .ps__thumb-y,
+.ps--scrolling-y > .ps__thumb-y,
+.ps--scrolling-y .ps__thumb-y {
+  background: var(--vscode-scrollbarSlider-hoverBackground) !important;
+  width: 14px !important;
 }
 
-.xterm .xterm-viewport {
-  position: absolute;
-  inset: 0;
-  /* match terminal background so scrollbar lane looks right */
-  background-color: inherit;
-}
-
-.xterm .xterm-screen {
-  position: relative;
-}
-.xterm .xterm-screen canvas {
-  position: absolute;
-  left: 0;
-  top: 0;
-}
-
-.xterm-char-measure-element {
-  display: inline-block;
-  visibility: hidden;
-  position: absolute;
-  top: 0;
-  left: -9999em;
-  line-height: normal;
-}
-
-.xterm.enable-mouse-events {
-  cursor: default;
-} /* eg. tmux */
-.xterm.xterm-cursor-pointer,
-.xterm .xterm-cursor-pointer {
-  cursor: pointer;
-}
-.xterm.column-select.focus {
-  cursor: crosshair;
-}
-
-/* Accessibility overlays */
-.xterm .xterm-accessibility:not(.debug),
-.xterm .xterm-message {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  color: transparent;
-  pointer-events: none;
-}
-.xterm .xterm-accessibility-tree {
-  font-family: monospace;
-  user-select: text;
-  white-space: pre;
-}
-.xterm .xterm-accessibility-tree > div {
-  transform-origin: left;
-  width: fit-content;
-}
-.xterm .live-region {
-  position: absolute;
-  left: -9999px;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-}
-
-/* Decorations */
-.xterm-screen .xterm-decoration-container .xterm-decoration {
-  z-index: 6;
-  position: absolute;
-}
-.xterm-screen
-  .xterm-decoration-container
-  .xterm-decoration.xterm-decoration-top-layer {
-  z-index: 7;
-}
-.xterm-decoration-overview-ruler {
-  z-index: 8;
-  position: absolute;
-  top: 0;
-  right: 0;
-  pointer-events: none;
-}
-.xterm-decoration-top {
-  z-index: 2;
-  position: relative;
-}
-
-/* Scrollbar look (mapped to VS Code tokens) */
-.xterm .xterm-scrollable-element > .scrollbar {
-  cursor: default;
-}
-.xterm .xterm-scrollable-element > .visible {
-  opacity: 1;
-  background: rgba(0, 0, 0, 0); /* allow clicks on IE9 era nodes */
-  transition: opacity 100ms linear;
-  z-index: 11;
-}
-.xterm .xterm-scrollable-element > .invisible {
-  opacity: 0;
-  pointer-events: none;
-}
-.xterm .xterm-scrollable-element > .invisible.fade {
-  transition: opacity 800ms linear;
-}
-
-/* Scrollbar shadows */
-.xterm .xterm-scrollable-element > .shadow {
-  position: absolute;
-  display: none;
-}
-.xterm .xterm-scrollable-element > .shadow.top {
-  display: block;
-  top: 0;
-  left: 3px;
-  height: 3px;
-  width: 100%;
-  box-shadow: var(--vscode-scrollbar-shadow, #000) 0 6px 6px -6px inset;
-}
-.xterm .xterm-scrollable-element > .shadow.left {
-  display: block;
-  top: 3px;
-  left: 0;
-  height: 100%;
-  width: 3px;
-  box-shadow: var(--vscode-scrollbar-shadow, #000) 6px 0 6px -6px inset;
-}
-.xterm .xterm-scrollable-element > .shadow.top-left-corner {
-  display: block;
-  top: 0;
-  left: 0;
-  height: 3px;
-  width: 3px;
-}
-
-/* Slider colors */
-.xterm .xterm-scrollbar .xterm-scrollbar-slider {
-  background: var(
-    --vscode-scrollbarSlider-background,
-    rgba(121, 121, 121, 0.4)
-  );
-}
-.xterm .xterm-scrollbar .xterm-scrollbar-slider:hover {
-  background: var(
-    --vscode-scrollbarSlider-hoverBackground,
-    rgba(100, 100, 100, 0.7)
-  );
-}
-.xterm .xterm-scrollbar .xterm-scrollbar-slider.active {
-  background: var(
-    --vscode-scrollbarSlider-activeBackground,
-    rgba(191, 191, 191, 0.4)
-  );
-}
-
-/* Text decorations */
-.xterm-underline-1 {
-  text-decoration: underline;
-}
-.xterm-underline-2 {
-  text-decoration: double underline;
-}
-.xterm-underline-3 {
-  text-decoration: wavy underline;
-}
-.xterm-underline-4 {
-  text-decoration: dotted underline;
-}
-.xterm-underline-5 {
-  text-decoration: dashed underline;
-}
-.xterm-overline {
-  text-decoration: overline;
-}
-.xterm-overline.xterm-underline-1 {
-  text-decoration: overline underline;
-}
-.xterm-overline.xterm-underline-2 {
-  text-decoration: overline double underline;
-}
-.xterm-overline.xterm-underline-3 {
-  text-decoration: overline wavy underline;
-}
-.xterm-overline.xterm-underline-4 {
-  text-decoration: overline dotted underline;
-}
-.xterm-overline.xterm-underline-5 {
-  text-decoration: overline dashed underline;
-}
-.xterm-strikethrough {
-  text-decoration: line-through;
+.ps__rail-y.ps--clicking > .ps__thumb-y,
+.ps__rail-y.ps--clicking .ps__thumb-y,
+.ps--clicking > .ps__thumb-y,
+.ps--clicking .ps__thumb-y,
+.ps__rail-y.ps--clicking .ps__thumb-y:active,
+.ps__thumb-y:active {
+  background: var(--vscode-scrollbarSlider-activeBackground) !important;
+  width: 14px !important;
 }
