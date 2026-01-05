@@ -21,6 +21,6 @@
     "vscode-messenger-common": "^0.5.1"
   },
   "devDependencies": {
-    "vscode-arduino-api": "^0.2.3"
+    "vscode-arduino-api": "^0.2.4"
   }
 }
