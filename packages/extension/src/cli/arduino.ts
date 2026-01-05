@@ -51,7 +51,12 @@ import type {
   UploadUsingProgrammerRequest,
   UploadUsingProgrammerResponse,
 } from 'ardunno-cli/api'
-import { BoardIdentifier, DetectedPorts, PortIdentifier } from 'boards-list'
+import {
+  BoardIdentifier,
+  DetectedPorts,
+  parsePortKey,
+  PortIdentifier,
+} from 'boards-list'
 import defer from 'p-defer'
 import { sort as sortSemver } from 'semver'
 import * as vscode from 'vscode'
@@ -248,7 +253,7 @@ export function revivePort(portKey: PortQName): PortIdentifier | undefined {
       .split(portKeySeparator, 2)
     return protocol && address ? { protocol, address } : undefined
   }
-  return undefined
+  return parsePortKey(portKey)
 }
 
 export type InstalledBoardListItem = BoardIdentifier & {

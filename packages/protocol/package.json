@@ -16,11 +16,11 @@
   "dependencies": {
     "@c4312/evt": "^0.1.1",
     "ardunno-cli": "^0.1.12",
-    "boards-list": "^1.1.0",
+    "boards-list": "^2.0.0",
     "vscode-jsonrpc": "^8.2.1",
     "vscode-messenger-common": "^0.5.1"
   },
   "devDependencies": {
-    "vscode-arduino-api": "^0.2.0"
+    "vscode-arduino-api": "^0.2.4"
   }
 }

@@ -8,5 +8,6 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     exclude: ['src/test/suite/**/*-vsix-test.ts'],
+    setupFiles: ['src/test/setup/vscode.ts'],
   },
 })

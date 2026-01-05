@@ -140,6 +140,9 @@ export interface BoardLabContext extends ArduinoContext {
   readonly outputChannel: vscode.OutputChannel
 }
 
+type SketchPort = SketchFolder['port']
+type SelectedPort = NonNullable<SketchPort>
+
 export function createBoardLabContext(
   context: vscode.ExtensionContext,
   messenger: Messenger,
@@ -989,7 +992,7 @@ export class BoardLabContextImpl implements BoardLabContext {
   async pickBoardsConfig(currentSketch: SketchFolder | undefined): Promise<
     | Readonly<{
         selectedBoard: BoardIdentifier | ApiBoardDetails
-        selectedPort: Port
+        selectedPort: SelectedPort
       }>
     | undefined
   > {
@@ -1008,10 +1011,9 @@ export class BoardLabContextImpl implements BoardLabContext {
       this.boardsListWatcher.onDidChangeDetectedPorts
     )
     let board: BoardIdentifier
-    let port: Port | undefined
+    let port: SketchPort
     if (isBoardsListItem(pickedBoard)) {
-      // TODO: correct vscode-arduino-api
-      port = pickedBoard.port as any
+      port = pickedBoard.port
       board = pickedBoard.board
     } else if (pickedBoard) {
       board = pickedBoard
@@ -1050,7 +1052,7 @@ export class BoardLabContextImpl implements BoardLabContext {
 
   async pickPort(
     currentSketch: SketchFolder | undefined = this.currentSketch
-  ): Promise<Port | undefined> {
+  ): Promise<SketchPort> {
     if (!currentSketch) {
       return undefined
     }
@@ -1060,7 +1062,7 @@ export class BoardLabContextImpl implements BoardLabContext {
       this.pinnedPorts,
       this.recentPorts
     )
-    return port as any // TODO: fix vscode-arduino-api's port inconsistency
+    return port
   }
 
   async selectPort(
@@ -1068,7 +1070,7 @@ export class BoardLabContextImpl implements BoardLabContext {
       | SketchFolder
       | Promise<SketchFolder | undefined>
       | undefined = this.currentSketch ?? this.selectSketch()
-  ): Promise<Port | undefined> {
+  ): Promise<SketchPort> {
     const sketch = await currentSketch
     if (!(sketch instanceof SketchFolderImpl)) {
       return undefined

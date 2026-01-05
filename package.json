@@ -1481,7 +1481,7 @@
     "ajv": "^8.12.0",
     "ardunno-cli": "^0.1.12",
     "ardunno-sketch": "^0.1.0-beta.3",
-    "boards-list": "^1.1.0",
+    "boards-list": "^2.0.0",
     "cors": "^2.8.5",
     "ellipsize": "^0.6.2",
     "express": "^5.1.0",
@@ -1549,7 +1549,7 @@
     "ts-loader": "^9.5.4",
     "typescript": "^5.1.x",
     "vitest": "^4.0.16",
-    "vscode-arduino-api": "^0.2.1",
+    "vscode-arduino-api": "^0.2.4",
     "webpack": "^5.104.1",
     "webpack-cli": "^6.0.1"
   },

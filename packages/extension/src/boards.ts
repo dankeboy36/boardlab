@@ -2,7 +2,6 @@ import {
   BoardDetailsResponse,
   BoardListItem,
   Platform,
-  Port,
   ToolsDependencies,
 } from 'ardunno-cli'
 import {
@@ -11,6 +10,7 @@ import {
   BoardsList,
   BoardsListItemWithBoard,
   DetectedPorts,
+  Port,
   PortIdentifier,
   boardIdentifierEquals,
   createBoardsList,

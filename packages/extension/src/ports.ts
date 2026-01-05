@@ -111,8 +111,7 @@ class DetectedPortQuickItem implements vscode.QuickPickItem {
     readonly detectedPort: DetectedPort,
     selected: boolean
   ) {
-    // TODO: change vscode-arduino-api's Port#properties
-    this.label = portQuickItemLabel(detectedPort.port as any, selected)
+    this.label = portQuickItemLabel(detectedPort.port, selected)
     const boards = detectedPort.boards
     if (boards) {
       if (detectedPort.boards.length === 1) {
