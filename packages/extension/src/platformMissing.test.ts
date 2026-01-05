@@ -1,28 +1,6 @@
 import type { BoardIdentifier } from 'boards-list'
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('vscode', () => {
-  class EventEmitter<T = unknown> {
-    private listeners: ((value: T) => void)[] = []
-    event = (listener: (value: T) => void) => {
-      this.listeners.push(listener)
-    }
-
-    fire(value: T): void {
-      for (const listener of this.listeners) listener(value)
-    }
-
-    dispose(): void {
-      this.listeners = []
-    }
-  }
-  return {
-    EventEmitter,
-    ThemeIcon: class {},
-    QuickPickItemKind: { Separator: -1 },
-  }
-})
-
 const loadBoardsModule = async () => import('./boards')
 const loadPlatformMissing = async () => import('./platformMissing')
 
