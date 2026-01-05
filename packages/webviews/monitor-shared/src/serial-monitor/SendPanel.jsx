@@ -43,18 +43,18 @@ export default function SendPanel({
   }, [])
 
   const doSend = useCallback(
-    (/** @type {string} */ prepared) => {
+    (/** @type {string} */ typed, /** @type {string} */ finalMessage) => {
       const last = history[history.length - 1]
       const nextHistory =
-        prepared && prepared !== last
-          ? [...history.slice(-MAX_HISTORY + 1), prepared]
+        typed && typed !== last
+          ? [...history.slice(-MAX_HISTORY + 1), typed]
           : history
       if (nextHistory !== history) {
         setHistory(nextHistory)
         saveHistory(nextHistory)
       }
       setHistoryIndex(-1)
-      onSend?.(prepared)
+      onSend?.(finalMessage)
       setText('')
     },
     [onSend, history, saveHistory]
@@ -86,7 +86,7 @@ export default function SendPanel({
                 : lineEnding === 'crlf'
                   ? '\r\n'
                   : ''
-          doSend(prepared + suffix)
+          doSend(prepared, prepared + suffix)
         }}
         registerSubmitter={(fn) => (submitRef.current = fn)}
         onHistoryPrev={() => {

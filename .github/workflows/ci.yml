@@ -127,7 +127,7 @@ jobs:
     name: Release
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
-    needs: [package]
+    needs: [determine-version, test]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
