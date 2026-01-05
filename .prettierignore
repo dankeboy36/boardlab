@@ -2,3 +2,4 @@ out
 dist
 build
 .vscode-test
+CHANGELOG.md
