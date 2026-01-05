@@ -17,7 +17,7 @@
     "@boardlab/base": "0.0.0",
     "@boardlab/protocol": "0.0.0",
     "@reduxjs/toolkit": "^2.8.2",
-    "boards-list": "^1.1.0",
+    "boards-list": "^2.0.0",
     "react": "^19.1.1",
     "react-redux": "^9.2.0",
     "vscode-elements-x": "^0.1.3",
