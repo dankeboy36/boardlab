@@ -79,6 +79,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(
   const scrollableRef = useRef(
     /** @type {HTMLDivElement | null} */ (null)
   )
+  const [scrollbarVisible, setScrollbarVisible] = useState(false)
   const psRef = useRef(
     /** @type {PerfectScrollbar | null} */ (null)
   )
@@ -395,6 +396,14 @@ const TerminalPanel = forwardRef(function TerminalPanel(
     }
   }, [persistNow])
 
+  const handleMouseEnter = useCallback(() => {
+    setScrollbarVisible(true)
+  }, [])
+
+  const handleMouseLeave = useCallback(() => {
+    setScrollbarVisible(false)
+  }, [])
+
   return (
     <div
       style={{
@@ -406,6 +415,11 @@ const TerminalPanel = forwardRef(function TerminalPanel(
     >
       <div
         ref={scrollableRef}
+        className={`monitor-scrollable${
+          scrollbarVisible ? ' monitor-scrollbar-visible' : ''
+        }`}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         style={{
           flex: 1,
           minHeight: 0,

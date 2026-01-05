@@ -232,12 +232,13 @@
   background-color: var(--vscode-terminal-ansiBrightWhite, #ffffff) !important;
 }
 
-.ps__rail-y {
+.monitor-scrollable .ps__rail-y {
   width: 14px;
   right: 4px;
-  opacity: 1 !important;
-  transition: background 200ms ease;
+  opacity: 0;
+  transition: opacity 0.4s ease, background 200ms ease;
   background: transparent !important;
+  pointer-events: none;
 }
 
 .ps__rail-y.ps--clicking,
@@ -246,7 +247,7 @@
   background: transparent !important;
 }
 
-.ps__thumb-y {
+.monitor-scrollable .ps__thumb-y {
   width: 14px;
   min-height: 14px;
   border-radius: 0 !important;
@@ -255,22 +256,27 @@
   transition: background 150ms ease;
 }
 
-.ps:hover > .ps__thumb-y,
-.ps:hover .ps__thumb-y,
-.ps--focus > .ps__thumb-y,
-.ps--focus .ps__thumb-y,
-.ps--scrolling-y > .ps__thumb-y,
-.ps--scrolling-y .ps__thumb-y {
+.monitor-scrollable .ps:hover > .ps__thumb-y,
+.monitor-scrollable .ps:hover .ps__thumb-y,
+.monitor-scrollable .ps--focus > .ps__thumb-y,
+.monitor-scrollable .ps--focus .ps__thumb-y,
+.monitor-scrollable .ps--scrolling-y > .ps__thumb-y,
+.monitor-scrollable .ps--scrolling-y .ps__thumb-y {
   background: var(--vscode-scrollbarSlider-hoverBackground) !important;
   width: 14px !important;
 }
 
-.ps__rail-y.ps--clicking > .ps__thumb-y,
-.ps__rail-y.ps--clicking .ps__thumb-y,
-.ps--clicking > .ps__thumb-y,
-.ps--clicking .ps__thumb-y,
-.ps__rail-y.ps--clicking .ps__thumb-y:active,
-.ps__thumb-y:active {
+.monitor-scrollable .ps__rail-y.ps--clicking > .ps__thumb-y,
+.monitor-scrollable .ps__rail-y.ps--clicking .ps__thumb-y,
+.monitor-scrollable .ps--clicking > .ps__thumb-y,
+.monitor-scrollable .ps--clicking .ps__thumb-y,
+.monitor-scrollable .ps__rail-y.ps--clicking .ps__thumb-y:active,
+.monitor-scrollable .ps__thumb-y:active {
   background: var(--vscode-scrollbarSlider-activeBackground) !important;
   width: 14px !important;
+}
+
+.monitor-scrollable.monitor-scrollbar-visible .ps__rail-y {
+  opacity: 1;
+  pointer-events: auto;
 }
