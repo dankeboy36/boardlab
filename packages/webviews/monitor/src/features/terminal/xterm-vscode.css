@@ -252,7 +252,7 @@
   right: 20px !important;
   opacity: 0;
   transition:
-    opacity 0.4s ease,
+    opacity 1s linear,
     background 200ms ease;
   background: transparent !important;
   pointer-events: none;
@@ -270,7 +270,11 @@
   border-radius: 0 !important;
   background: var(--vscode-scrollbarSlider-background);
   opacity: 1 !important;
-  transition: background 150ms ease;
+  transition:
+    background 150ms ease,
+    transform 150ms ease,
+    opacity 150ms ease;
+  will-change: transform, opacity;
 }
 
 .monitor-scrollable .ps:hover > .ps__thumb-y,
