@@ -19,6 +19,10 @@ import {
   normalizeAlpha,
 } from './terminalTheme.js'
 
+export const DEFAULT_TERMINAL_FONT_FAMILY =
+  'ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", "Courier New", monospace'
+export const DEFAULT_TERMINAL_FONT_SIZE = 12
+
 /**
  * Imperative Xterm view. Does not lift lines into React; use ref API to write.
  *
@@ -41,6 +45,7 @@ import {
  *   scrollback?: number | undefined
  *   cursorStyle?: 'block' | 'underline' | 'bar' | undefined
  *   fontSize?: number | undefined
+ *   fontFamily?: string | undefined
  * }} XtermViewProps
  *
  *
@@ -56,6 +61,7 @@ const XtermView = forwardRef(function XtermView(props, ref) {
     scrollback,
     cursorStyle,
     fontSize,
+    fontFamily,
   } = /** @type {XtermViewProps} */ (props)
   /** @type {React.RefObject<HTMLDivElement | null>} */
   const containerRef = useRef(null)
@@ -180,6 +186,7 @@ const XtermView = forwardRef(function XtermView(props, ref) {
     }
   }, [])
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     lockRef.current = !!scrollLock
   }, [scrollLock])
@@ -225,7 +232,14 @@ const XtermView = forwardRef(function XtermView(props, ref) {
     ) {
       desired.fontSize = fontSize
     } else if ('fontSize' in defaultsRef.current) {
-      desired.fontSize = /** @type {any} */ (defaultsRef.current).fontSize ?? 14
+      desired.fontSize =
+        /** @type {any} */ (defaultsRef.current).fontSize ??
+        DEFAULT_TERMINAL_FONT_SIZE
+    }
+    if (fontFamily !== undefined) {
+      desired.fontFamily = fontFamily
+    } else if ('fontFamily' in defaultsRef.current) {
+      desired.fontFamily = /** @type {any} */ (defaultsRef.current).fontFamily
     }
 
     const applyKey = (key, value) => {
@@ -237,7 +251,7 @@ const XtermView = forwardRef(function XtermView(props, ref) {
     }
 
     Object.keys(desired).forEach((k) => applyKey(k, desired[k]))
-  }, [scrollback, cursorStyle, fontSize])
+  }, [scrollback, cursorStyle, fontSize, fontFamily])
 
   useImperativeHandle(
     ref,
@@ -431,13 +445,13 @@ const XtermView = forwardRef(function XtermView(props, ref) {
     const baseOpts = {
       // Needed for search decorations and onDidChangeResults
       allowProposedApi: true,
-      fontFamily: 'monospace',
+      fontFamily: fontFamily ?? DEFAULT_TERMINAL_FONT_FAMILY,
       fontSize:
         typeof fontSize === 'number' &&
         Number.isInteger(fontSize) &&
         fontSize > 0
           ? fontSize
-          : 14,
+          : DEFAULT_TERMINAL_FONT_SIZE,
       convertEol: true,
       scrollOnUserInput: false,
     }
@@ -451,6 +465,7 @@ const XtermView = forwardRef(function XtermView(props, ref) {
         scrollback: /** @type {any} */ (term.options).scrollback,
         cursorStyle: /** @type {any} */ (term.options).cursorStyle,
         fontSize: /** @type {any} */ (term.options).fontSize,
+        fontFamily: /** @type {any} */ (term.options).fontFamily,
       }
     } catch {}
 
@@ -584,7 +599,7 @@ const XtermView = forwardRef(function XtermView(props, ref) {
         restoreCreateElement?.()
       } catch {}
     }
-  }, [fontSize, scrollback, cursorStyle, focusSearchField, closeSearch])
+  }, [focusSearchField, closeSearch])
 
   // When the search bar opens/changes, fire an incremental search to update decorations/results
   useEffect(() => {

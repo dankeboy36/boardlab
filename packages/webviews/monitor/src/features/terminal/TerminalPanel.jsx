@@ -13,16 +13,43 @@ import PerfectScrollbar from 'perfect-scrollbar'
 import 'perfect-scrollbar/css/perfect-scrollbar.css'
 
 import { useMonitorStream } from '@boardlab/monitor-shared/serial-monitor'
+import { vscode } from '@boardlab/base'
+import { notifyMonitorThemeChanged } from '@boardlab/protocol'
 
 import {
   getPersistedState,
   updatePersistentState,
 } from '../../state/persistence.js'
-import XtermView from './XtermView.jsx'
+import XtermView, {
+  DEFAULT_TERMINAL_FONT_FAMILY,
+  DEFAULT_TERMINAL_FONT_SIZE,
+} from './XtermView.jsx'
 import { selectTerminalSettings } from './terminalSelectors.js'
 
 const MAX_SERIALIZE_ROWS = 2000
 const MAX_PERSISTED_CHARS = 20000
+
+const parseCssNumber = (/** @type {string | undefined} */ value) => {
+  const trimmed = String(value ?? '').trim()
+  if (!trimmed) return undefined
+  const parsed = parseFloat(trimmed)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+const readCssProperty = (/** @type {string} */ name) => {
+  if (typeof document === 'undefined') return undefined
+  const root = document.documentElement
+  if (!root) return undefined
+  return getComputedStyle(root).getPropertyValue(name).trim() || undefined
+}
+
+const readEditorFontSize = () => {
+  return parseCssNumber(readCssProperty('--vscode-editor-font-size'))
+}
+
+const readEditorFontFamily = () => {
+  return readCssProperty('--vscode-editor-font-family')
+}
 
 /** @typedef {Object} TerminalPanelProps */
 
@@ -62,6 +89,10 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
   const startedRef = useRef(false)
   const [isHovered, setIsHovered] = useState(false)
   const [terminalAtBottom, setTerminalAtBottom] = useState(true)
+  const [cssFontSize, setCssFontSize] = useState(() => readEditorFontSize())
+  const [cssFontFamily, setCssFontFamily] = useState(() =>
+    readEditorFontFamily()
+  )
   const [scrollActive, setScrollActive] = useState(false)
   const scrollableRef = useRef(/** @type {HTMLDivElement | null} */ (null))
   const psRef = useRef(/** @type {PerfectScrollbar | null} */ (null))
@@ -74,6 +105,40 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
   const scrollFadeTimerRef = useRef(
     /** @type {ReturnType<typeof setTimeout> | null} */ (null)
   )
+
+  useEffect(() => {
+    const refreshFonts = () => {
+      setCssFontSize(readEditorFontSize())
+      setCssFontFamily(readEditorFontFamily())
+    }
+    refreshFonts()
+
+    const messenger = vscode.messenger
+    const disposables = []
+
+    if (messenger) {
+      const disposable = messenger.onNotification(
+        notifyMonitorThemeChanged,
+        refreshFonts
+      )
+      if (disposable) {
+        disposables.push(disposable)
+      }
+    }
+
+    if (typeof document !== 'undefined') {
+      const root = document.documentElement
+      if (root) {
+        const observer = new MutationObserver(refreshFonts)
+        observer.observe(root, { attributes: true, attributeFilter: ['style'] })
+        disposables.push({ dispose: () => observer.disconnect() })
+      }
+    }
+
+    return () => {
+      disposables.forEach((d) => d?.dispose?.())
+    }
+  }, [])
 
   const updateTerminalAtBottom = useCallback(() => {
     try {
@@ -94,6 +159,10 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
       setScrollActive(false)
     }, 1100)
   }, [])
+
+  const derivedFontSize =
+    settings.fontSize ?? cssFontSize ?? DEFAULT_TERMINAL_FONT_SIZE
+  const derivedFontFamily = cssFontFamily ?? DEFAULT_TERMINAL_FONT_FAMILY
 
   const getTerminalText = useCallback(() => {
     try {
@@ -150,6 +219,13 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
     } catch {}
     updateTerminalAtBottom()
   }, [updateTerminalAtBottom])
+
+  useEffect(() => {
+    try {
+      xtermRef.current?.fit?.()
+    } catch {}
+    refreshScrollbar()
+  }, [derivedFontSize, derivedFontFamily, refreshScrollbar])
 
   useEffect(() => {
     let disposed = false
@@ -475,7 +551,8 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
         <XtermView
           ref={xtermRef}
           scrollback={settings.scrollback}
-          fontSize={settings.fontSize}
+          fontSize={derivedFontSize}
+          fontFamily={derivedFontFamily}
           cursorStyle={settings.cursorStyle}
         />
       </div>

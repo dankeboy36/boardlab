@@ -16,8 +16,19 @@
   -webkit-user-select: none;
 
   /* VS Code font + size defaults */
-  font-family: var(--vscode-editor-font-family);
-  font-size: var(--vscode-editor-font-size);
+  font-family: var(
+    --vscode-editor-font-family,
+    var(
+      --vscode-font-family,
+      ui-monospace,
+      'SFMono-Regular',
+      Consolas,
+      'Liberation Mono',
+      'Courier New',
+      monospace
+    )
+  );
+  font-size: var(--vscode-editor-font-size, 12px);
 
   /* Background/foreground from terminal tokens; fall back to area/editor */
   background-color: var(
@@ -25,6 +36,11 @@
     var(--vscode-editor-background)
   );
   color: var(--vscode-terminal-foreground, var(--vscode-editor-foreground));
+}
+
+.xterm .xterm-rows {
+  font-family: inherit;
+  font-size: inherit;
 }
 
 .xterm .xterm-decoration-top .xterm-decoration-overview-mark.find-active {

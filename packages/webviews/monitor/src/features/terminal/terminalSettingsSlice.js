@@ -4,7 +4,7 @@ import { createSlice } from '@reduxjs/toolkit'
 /**
  * @typedef {Pick<
  *   import('@xterm/xterm').ITerminalOptions,
- *   'cursorStyle' | 'scrollback' | 'fontSize'
+ *   'cursorStyle' | 'scrollback' | 'fontSize' | 'fontFamily'
  * >} TerminalSettings
  */
 
