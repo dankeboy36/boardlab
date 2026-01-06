@@ -9,6 +9,7 @@ import type {
 
 import {
   notifyMonitorLineEndingChanged,
+  notifyMonitorTerminalSettingsChanged,
   notifyMonitorEditorStatus,
   notifyMonitorThemeChanged,
   notifyMonitorToolbarAction,
@@ -22,6 +23,7 @@ import {
   type MonitorEditorStatus,
   type MonitorEditorStatusNotification,
   type MonitorSelectionNotification,
+  type MonitorTerminalSettings,
   type MonitorToolbarAction,
   type PlotterToolbarAction,
 } from '@boardlab/protocol'
@@ -424,6 +426,31 @@ abstract class MonitorBaseEditorProvider<
     })
   }
 
+  pushTerminalSettings(target?: TDocument): void {
+    const config = vscode.workspace.getConfiguration('boardlab.monitor')
+    const terminalSettings: MonitorTerminalSettings = {
+      cursorStyle: config.get('cursorStyle', 'block'),
+      cursorInactiveStyle: config.get('cursorInactiveStyle', 'outline'),
+      cursorBlink: config.get('cursorBlink', false),
+      scrollback: config.get('scrollback', 1000),
+      fontSize: config.get('fontSize', 12),
+    }
+    this.forEachBinding(target, (binding) => {
+      try {
+        this.messenger.sendNotification(
+          notifyMonitorTerminalSettingsChanged,
+          binding.participant,
+          terminalSettings
+        )
+      } catch (error) {
+        console.error('Failed to push monitor terminal settings', {
+          viewType: this.stateConfig.viewType,
+          error,
+        })
+      }
+    })
+  }
+
   private activeDocument: TDocument | undefined
 
   private detachPanel(panel: vscode.WebviewPanel): void {
@@ -602,6 +629,15 @@ export class MonitorEditors extends MonitorBaseEditorProvider<
     query: ReadonlyMap<string, string>
   ): MonitorDocument {
     return new MonitorDocument(uri, port, query, this.resourceStore)
+  }
+
+  override async resolveCustomEditor(
+    document: MonitorDocument,
+    panel: vscode.WebviewPanel,
+    token: vscode.CancellationToken
+  ): Promise<void> {
+    await super.resolveCustomEditor(document, panel, token)
+    this.pushTerminalSettings(document)
   }
 
   pushTheme(): void {

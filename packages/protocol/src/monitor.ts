@@ -10,6 +10,21 @@ import type {
   RequestType as MessengerRequestType,
 } from 'vscode-messenger-common'
 
+/** The style of the cursor when the terminal is focused. */
+export type CursorStyle = 'block' | 'underline' | 'bar'
+
+/**
+ * /**
+ *
+ * The style of the cursor when the terminal is not focused.
+ */
+export type CursorInactiveStyle =
+  | 'outline'
+  | 'block'
+  | 'bar'
+  | 'underline'
+  | 'none'
+
 export interface ConnectClientParams {
   readonly clientId: string
   readonly selectedPort?: PortIdentifier
@@ -202,6 +217,19 @@ export const notifyMonitorBridgeError: MessengerNotificationType<{
 export const notifyMonitorThemeChanged: MessengerNotificationType<void> = {
   method: 'boardlab/monitor/theme-changed',
 }
+
+export interface MonitorTerminalSettings {
+  readonly cursorStyle?: CursorStyle
+  readonly cursorInactiveStyle?: CursorInactiveStyle
+  readonly cursorBlink?: boolean
+  readonly scrollback?: number
+  readonly fontSize?: number
+}
+
+export const notifyMonitorTerminalSettingsChanged: MessengerNotificationType<MonitorTerminalSettings> =
+  {
+    method: 'boardlab/monitor/terminal-settings-changed',
+  }
 
 export const connectMonitorClient: MessengerRequestType<
   ConnectClientParams,

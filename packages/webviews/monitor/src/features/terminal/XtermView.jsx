@@ -42,6 +42,14 @@ export const DEFAULT_TERMINAL_FONT_SIZE = 12
  * @typedef {{
  *   scrollback?: number | undefined
  *   cursorStyle?: 'block' | 'underline' | 'bar' | undefined
+ *   cursorInactiveStyle?:
+ *     | 'outline'
+ *     | 'block'
+ *     | 'bar'
+ *     | 'underline'
+ *     | 'none'
+ *     | undefined
+ *   cursorBlink?: boolean | undefined
  *   fontSize?: number | undefined
  *   fontFamily?: string | undefined
  * }} XtermViewProps
@@ -54,8 +62,14 @@ export const DEFAULT_TERMINAL_FONT_SIZE = 12
  */
 /** @type {XtermViewComponent} */
 const XtermView = forwardRef(function XtermView(props, ref) {
-  const { scrollback, cursorStyle, fontSize, fontFamily } =
-    /** @type {XtermViewProps} */ (props)
+  const {
+    scrollback,
+    cursorStyle,
+    cursorInactiveStyle,
+    cursorBlink,
+    fontSize,
+    fontFamily,
+  } = /** @type {XtermViewProps} */ (props)
   /** @type {React.RefObject<HTMLDivElement | null>} */
   const containerRef = useRef(null)
   const termRef = useRef(
@@ -211,6 +225,16 @@ const XtermView = forwardRef(function XtermView(props, ref) {
     else if ('cursorStyle' in defaultsRef.current) {
       desired.cursorStyle = defaultsRef.current.cursorStyle
     }
+    if (cursorInactiveStyle !== undefined) {
+      desired.cursorInactiveStyle = cursorInactiveStyle
+    } else if ('cursorInactiveStyle' in defaultsRef.current) {
+      desired.cursorInactiveStyle = defaultsRef.current.cursorInactiveStyle
+    }
+    if (typeof cursorBlink === 'boolean') {
+      desired.cursorBlink = cursorBlink
+    } else if ('cursorBlink' in defaultsRef.current) {
+      desired.cursorBlink = defaultsRef.current.cursorBlink
+    }
     if (
       typeof fontSize === 'number' &&
       Number.isInteger(fontSize) &&
@@ -237,7 +261,14 @@ const XtermView = forwardRef(function XtermView(props, ref) {
     }
 
     Object.keys(desired).forEach((k) => applyKey(k, desired[k]))
-  }, [scrollback, cursorStyle, fontSize, fontFamily])
+  }, [
+    scrollback,
+    cursorStyle,
+    cursorInactiveStyle,
+    cursorBlink,
+    fontSize,
+    fontFamily,
+  ])
 
   useImperativeHandle(
     ref,
@@ -405,6 +436,9 @@ const XtermView = forwardRef(function XtermView(props, ref) {
     }
     if (typeof scrollback === 'number') baseOpts.scrollback = scrollback
     if (cursorStyle !== undefined) baseOpts.cursorStyle = cursorStyle
+    if (cursorInactiveStyle !== undefined)
+      baseOpts.cursorInactiveStyle = cursorInactiveStyle
+    if (typeof cursorBlink === 'boolean') baseOpts.cursorBlink = cursorBlink
     const term = new Terminal(baseOpts)
 
     // remember defaults so that clearing a setting can revert properly
@@ -412,6 +446,9 @@ const XtermView = forwardRef(function XtermView(props, ref) {
       defaultsRef.current = {
         scrollback: /** @type {any} */ (term.options).scrollback,
         cursorStyle: /** @type {any} */ (term.options).cursorStyle,
+        cursorInactiveStyle: /** @type {any} */ (term.options)
+          .cursorInactiveStyle,
+        cursorBlink: /** @type {any} */ (term.options).cursorBlink,
         fontSize: /** @type {any} */ (term.options).fontSize,
         fontFamily: /** @type {any} */ (term.options).fontFamily,
       }

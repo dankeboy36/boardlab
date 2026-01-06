@@ -29,22 +29,11 @@ import { selectTerminalSettings } from './terminalSelectors.js'
 const MAX_SERIALIZE_ROWS = 2000
 const MAX_PERSISTED_CHARS = 20000
 
-const parseCssNumber = (/** @type {string | undefined} */ value) => {
-  const trimmed = String(value ?? '').trim()
-  if (!trimmed) return undefined
-  const parsed = parseFloat(trimmed)
-  return Number.isFinite(parsed) ? parsed : undefined
-}
-
 const readCssProperty = (/** @type {string} */ name) => {
   if (typeof document === 'undefined') return undefined
   const root = document.documentElement
   if (!root) return undefined
   return getComputedStyle(root).getPropertyValue(name).trim() || undefined
-}
-
-const readEditorFontSize = () => {
-  return parseCssNumber(readCssProperty('--vscode-editor-font-size'))
 }
 
 const readEditorFontFamily = () => {
@@ -88,7 +77,6 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
   const flushTidRef = useRef(/** @type {number | null} */ (null))
   const startedRef = useRef(false)
   const [isHovered, setIsHovered] = useState(false)
-  const [cssFontSize, setCssFontSize] = useState(() => readEditorFontSize())
   const [cssFontFamily, setCssFontFamily] = useState(() =>
     readEditorFontFamily()
   )
@@ -106,11 +94,10 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
   )
 
   useEffect(() => {
-    const refreshFonts = () => {
-      setCssFontSize(readEditorFontSize())
+    const refreshFontFamily = () => {
       setCssFontFamily(readEditorFontFamily())
     }
-    refreshFonts()
+    refreshFontFamily()
 
     const messenger = vscode.messenger
     const disposables = []
@@ -118,7 +105,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
     if (messenger) {
       const disposable = messenger.onNotification(
         notifyMonitorThemeChanged,
-        refreshFonts
+        refreshFontFamily
       )
       if (disposable) {
         disposables.push(disposable)
@@ -128,7 +115,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
     if (typeof document !== 'undefined') {
       const root = document.documentElement
       if (root) {
-        const observer = new MutationObserver(refreshFonts)
+        const observer = new MutationObserver(refreshFontFamily)
         observer.observe(root, { attributes: true, attributeFilter: ['style'] })
         disposables.push({ dispose: () => observer.disconnect() })
       }
@@ -150,8 +137,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
     }, 1100)
   }, [])
 
-  const derivedFontSize =
-    settings.fontSize ?? cssFontSize ?? DEFAULT_TERMINAL_FONT_SIZE
+  const derivedFontSize = settings.fontSize ?? DEFAULT_TERMINAL_FONT_SIZE
   const derivedFontFamily = cssFontFamily ?? DEFAULT_TERMINAL_FONT_FAMILY
 
   const getTerminalText = useCallback(() => {
@@ -529,6 +515,8 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
           fontSize={derivedFontSize}
           fontFamily={derivedFontFamily}
           cursorStyle={settings.cursorStyle}
+          cursorInactiveStyle={settings.cursorInactiveStyle}
+          cursorBlink={settings.cursorBlink}
         />
       </div>
     </div>

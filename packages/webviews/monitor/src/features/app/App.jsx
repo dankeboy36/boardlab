@@ -1,5 +1,6 @@
 // @ts-check
 import { useEffect, useRef, useState } from 'react'
+import { useDispatch } from 'react-redux'
 
 import { useCodiconStylesheet, vscode } from '@boardlab/base'
 import { useMonitorClientSync } from '@boardlab/monitor-shared/hooks'
@@ -11,6 +12,7 @@ import {
 import {
   notifyMonitorLineEndingChanged,
   notifyMonitorThemeChanged,
+  notifyMonitorTerminalSettingsChanged,
   notifyMonitorToolbarAction,
   requestMonitorEditorContent,
 } from '@boardlab/protocol'
@@ -18,6 +20,7 @@ import {
 import { applyNonce } from '../../utils/csp.js'
 import TerminalPanel from '../terminal/TerminalPanel.jsx'
 import Shell from './Shell.jsx'
+import { setTerminalSettings } from '../terminal/terminalSettingsSlice.js'
 
 function MonitorToolbarActionHandler({ terminalRef }) {
   const { play, stop } = useMonitorController()
@@ -42,6 +45,7 @@ function MonitorToolbarActionHandler({ terminalRef }) {
 
 function App() {
   useCodiconStylesheet()
+  const dispatch = useDispatch()
 
   useEffect(() => {
     if (typeof document === 'undefined') return
@@ -92,6 +96,23 @@ function App() {
       }
     })
   }, [])
+
+  useEffect(() => {
+    const messenger = vscode.messenger
+    if (!messenger) return
+
+    messenger.onNotification(
+      notifyMonitorTerminalSettingsChanged,
+      (settings) => {
+        if (!settings) return
+        try {
+          dispatch(setTerminalSettings(settings))
+        } catch (error) {
+          console.error('Failed to apply monitor terminal settings', error)
+        }
+      }
+    )
+  }, [dispatch])
 
   useEffect(() => {
     const messenger = vscode.messenger

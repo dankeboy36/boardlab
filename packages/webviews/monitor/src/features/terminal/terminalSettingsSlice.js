@@ -4,7 +4,12 @@ import { createSlice } from '@reduxjs/toolkit'
 /**
  * @typedef {Pick<
  *   import('@xterm/xterm').ITerminalOptions,
- *   'cursorStyle' | 'scrollback' | 'fontSize' | 'fontFamily'
+ *   | 'cursorStyle'
+ *   | 'cursorInactiveStyle'
+ *   | 'cursorBlink'
+ *   | 'scrollback'
+ *   | 'fontSize'
+ *   | 'fontFamily'
  * >} TerminalSettings
  */
 
@@ -25,10 +30,14 @@ function load() {
 function save(s) {
   try {
     const compact =
-      /** @type {Record<string, number | string | undefined>} */ ({})
+      /** @type {Record<string, number | string | boolean | undefined>} */ ({})
     if (s.scrollback != null) compact.scrollback = s.scrollback
     if (s.cursorStyle != null) compact.cursorStyle = s.cursorStyle
+    if (s.cursorInactiveStyle != null)
+      compact.cursorInactiveStyle = s.cursorInactiveStyle
+    if (s.cursorBlink != null) compact.cursorBlink = s.cursorBlink
     if (s.fontSize != null) compact.fontSize = s.fontSize
+    if (s.fontFamily != null) compact.fontFamily = s.fontFamily
     localStorage.setItem(LS_KEY, JSON.stringify(compact))
   } catch {}
 }
@@ -52,6 +61,13 @@ const terminalSettingsSlice = createSlice({
       state.fontSize = action.payload
       save(state)
     },
+    setTerminalSettings(state, action) {
+      Object.assign(
+        state,
+        /** @type {Partial<TerminalSettings>} */ (action.payload)
+      )
+      save(state)
+    },
     resetTerminalSettings() {
       const next = /** @type {TerminalSettings} */ ({})
       save(next)
@@ -69,6 +85,7 @@ export const {
   setScrollback,
   setCursorStyle,
   setFontSize,
+  setTerminalSettings,
   resetTerminalSettings,
 } = actions
 

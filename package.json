@@ -639,6 +639,45 @@
           "default": "crlf",
           "markdownDescription": "Line ending appended to messages sent from the Monitor and Plotter inputs."
         },
+        "boardlab.monitor.fontSize": {
+          "type": "number",
+          "default": 12,
+          "minimum": 1,
+          "markdownDescription": "Controls the font size in pixels of the Monitor terminal."
+        },
+        "boardlab.monitor.cursorStyle": {
+          "type": "string",
+          "enum": [
+            "block",
+            "underline",
+            "bar"
+          ],
+          "default": "block",
+          "markdownDescription": "Controls the style of Monitor terminal cursor when the terminal is focused."
+        },
+        "boardlab.monitor.cursorInactiveStyle": {
+          "type": "string",
+          "enum": [
+            "outline",
+            "block",
+            "bar",
+            "underline",
+            "none"
+          ],
+          "default": "outline",
+          "markdownDescription": "Controls the style of Monitor terminal cursor when the terminal is not focused."
+        },
+        "boardlab.monitor.cursorBlink": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Controls whether the Monitor terminal cursor blinks."
+        },
+        "boardlab.monitor.scrollback": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 0,
+          "markdownDescription": "Controls the maximum number of lines the Monitor terminal keeps in its buffer. We pre-allocate memory based on this value in order to ensure a smooth experience. As such, as the value increases, so will the amount of memory."
+        },
         "boardlab.monitor.bridgePort": {
           "type": "number",
           "default": 55888,

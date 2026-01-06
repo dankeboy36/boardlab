@@ -4,14 +4,21 @@ import { createContext } from 'react'
 /**
  * @typedef {Pick<
  *   import('@xterm/xterm').ITerminalOptions,
- *   'cursorStyle' | 'scrollback'
+ *   | 'cursorStyle'
+ *   | 'cursorInactiveStyle'
+ *   | 'cursorBlink'
+ *   | 'scrollback'
+ *   | 'fontSize'
  * >} TerminalSettings
  */
 
 /** @type {TerminalSettings} */
 const defaultSettings = {
   cursorStyle: 'block',
+  cursorInactiveStyle: 'outline',
+  cursorBlink: false,
   scrollback: 1000,
+  fontSize: 12,
 }
 
 /**
