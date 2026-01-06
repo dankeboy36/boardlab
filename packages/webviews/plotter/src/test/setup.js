@@ -113,7 +113,6 @@ vi.mock('@xterm/xterm', () => {
     clear() {}
     dispose() {}
     focus() {}
-    scrollToBottom() {}
   }
   return { Terminal }
 })

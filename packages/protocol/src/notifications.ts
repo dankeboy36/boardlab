@@ -21,7 +21,6 @@ export type MonitorToolbarAction =
   | 'copyAll'
   | 'saveToFile'
   | 'clear'
-  | 'toggleScrollLock'
   | 'play'
   | 'stop'
 

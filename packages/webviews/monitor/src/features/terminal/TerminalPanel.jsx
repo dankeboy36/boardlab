@@ -9,30 +9,43 @@ import {
   useState,
 } from 'react'
 import { useSelector } from 'react-redux'
+import PerfectScrollbar from 'perfect-scrollbar'
+import 'perfect-scrollbar/css/perfect-scrollbar.css'
 
 import { useMonitorStream } from '@boardlab/monitor-shared/serial-monitor'
+import { vscode } from '@boardlab/base'
+import { notifyMonitorThemeChanged } from '@boardlab/protocol'
 
 import {
   getPersistedState,
   updatePersistentState,
 } from '../../state/persistence.js'
-import XtermView from './XtermView.jsx'
+import XtermView, {
+  DEFAULT_TERMINAL_FONT_FAMILY,
+  DEFAULT_TERMINAL_FONT_SIZE,
+} from './XtermView.jsx'
 import { selectTerminalSettings } from './terminalSelectors.js'
 
 const MAX_SERIALIZE_ROWS = 2000
 const MAX_PERSISTED_CHARS = 20000
 
-/**
- * @typedef {Object} TerminalPanelProps
- * @property {(locked: boolean) => void} [onScrollLockChange]
- */
+const readCssProperty = (/** @type {string} */ name) => {
+  if (typeof document === 'undefined') return undefined
+  const root = document.documentElement
+  if (!root) return undefined
+  return getComputedStyle(root).getPropertyValue(name).trim() || undefined
+}
+
+const readEditorFontFamily = () => {
+  return readCssProperty('--vscode-editor-font-family')
+}
+
+/** @typedef {Object} TerminalPanelProps */
 
 /**
  * @typedef {Object} TerminalPanelHandle
  * @property {() => string} getText
  * @property {() => void} clear
- * @property {() => void} toggleScrollLock
- * @property {() => boolean} isScrollLock
  * @property {() => void} refreshTheme
  */
 
@@ -40,10 +53,7 @@ const MAX_PERSISTED_CHARS = 20000
  * @param {TerminalPanelProps} props
  * @param {import('react').Ref<TerminalPanelHandle>} ref
  */
-const TerminalPanel = forwardRef(function TerminalPanel(
-  { onScrollLockChange },
-  ref
-) {
+const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
   const settings = useSelector(selectTerminalSettings)
   const persistedTerminal = useRef(() => {
     const state = getPersistedState()
@@ -51,13 +61,9 @@ const TerminalPanel = forwardRef(function TerminalPanel(
     if (terminalState && typeof terminalState === 'object') {
       return {
         text: typeof terminalState.text === 'string' ? terminalState.text : '',
-        scrollLock:
-          typeof terminalState.scrollLock === 'boolean'
-            ? terminalState.scrollLock
-            : false,
       }
     }
-    return { text: '', scrollLock: false }
+    return { text: '' }
   })
   const xtermRef = useRef(
     /** @type {import('./XtermView.jsx').XtermViewHandle | null} */ (null)
@@ -70,16 +76,69 @@ const TerminalPanel = forwardRef(function TerminalPanel(
   const rafIdRef = useRef(/** @type {number | null} */ (null))
   const flushTidRef = useRef(/** @type {number | null} */ (null))
   const startedRef = useRef(false)
-  const [scrollLock, setScrollLock] = useState(
-    persistedTerminal.current.scrollLock
+  const [isHovered, setIsHovered] = useState(false)
+  const [cssFontFamily, setCssFontFamily] = useState(() =>
+    readEditorFontFamily()
   )
-  const scrollLockRef = useRef(scrollLock)
+  const [scrollActive, setScrollActive] = useState(false)
+  const scrollableRef = useRef(/** @type {HTMLDivElement | null} */ (null))
+  const psRef = useRef(/** @type {PerfectScrollbar | null} */ (null))
   const persistTimerRef = useRef(
     /** @type {ReturnType<typeof setTimeout> | null} */ (null)
   )
   const serializeAddonRef = useRef(
     /** @type {SerializeAddon | undefined} */ (undefined)
   )
+  const scrollFadeTimerRef = useRef(
+    /** @type {ReturnType<typeof setTimeout> | null} */ (null)
+  )
+
+  useEffect(() => {
+    const refreshFontFamily = () => {
+      setCssFontFamily(readEditorFontFamily())
+    }
+    refreshFontFamily()
+
+    const messenger = vscode.messenger
+    const disposables = []
+
+    if (messenger) {
+      const disposable = messenger.onNotification(
+        notifyMonitorThemeChanged,
+        refreshFontFamily
+      )
+      if (disposable) {
+        disposables.push(disposable)
+      }
+    }
+
+    if (typeof document !== 'undefined') {
+      const root = document.documentElement
+      if (root) {
+        const observer = new MutationObserver(refreshFontFamily)
+        observer.observe(root, { attributes: true, attributeFilter: ['style'] })
+        disposables.push({ dispose: () => observer.disconnect() })
+      }
+    }
+
+    return () => {
+      disposables.forEach((d) => d?.dispose?.())
+    }
+  }, [])
+
+  const showTemporaryScrollbar = useCallback(() => {
+    setScrollActive(true)
+    if (scrollFadeTimerRef.current != null) {
+      clearTimeout(scrollFadeTimerRef.current)
+    }
+    scrollFadeTimerRef.current = setTimeout(() => {
+      scrollFadeTimerRef.current = null
+      setScrollActive(false)
+    }, 1100)
+  }, [])
+
+  const derivedFontSize = settings.fontSize ?? DEFAULT_TERMINAL_FONT_SIZE
+  const derivedFontFamily = cssFontFamily ?? DEFAULT_TERMINAL_FONT_FAMILY
 
   const getTerminalText = useCallback(() => {
     try {
@@ -118,7 +177,6 @@ const TerminalPanel = forwardRef(function TerminalPanel(
     updatePersistentState({
       terminal: {
         text: snapshot,
-        scrollLock: scrollLockRef.current,
       },
     })
   }, [collectSnapshot])
@@ -131,11 +189,89 @@ const TerminalPanel = forwardRef(function TerminalPanel(
     }, 500)
   }, [persistNow])
 
+  const refreshScrollbar = useCallback(() => {
+    try {
+      psRef.current?.update()
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    try {
+      xtermRef.current?.fit?.()
+    } catch {}
+    refreshScrollbar()
+  }, [derivedFontSize, derivedFontFamily, refreshScrollbar])
+
+  useEffect(() => {
+    let disposed = false
+    let rafId = /** @type {number | null} */ (null)
+    let psInstance = /** @type {PerfectScrollbar | null} */ (null)
+    const attach = () => {
+      if (disposed) return
+      const container = scrollableRef.current
+      const viewport = container?.querySelector('.xterm-viewport')
+      if (!(viewport instanceof HTMLElement)) {
+        rafId = requestAnimationFrame(attach)
+        return
+      }
+      psInstance = new PerfectScrollbar(viewport, {
+        wheelPropagation: false,
+      })
+      psRef.current = psInstance
+      refreshScrollbar()
+    }
+
+    attach()
+
+    return () => {
+      disposed = true
+      if (rafId != null) {
+        cancelAnimationFrame(rafId)
+      }
+      psInstance?.destroy()
+      psRef.current = null
+    }
+  }, [refreshScrollbar])
+
+  useEffect(() => {
+    let disposed = false
+    let disposable = null
+
+    const attach = () => {
+      if (disposed) return
+      const terminal = xtermRef.current
+      if (!terminal || typeof terminal.onScroll !== 'function') {
+        requestAnimationFrame(attach)
+        return
+      }
+      disposable = terminal.onScroll(() => {
+        showTemporaryScrollbar()
+      })
+    }
+
+    attach()
+
+    return () => {
+      disposed = true
+      disposable?.dispose?.()
+    }
+  }, [showTemporaryScrollbar])
+
+  useEffect(() => {
+    return () => {
+      if (scrollFadeTimerRef.current != null) {
+        clearTimeout(scrollFadeTimerRef.current)
+        scrollFadeTimerRef.current = null
+      }
+    }
+  }, [])
+
   const handleClearAll = useCallback(() => {
     xtermRef.current?.clear()
     bufferRef.current = ''
     schedulePersist()
-  }, [schedulePersist])
+    refreshScrollbar()
+  }, [refreshScrollbar, schedulePersist])
 
   useMonitorStream({
     onStart: () => {
@@ -193,20 +329,16 @@ const TerminalPanel = forwardRef(function TerminalPanel(
           xtermRef.current?.write(bufferRef.current)
         } catch {}
         bufferRef.current = ''
+        refreshScrollbar()
       } else {
         bufferRef.current = ''
         bufferSessionRef.current = sid
       }
       xtermRef.current?.write(chunk)
+      refreshScrollbar()
       schedulePersist()
     },
   })
-
-  useEffect(() => {
-    onScrollLockChange?.(scrollLock)
-    scrollLockRef.current = scrollLock
-    schedulePersist()
-  }, [scrollLock, onScrollLockChange, schedulePersist])
 
   useEffect(() => {
     // Fit first at current size
@@ -234,6 +366,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(
             xtermRef.current?.write(bufferRef.current)
           } catch {}
           bufferRef.current = ''
+          refreshScrollbar()
         } else {
           bufferRef.current = ''
           bufferSessionRef.current = sessionRef.current
@@ -254,6 +387,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(
           xtermRef.current?.write(bufferRef.current)
         } catch {}
         bufferRef.current = ''
+        refreshScrollbar()
       } else {
         bufferRef.current = ''
         bufferSessionRef.current = sessionRef.current
@@ -276,15 +410,13 @@ const TerminalPanel = forwardRef(function TerminalPanel(
     () => ({
       getText: () => getTerminalText(),
       clear: handleClearAll,
-      toggleScrollLock: () => setScrollLock((prev) => !prev),
-      isScrollLock: () => scrollLock,
       refreshTheme: () => {
         try {
           xtermRef.current?.refreshTheme?.()
         } catch {}
       },
     }),
-    [getTerminalText, handleClearAll, scrollLock]
+    [getTerminalText, handleClearAll]
   )
 
   useEffect(() => {
@@ -324,6 +456,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(
       try {
         xtermRef.current.clear()
         xtermRef.current.write(initialText)
+        refreshScrollbar()
       } catch {}
       persistedTerminal.current.text = ''
     }
@@ -343,6 +476,14 @@ const TerminalPanel = forwardRef(function TerminalPanel(
     }
   }, [persistNow])
 
+  const handleMouseEnter = useCallback(() => {
+    setIsHovered(true)
+  }, [])
+
+  const handleMouseLeave = useCallback(() => {
+    setIsHovered(false)
+  }, [])
+
   return (
     <div
       style={{
@@ -353,21 +494,29 @@ const TerminalPanel = forwardRef(function TerminalPanel(
       }}
     >
       <div
+        ref={scrollableRef}
+        className={`monitor-scrollable${
+          isHovered || scrollActive ? ' monitor-scrollbar-visible' : ''
+        }`}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         style={{
           flex: 1,
           minHeight: 0,
-          margin: 4,
-          background:
-            'var(--vscode-terminal-background, var(--vscode-editor-background))',
+          margin: 0,
+          background: 'var(--vscode-editor-background)',
           overflow: 'hidden',
+          position: 'relative',
         }}
       >
         <XtermView
           ref={xtermRef}
-          scrollLock={scrollLock}
           scrollback={settings.scrollback}
-          fontSize={settings.fontSize}
+          fontSize={derivedFontSize}
+          fontFamily={derivedFontFamily}
           cursorStyle={settings.cursorStyle}
+          cursorInactiveStyle={settings.cursorInactiveStyle}
+          cursorBlink={settings.cursorBlink}
         />
       </div>
     </div>

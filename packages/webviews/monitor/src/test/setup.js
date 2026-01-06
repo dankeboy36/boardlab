@@ -100,7 +100,6 @@ vi.mock('@xterm/xterm', () => {
     clear() {}
     dispose() {}
     focus() {}
-    scrollToBottom() {}
     get rows() {
       return 0
     }

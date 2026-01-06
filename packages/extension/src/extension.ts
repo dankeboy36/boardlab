@@ -88,6 +88,14 @@ import {
   PlatformsManagerViewProvider,
 } from './webviews/viewProvider'
 
+const TERMINAL_SETTING_KEYS = [
+  'boardlab.monitor.cursorStyle',
+  'boardlab.monitor.cursorInactiveStyle',
+  'boardlab.monitor.cursorBlink',
+  'boardlab.monitor.scrollback',
+  'boardlab.monitor.fontSize',
+]
+
 interface SketchTaskParamsInput {
   sketchPath?: string
   fqbn?: string
@@ -1621,19 +1629,6 @@ export function activate(context: vscode.ExtensionContext) {
       }
       await monitorEditors.sendToolbarAction('clear', active)
     }),
-    vscode.commands.registerCommand(
-      'boardlab.monitor.toggleScrollLock',
-      async () => {
-        const active = monitorEditors.getActiveDocument()
-        if (!active) {
-          vscode.window.showInformationMessage(
-            'Open a monitor editor to toggle scroll lock.'
-          )
-          return
-        }
-        await monitorEditors.sendToolbarAction('toggleScrollLock', active)
-      }
-    ),
     vscode.commands.registerCommand('boardlab.plotter.clear', async () => {
       const active = plotterEditors.getActiveDocument()
       if (!active) {
@@ -1998,6 +1993,11 @@ export function activate(context: vscode.ExtensionContext) {
       if (event.affectsConfiguration('boardlab.monitor.lineEnding')) {
         monitorEditors.pushLineEnding()
         plotterEditors.pushLineEnding()
+      }
+      if (
+        TERMINAL_SETTING_KEYS.some((key) => event.affectsConfiguration(key))
+      ) {
+        monitorEditors.pushTerminalSettings()
       }
     })
   )

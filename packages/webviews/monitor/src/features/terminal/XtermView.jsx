@@ -19,6 +19,10 @@ import {
   normalizeAlpha,
 } from './terminalTheme.js'
 
+export const DEFAULT_TERMINAL_FONT_FAMILY =
+  'ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", "Courier New", monospace'
+export const DEFAULT_TERMINAL_FONT_SIZE = 12
+
 /**
  * Imperative Xterm view. Does not lift lines into React; use ref API to write.
  *
@@ -28,19 +32,26 @@ import {
  *   clear: () => void
  *   getText: () => string
  *   fit: () => void
- *   isAtBottom: () => boolean
- *   scrollToBottom: () => void
- *   pushTransientLock: () => void
- *   popTransientLock: () => void
  *   refreshTheme: () => void
+ *   onScroll: (
+ *     listener: (position: number) => void
+ *   ) => import('@xterm/xterm').IDisposable | undefined
  * }} XtermViewHandle
  *
  *
  * @typedef {{
- *   scrollLock?: boolean
  *   scrollback?: number | undefined
  *   cursorStyle?: 'block' | 'underline' | 'bar' | undefined
+ *   cursorInactiveStyle?:
+ *     | 'outline'
+ *     | 'block'
+ *     | 'bar'
+ *     | 'underline'
+ *     | 'none'
+ *     | undefined
+ *   cursorBlink?: boolean | undefined
  *   fontSize?: number | undefined
+ *   fontFamily?: string | undefined
  * }} XtermViewProps
  *
  *
@@ -52,10 +63,12 @@ import {
 /** @type {XtermViewComponent} */
 const XtermView = forwardRef(function XtermView(props, ref) {
   const {
-    scrollLock = false,
     scrollback,
     cursorStyle,
+    cursorInactiveStyle,
+    cursorBlink,
     fontSize,
+    fontFamily,
   } = /** @type {XtermViewProps} */ (props)
   /** @type {React.RefObject<HTMLDivElement | null>} */
   const containerRef = useRef(null)
@@ -75,9 +88,6 @@ const XtermView = forwardRef(function XtermView(props, ref) {
       undefined
     )
   )
-  const lockRef = useRef(!!scrollLock)
-  // Additional transient lock level (used while dropdowns are open)
-  const transientLockRef = useRef(0)
   const defaultsRef = useRef(
     /**
      * @type {Partial<
@@ -180,10 +190,7 @@ const XtermView = forwardRef(function XtermView(props, ref) {
     }
   }, [])
 
-  useEffect(() => {
-    lockRef.current = !!scrollLock
-  }, [scrollLock])
-
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   // Refit xterm when the container resizes or window size changes
   useEffect(() => {
     const el = containerRef.current
@@ -218,6 +225,16 @@ const XtermView = forwardRef(function XtermView(props, ref) {
     else if ('cursorStyle' in defaultsRef.current) {
       desired.cursorStyle = defaultsRef.current.cursorStyle
     }
+    if (cursorInactiveStyle !== undefined) {
+      desired.cursorInactiveStyle = cursorInactiveStyle
+    } else if ('cursorInactiveStyle' in defaultsRef.current) {
+      desired.cursorInactiveStyle = defaultsRef.current.cursorInactiveStyle
+    }
+    if (typeof cursorBlink === 'boolean') {
+      desired.cursorBlink = cursorBlink
+    } else if ('cursorBlink' in defaultsRef.current) {
+      desired.cursorBlink = defaultsRef.current.cursorBlink
+    }
     if (
       typeof fontSize === 'number' &&
       Number.isInteger(fontSize) &&
@@ -225,7 +242,14 @@ const XtermView = forwardRef(function XtermView(props, ref) {
     ) {
       desired.fontSize = fontSize
     } else if ('fontSize' in defaultsRef.current) {
-      desired.fontSize = /** @type {any} */ (defaultsRef.current).fontSize ?? 14
+      desired.fontSize =
+        /** @type {any} */ (defaultsRef.current).fontSize ??
+        DEFAULT_TERMINAL_FONT_SIZE
+    }
+    if (fontFamily !== undefined) {
+      desired.fontFamily = fontFamily
+    } else if ('fontFamily' in defaultsRef.current) {
+      desired.fontFamily = /** @type {any} */ (defaultsRef.current).fontFamily
     }
 
     const applyKey = (key, value) => {
@@ -237,7 +261,14 @@ const XtermView = forwardRef(function XtermView(props, ref) {
     }
 
     Object.keys(desired).forEach((k) => applyKey(k, desired[k]))
-  }, [scrollback, cursorStyle, fontSize])
+  }, [
+    scrollback,
+    cursorStyle,
+    cursorInactiveStyle,
+    cursorBlink,
+    fontSize,
+    fontFamily,
+  ])
 
   useImperativeHandle(
     ref,
@@ -256,50 +287,12 @@ const XtermView = forwardRef(function XtermView(props, ref) {
         const t = termRef.current
         if (!t) return
         try {
-          const locked = lockRef.current || transientLockRef.current > 0
-          if (locked) {
-            const topLine = /** @type {any} */ (t).buffer?.active?.viewportY
-            t.write(text, () => {
-              try {
-                /** @type {any} */ t.scrollToLine?.(topLine)
-              } catch {}
-            })
-          } else {
-            t.write(text)
-          }
+          t.write(text)
         } catch {}
       },
       clear() {
         const t = termRef.current
         t?.clear()
-      },
-      /** Temporarily force scroll lock on/off without React state. */
-      pushTransientLock() {
-        transientLockRef.current += 1
-      },
-      popTransientLock() {
-        if (transientLockRef.current > 0) transientLockRef.current -= 1
-      },
-      /** Return true if viewport shows the last line(s). */
-      isAtBottom() {
-        const t = termRef.current
-        try {
-          const buf = t?.buffer?.active
-          const rows = t?.rows ?? 0
-          if (!buf || !rows) return true
-          const bottomTopIndex = Math.max(0, (buf.length ?? 0) - rows)
-          const viewportY = buf.viewportY ?? 0
-          return viewportY >= bottomTopIndex
-        } catch {
-          return true
-        }
-      },
-      /** Programmatically scroll to the last line. */
-      scrollToBottom() {
-        const t = termRef.current
-        try {
-          t?.scrollToBottom?.()
-        } catch {}
       },
       getText() {
         const t = termRef.current
@@ -326,6 +319,13 @@ const XtermView = forwardRef(function XtermView(props, ref) {
         try {
           themeHandleRef.current?.refresh?.()
         } catch {}
+      },
+      onScroll(listener) {
+        try {
+          return termRef.current?.onScroll(listener)
+        } catch {
+          return undefined
+        }
       },
     }),
     []
@@ -424,18 +424,21 @@ const XtermView = forwardRef(function XtermView(props, ref) {
     const baseOpts = {
       // Needed for search decorations and onDidChangeResults
       allowProposedApi: true,
-      fontFamily: 'monospace',
+      fontFamily: fontFamily ?? DEFAULT_TERMINAL_FONT_FAMILY,
       fontSize:
         typeof fontSize === 'number' &&
         Number.isInteger(fontSize) &&
         fontSize > 0
           ? fontSize
-          : 14,
+          : DEFAULT_TERMINAL_FONT_SIZE,
       convertEol: true,
       scrollOnUserInput: false,
     }
     if (typeof scrollback === 'number') baseOpts.scrollback = scrollback
     if (cursorStyle !== undefined) baseOpts.cursorStyle = cursorStyle
+    if (cursorInactiveStyle !== undefined)
+      baseOpts.cursorInactiveStyle = cursorInactiveStyle
+    if (typeof cursorBlink === 'boolean') baseOpts.cursorBlink = cursorBlink
     const term = new Terminal(baseOpts)
 
     // remember defaults so that clearing a setting can revert properly
@@ -443,7 +446,11 @@ const XtermView = forwardRef(function XtermView(props, ref) {
       defaultsRef.current = {
         scrollback: /** @type {any} */ (term.options).scrollback,
         cursorStyle: /** @type {any} */ (term.options).cursorStyle,
+        cursorInactiveStyle: /** @type {any} */ (term.options)
+          .cursorInactiveStyle,
+        cursorBlink: /** @type {any} */ (term.options).cursorBlink,
         fontSize: /** @type {any} */ (term.options).fontSize,
+        fontFamily: /** @type {any} */ (term.options).fontFamily,
       }
     } catch {}
 
@@ -577,7 +584,7 @@ const XtermView = forwardRef(function XtermView(props, ref) {
         restoreCreateElement?.()
       } catch {}
     }
-  }, [fontSize, scrollback, cursorStyle, focusSearchField, closeSearch])
+  }, [focusSearchField, closeSearch])
 
   // When the search bar opens/changes, fire an incremental search to update decorations/results
   useEffect(() => {
