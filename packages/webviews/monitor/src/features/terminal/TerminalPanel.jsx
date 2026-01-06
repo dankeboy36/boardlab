@@ -88,7 +88,6 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
   const flushTidRef = useRef(/** @type {number | null} */ (null))
   const startedRef = useRef(false)
   const [isHovered, setIsHovered] = useState(false)
-  const [terminalAtBottom, setTerminalAtBottom] = useState(true)
   const [cssFontSize, setCssFontSize] = useState(() => readEditorFontSize())
   const [cssFontFamily, setCssFontFamily] = useState(() =>
     readEditorFontFamily()
@@ -137,15 +136,6 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
 
     return () => {
       disposables.forEach((d) => d?.dispose?.())
-    }
-  }, [])
-
-  const updateTerminalAtBottom = useCallback(() => {
-    try {
-      const atBottom = xtermRef.current?.isAtBottom?.() ?? true
-      setTerminalAtBottom(atBottom)
-    } catch {
-      setTerminalAtBottom(true)
     }
   }, [])
 
@@ -217,8 +207,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
     try {
       psRef.current?.update()
     } catch {}
-    updateTerminalAtBottom()
-  }, [updateTerminalAtBottom])
+  }, [])
 
   useEffect(() => {
     try {
@@ -231,12 +220,6 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
     let disposed = false
     let rafId = /** @type {number | null} */ (null)
     let psInstance = /** @type {PerfectScrollbar | null} */ (null)
-    let viewportElement = /** @type {HTMLElement | null} */ (null)
-
-    const handleViewportScroll = () => {
-      updateTerminalAtBottom()
-    }
-
     const attach = () => {
       if (disposed) return
       const container = scrollableRef.current
@@ -245,10 +228,6 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
         rafId = requestAnimationFrame(attach)
         return
       }
-      viewportElement = viewport
-      viewport.addEventListener('scroll', handleViewportScroll, {
-        passive: true,
-      })
       psInstance = new PerfectScrollbar(viewport, {
         wheelPropagation: false,
       })
@@ -263,11 +242,10 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
       if (rafId != null) {
         cancelAnimationFrame(rafId)
       }
-      viewportElement?.removeEventListener('scroll', handleViewportScroll)
       psInstance?.destroy()
       psRef.current = null
     }
-  }, [refreshScrollbar, updateTerminalAtBottom])
+  }, [refreshScrollbar])
 
   useEffect(() => {
     let disposed = false
@@ -282,7 +260,6 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
       }
       disposable = terminal.onScroll(() => {
         showTemporaryScrollbar()
-        updateTerminalAtBottom()
       })
     }
 
@@ -292,7 +269,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
       disposed = true
       disposable?.dispose?.()
     }
-  }, [showTemporaryScrollbar, updateTerminalAtBottom])
+  }, [showTemporaryScrollbar])
 
   useEffect(() => {
     return () => {
@@ -533,9 +510,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
       <div
         ref={scrollableRef}
         className={`monitor-scrollable${
-          isHovered || terminalAtBottom || scrollActive
-            ? ' monitor-scrollbar-visible'
-            : ''
+          isHovered || scrollActive ? ' monitor-scrollbar-visible' : ''
         }`}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
