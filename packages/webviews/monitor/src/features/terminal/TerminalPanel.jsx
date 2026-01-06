@@ -62,6 +62,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
   const startedRef = useRef(false)
   const [isHovered, setIsHovered] = useState(false)
   const [terminalAtBottom, setTerminalAtBottom] = useState(true)
+  const [scrollActive, setScrollActive] = useState(false)
   const scrollableRef = useRef(/** @type {HTMLDivElement | null} */ (null))
   const psRef = useRef(/** @type {PerfectScrollbar | null} */ (null))
   const persistTimerRef = useRef(
@@ -69,6 +70,9 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
   )
   const serializeAddonRef = useRef(
     /** @type {SerializeAddon | undefined} */ (undefined)
+  )
+  const scrollFadeTimerRef = useRef(
+    /** @type {ReturnType<typeof setTimeout> | null} */ (null)
   )
 
   const updateTerminalAtBottom = useCallback(() => {
@@ -78,6 +82,17 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
     } catch {
       setTerminalAtBottom(true)
     }
+  }, [])
+
+  const showTemporaryScrollbar = useCallback(() => {
+    setScrollActive(true)
+    if (scrollFadeTimerRef.current != null) {
+      clearTimeout(scrollFadeTimerRef.current)
+    }
+    scrollFadeTimerRef.current = setTimeout(() => {
+      scrollFadeTimerRef.current = null
+      setScrollActive(false)
+    }, 1100)
   }, [])
 
   const getTerminalText = useCallback(() => {
@@ -177,6 +192,40 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
       psRef.current = null
     }
   }, [refreshScrollbar, updateTerminalAtBottom])
+
+  useEffect(() => {
+    let disposed = false
+    let disposable = null
+
+    const attach = () => {
+      if (disposed) return
+      const terminal = xtermRef.current
+      if (!terminal || typeof terminal.onScroll !== 'function') {
+        requestAnimationFrame(attach)
+        return
+      }
+      disposable = terminal.onScroll(() => {
+        showTemporaryScrollbar()
+        updateTerminalAtBottom()
+      })
+    }
+
+    attach()
+
+    return () => {
+      disposed = true
+      disposable?.dispose?.()
+    }
+  }, [showTemporaryScrollbar, updateTerminalAtBottom])
+
+  useEffect(() => {
+    return () => {
+      if (scrollFadeTimerRef.current != null) {
+        clearTimeout(scrollFadeTimerRef.current)
+        scrollFadeTimerRef.current = null
+      }
+    }
+  }, [])
 
   const handleClearAll = useCallback(() => {
     xtermRef.current?.clear()
@@ -408,7 +457,9 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
       <div
         ref={scrollableRef}
         className={`monitor-scrollable${
-          isHovered || terminalAtBottom ? ' monitor-scrollbar-visible' : ''
+          isHovered || terminalAtBottom || scrollActive
+            ? ' monitor-scrollbar-visible'
+            : ''
         }`}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}

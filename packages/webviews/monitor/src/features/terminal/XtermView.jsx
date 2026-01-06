@@ -29,10 +29,10 @@ import {
  *   getText: () => string
  *   fit: () => void
  *   isAtBottom: () => boolean
- *   scrollToBottom: () => void
- *   pushTransientLock: () => void
- *   popTransientLock: () => void
  *   refreshTheme: () => void
+ *   onScroll: (
+ *     listener: (position: number) => void
+ *   ) => import('@xterm/xterm').IDisposable | undefined
  * }} XtermViewHandle
  *
  *
@@ -326,6 +326,13 @@ const XtermView = forwardRef(function XtermView(props, ref) {
         try {
           themeHandleRef.current?.refresh?.()
         } catch {}
+      },
+      onScroll(listener) {
+        try {
+          return termRef.current?.onScroll(listener)
+        } catch {
+          return undefined
+        }
       },
     }),
     []
