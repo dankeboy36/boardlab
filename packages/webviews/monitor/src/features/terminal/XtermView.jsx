@@ -32,7 +32,6 @@ export const DEFAULT_TERMINAL_FONT_SIZE = 12
  *   clear: () => void
  *   getText: () => string
  *   fit: () => void
- *   isAtBottom: () => boolean
  *   refreshTheme: () => void
  *   onScroll: (
  *     listener: (position: number) => void
@@ -41,7 +40,6 @@ export const DEFAULT_TERMINAL_FONT_SIZE = 12
  *
  *
  * @typedef {{
- *   scrollLock?: boolean
  *   scrollback?: number | undefined
  *   cursorStyle?: 'block' | 'underline' | 'bar' | undefined
  *   fontSize?: number | undefined
@@ -56,13 +54,8 @@ export const DEFAULT_TERMINAL_FONT_SIZE = 12
  */
 /** @type {XtermViewComponent} */
 const XtermView = forwardRef(function XtermView(props, ref) {
-  const {
-    scrollLock = false,
-    scrollback,
-    cursorStyle,
-    fontSize,
-    fontFamily,
-  } = /** @type {XtermViewProps} */ (props)
+  const { scrollback, cursorStyle, fontSize, fontFamily } =
+    /** @type {XtermViewProps} */ (props)
   /** @type {React.RefObject<HTMLDivElement | null>} */
   const containerRef = useRef(null)
   const termRef = useRef(
@@ -81,9 +74,6 @@ const XtermView = forwardRef(function XtermView(props, ref) {
       undefined
     )
   )
-  const lockRef = useRef(!!scrollLock)
-  // Additional transient lock level (used while dropdowns are open)
-  const transientLockRef = useRef(0)
   const defaultsRef = useRef(
     /**
      * @type {Partial<
@@ -187,10 +177,6 @@ const XtermView = forwardRef(function XtermView(props, ref) {
   }, [])
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    lockRef.current = !!scrollLock
-  }, [scrollLock])
-
   // Refit xterm when the container resizes or window size changes
   useEffect(() => {
     const el = containerRef.current
@@ -270,50 +256,12 @@ const XtermView = forwardRef(function XtermView(props, ref) {
         const t = termRef.current
         if (!t) return
         try {
-          const locked = lockRef.current || transientLockRef.current > 0
-          if (locked) {
-            const topLine = /** @type {any} */ (t).buffer?.active?.viewportY
-            t.write(text, () => {
-              try {
-                /** @type {any} */ t.scrollToLine?.(topLine)
-              } catch {}
-            })
-          } else {
-            t.write(text)
-          }
+          t.write(text)
         } catch {}
       },
       clear() {
         const t = termRef.current
         t?.clear()
-      },
-      /** Temporarily force scroll lock on/off without React state. */
-      pushTransientLock() {
-        transientLockRef.current += 1
-      },
-      popTransientLock() {
-        if (transientLockRef.current > 0) transientLockRef.current -= 1
-      },
-      /** Return true if viewport shows the last line(s). */
-      isAtBottom() {
-        const t = termRef.current
-        try {
-          const buf = t?.buffer?.active
-          const rows = t?.rows ?? 0
-          if (!buf || !rows) return true
-          const bottomTopIndex = Math.max(0, (buf.length ?? 0) - rows)
-          const viewportY = buf.viewportY ?? 0
-          return viewportY >= bottomTopIndex
-        } catch {
-          return true
-        }
-      },
-      /** Programmatically scroll to the last line. */
-      scrollToBottom() {
-        const t = termRef.current
-        try {
-          t?.scrollToBottom?.()
-        } catch {}
       },
       getText() {
         const t = termRef.current
