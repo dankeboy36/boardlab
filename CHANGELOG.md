@@ -1,3 +1,10 @@
+## [0.0.5](https://github.com/dankeboy36/boardlab/compare/0.0.4...0.0.5) (2026-01-06)
+
+
+### Bug Fixes
+
+* **ci:** correct bundled VSIX version ([#9](https://github.com/dankeboy36/boardlab/issues/9)) ([7bd38b0](https://github.com/dankeboy36/boardlab/commit/7bd38b04a3c32c7d45356911ab7c5b63bee2b576))
+
 ## [0.0.4](https://github.com/dankeboy36/boardlab/compare/0.0.3...0.0.4) (2026-01-06)
 
 
