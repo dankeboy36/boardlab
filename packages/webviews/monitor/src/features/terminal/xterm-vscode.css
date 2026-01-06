@@ -1,7 +1,3 @@
-/* MIT License */
-/* https://github.com/microsoft/vscode/blob/3f25a2dc283a0c05101af22d6c990175b411064f/src/vs/workbench/contrib/terminal/browser/media/xterm.css */
-/* VS Code–style xterm surface, driven by --vscode-* tokens */
-
 :root {
   --vscode-scrollbarSlider-background: rgba(100, 100, 100, 0.4);
   --vscode-scrollbarSlider-hoverBackground: rgba(100, 100, 100, 0.7);
