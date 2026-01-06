@@ -1,3 +1,10 @@
+## [0.0.4](https://github.com/dankeboy36/boardlab/compare/0.0.3...0.0.4) (2026-01-06)
+
+
+### Bug Fixes
+
+* make monitor terminal VS Code native ([#8](https://github.com/dankeboy36/boardlab/issues/8)) ([cbbe740](https://github.com/dankeboy36/boardlab/commit/cbbe740ea7b1b2c0ff90e0da43669f995f031f86))
+
 ## [0.0.3](https://github.com/dankeboy36/boardlab/compare/0.0.2...0.0.3) (2026-01-05)
 
 
