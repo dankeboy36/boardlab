@@ -24,9 +24,7 @@ import { selectTerminalSettings } from './terminalSelectors.js'
 const MAX_SERIALIZE_ROWS = 2000
 const MAX_PERSISTED_CHARS = 20000
 
-/**
- * @typedef {Object} TerminalPanelProps
- */
+/** @typedef {Object} TerminalPanelProps */
 
 /**
  * @typedef {Object} TerminalPanelHandle
@@ -64,12 +62,8 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
   const startedRef = useRef(false)
   const [isHovered, setIsHovered] = useState(false)
   const [terminalAtBottom, setTerminalAtBottom] = useState(true)
-  const scrollableRef = useRef(
-    /** @type {HTMLDivElement | null} */ (null)
-  )
-  const psRef = useRef(
-    /** @type {PerfectScrollbar | null} */ (null)
-  )
+  const scrollableRef = useRef(/** @type {HTMLDivElement | null} */ (null))
+  const psRef = useRef(/** @type {PerfectScrollbar | null} */ (null))
   const persistTimerRef = useRef(
     /** @type {ReturnType<typeof setTimeout> | null} */ (null)
   )
@@ -421,9 +415,8 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
         style={{
           flex: 1,
           minHeight: 0,
-          margin: 4,
-          background:
-            'var(--vscode-terminal-background, var(--vscode-editor-background))',
+          marginLeft: 4,
+          background: 'var(--vscode-editor-background)',
           overflow: 'hidden',
           position: 'relative',
         }}

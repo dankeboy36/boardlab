@@ -234,9 +234,11 @@
 
 .monitor-scrollable .ps__rail-y {
   width: 14px;
-  right: 4px;
+  right: 0px !important;
   opacity: 0;
-  transition: opacity 0.4s ease, background 200ms ease;
+  transition:
+    opacity 0.4s ease,
+    background 200ms ease;
   background: transparent !important;
   pointer-events: none;
 }
@@ -249,7 +251,7 @@
 
 .monitor-scrollable .ps__thumb-y {
   width: 14px;
-  min-height: 14px;
+  right: 0px !important;
   border-radius: 0 !important;
   background: var(--vscode-scrollbarSlider-background);
   opacity: 1 !important;
