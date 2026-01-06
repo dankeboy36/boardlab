@@ -259,11 +259,14 @@
 .monitor-scrollable .ps:hover > .ps__thumb-y,
 .monitor-scrollable .ps:hover .ps__thumb-y,
 .monitor-scrollable .ps--focus > .ps__thumb-y,
-.monitor-scrollable .ps--focus .ps__thumb-y,
-.monitor-scrollable .ps--scrolling-y > .ps__thumb-y,
-.monitor-scrollable .ps--scrolling-y .ps__thumb-y {
+.monitor-scrollable .ps--focus .ps__thumb-y {
   background: var(--vscode-scrollbarSlider-hoverBackground) !important;
   width: 14px !important;
+}
+
+.monitor-scrollable .ps--scrolling-y > .ps__thumb-y,
+.monitor-scrollable .ps--scrolling-y .ps__thumb-y {
+  background: var(--vscode-scrollbarSlider-background) !important;
 }
 
 .monitor-scrollable .ps__rail-y.ps--clicking > .ps__thumb-y,
