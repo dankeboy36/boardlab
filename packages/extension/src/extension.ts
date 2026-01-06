@@ -1621,19 +1621,6 @@ export function activate(context: vscode.ExtensionContext) {
       }
       await monitorEditors.sendToolbarAction('clear', active)
     }),
-    vscode.commands.registerCommand(
-      'boardlab.monitor.toggleScrollLock',
-      async () => {
-        const active = monitorEditors.getActiveDocument()
-        if (!active) {
-          vscode.window.showInformationMessage(
-            'Open a monitor editor to toggle scroll lock.'
-          )
-          return
-        }
-        await monitorEditors.sendToolbarAction('toggleScrollLock', active)
-      }
-    ),
     vscode.commands.registerCommand('boardlab.plotter.clear', async () => {
       const active = plotterEditors.getActiveDocument()
       if (!active) {

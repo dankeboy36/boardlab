@@ -33,8 +33,6 @@ function MonitorToolbarActionHandler({ terminalRef }) {
         stop()
       } else if (action === 'clear') {
         terminal?.clear?.()
-      } else if (action === 'toggleScrollLock') {
-        terminal?.toggleScrollLock?.()
       }
     })
   }, [play, stop, terminalRef])

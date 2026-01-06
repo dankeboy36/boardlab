@@ -26,15 +26,12 @@ const MAX_PERSISTED_CHARS = 20000
 
 /**
  * @typedef {Object} TerminalPanelProps
- * @property {(locked: boolean) => void} [onScrollLockChange]
  */
 
 /**
  * @typedef {Object} TerminalPanelHandle
  * @property {() => string} getText
  * @property {() => void} clear
- * @property {() => void} toggleScrollLock
- * @property {() => boolean} isScrollLock
  * @property {() => void} refreshTheme
  */
 
@@ -42,10 +39,7 @@ const MAX_PERSISTED_CHARS = 20000
  * @param {TerminalPanelProps} props
  * @param {import('react').Ref<TerminalPanelHandle>} ref
  */
-const TerminalPanel = forwardRef(function TerminalPanel(
-  { onScrollLockChange },
-  ref
-) {
+const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
   const settings = useSelector(selectTerminalSettings)
   const persistedTerminal = useRef(() => {
     const state = getPersistedState()
@@ -53,13 +47,9 @@ const TerminalPanel = forwardRef(function TerminalPanel(
     if (terminalState && typeof terminalState === 'object') {
       return {
         text: typeof terminalState.text === 'string' ? terminalState.text : '',
-        scrollLock:
-          typeof terminalState.scrollLock === 'boolean'
-            ? terminalState.scrollLock
-            : false,
       }
     }
-    return { text: '', scrollLock: false }
+    return { text: '' }
   })
   const xtermRef = useRef(
     /** @type {import('./XtermView.jsx').XtermViewHandle | null} */ (null)
@@ -72,14 +62,11 @@ const TerminalPanel = forwardRef(function TerminalPanel(
   const rafIdRef = useRef(/** @type {number | null} */ (null))
   const flushTidRef = useRef(/** @type {number | null} */ (null))
   const startedRef = useRef(false)
-  const [scrollLock, setScrollLock] = useState(
-    persistedTerminal.current.scrollLock
-  )
-  const scrollLockRef = useRef(scrollLock)
+  const [isHovered, setIsHovered] = useState(false)
+  const [terminalAtBottom, setTerminalAtBottom] = useState(true)
   const scrollableRef = useRef(
     /** @type {HTMLDivElement | null} */ (null)
   )
-  const [scrollbarVisible, setScrollbarVisible] = useState(false)
   const psRef = useRef(
     /** @type {PerfectScrollbar | null} */ (null)
   )
@@ -89,6 +76,15 @@ const TerminalPanel = forwardRef(function TerminalPanel(
   const serializeAddonRef = useRef(
     /** @type {SerializeAddon | undefined} */ (undefined)
   )
+
+  const updateTerminalAtBottom = useCallback(() => {
+    try {
+      const atBottom = xtermRef.current?.isAtBottom?.() ?? true
+      setTerminalAtBottom(atBottom)
+    } catch {
+      setTerminalAtBottom(true)
+    }
+  }, [])
 
   const getTerminalText = useCallback(() => {
     try {
@@ -127,7 +123,6 @@ const TerminalPanel = forwardRef(function TerminalPanel(
     updatePersistentState({
       terminal: {
         text: snapshot,
-        scrollLock: scrollLockRef.current,
       },
     })
   }, [collectSnapshot])
@@ -144,12 +139,18 @@ const TerminalPanel = forwardRef(function TerminalPanel(
     try {
       psRef.current?.update()
     } catch {}
-  }, [])
+    updateTerminalAtBottom()
+  }, [updateTerminalAtBottom])
 
   useEffect(() => {
     let disposed = false
     let rafId = /** @type {number | null} */ (null)
     let psInstance = /** @type {PerfectScrollbar | null} */ (null)
+    let viewportElement = /** @type {HTMLElement | null} */ (null)
+
+    const handleViewportScroll = () => {
+      updateTerminalAtBottom()
+    }
 
     const attach = () => {
       if (disposed) return
@@ -159,6 +160,10 @@ const TerminalPanel = forwardRef(function TerminalPanel(
         rafId = requestAnimationFrame(attach)
         return
       }
+      viewportElement = viewport
+      viewport.addEventListener('scroll', handleViewportScroll, {
+        passive: true,
+      })
       psInstance = new PerfectScrollbar(viewport, {
         wheelPropagation: false,
       })
@@ -173,10 +178,11 @@ const TerminalPanel = forwardRef(function TerminalPanel(
       if (rafId != null) {
         cancelAnimationFrame(rafId)
       }
+      viewportElement?.removeEventListener('scroll', handleViewportScroll)
       psInstance?.destroy()
       psRef.current = null
     }
-  }, [refreshScrollbar])
+  }, [refreshScrollbar, updateTerminalAtBottom])
 
   const handleClearAll = useCallback(() => {
     xtermRef.current?.clear()
@@ -253,12 +259,6 @@ const TerminalPanel = forwardRef(function TerminalPanel(
   })
 
   useEffect(() => {
-    onScrollLockChange?.(scrollLock)
-    scrollLockRef.current = scrollLock
-    schedulePersist()
-  }, [scrollLock, onScrollLockChange, schedulePersist])
-
-  useEffect(() => {
     // Fit first at current size
     try {
       xtermRef.current?.fit?.()
@@ -328,15 +328,13 @@ const TerminalPanel = forwardRef(function TerminalPanel(
     () => ({
       getText: () => getTerminalText(),
       clear: handleClearAll,
-      toggleScrollLock: () => setScrollLock((prev) => !prev),
-      isScrollLock: () => scrollLock,
       refreshTheme: () => {
         try {
           xtermRef.current?.refreshTheme?.()
         } catch {}
       },
     }),
-    [getTerminalText, handleClearAll, scrollLock]
+    [getTerminalText, handleClearAll]
   )
 
   useEffect(() => {
@@ -397,11 +395,11 @@ const TerminalPanel = forwardRef(function TerminalPanel(
   }, [persistNow])
 
   const handleMouseEnter = useCallback(() => {
-    setScrollbarVisible(true)
+    setIsHovered(true)
   }, [])
 
   const handleMouseLeave = useCallback(() => {
-    setScrollbarVisible(false)
+    setIsHovered(false)
   }, [])
 
   return (
@@ -416,7 +414,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(
       <div
         ref={scrollableRef}
         className={`monitor-scrollable${
-          scrollbarVisible ? ' monitor-scrollbar-visible' : ''
+          isHovered || terminalAtBottom ? ' monitor-scrollbar-visible' : ''
         }`}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -432,7 +430,6 @@ const TerminalPanel = forwardRef(function TerminalPanel(
       >
         <XtermView
           ref={xtermRef}
-          scrollLock={scrollLock}
           scrollback={settings.scrollback}
           fontSize={settings.fontSize}
           cursorStyle={settings.cursorStyle}

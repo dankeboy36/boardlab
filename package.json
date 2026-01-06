@@ -265,12 +265,6 @@
         "icon": "$(clear-all)"
       },
       {
-        "command": "boardlab.monitor.toggleScrollLock",
-        "title": "Toggle Scroll Lock",
-        "category": "BoardLab",
-        "icon": "$(lock)"
-      },
-      {
         "command": "boardlab.monitor.configureLineEnding",
         "title": "Select Line Ending",
         "category": "BoardLab",
@@ -758,11 +752,6 @@
           "command": "boardlab.monitor.clear",
           "when": "activeCustomEditorId == boardlab.monitorEditor",
           "group": "navigation@3"
-        },
-        {
-          "command": "boardlab.monitor.toggleScrollLock",
-          "when": "activeCustomEditorId == boardlab.monitorEditor",
-          "group": "navigation@4"
         },
         {
           "command": "boardlab.monitor.configureLineEnding",
