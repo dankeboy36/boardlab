@@ -9,6 +9,9 @@
 }
 
 .xterm {
+  /* Same as VS Code */
+  padding-left: 20px;
+
   cursor: text;
   position: relative;
   user-select: none;
@@ -250,7 +253,7 @@
 
 .monitor-scrollable .ps__rail-y {
   width: 14px;
-  right: 0px !important;
+  right: 20px !important;
   opacity: 0;
   transition:
     opacity 0.4s ease,

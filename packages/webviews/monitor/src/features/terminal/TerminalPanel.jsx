@@ -542,7 +542,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
         style={{
           flex: 1,
           minHeight: 0,
-          marginLeft: 4,
+          margin: 0,
           background: 'var(--vscode-editor-background)',
           overflow: 'hidden',
           position: 'relative',
