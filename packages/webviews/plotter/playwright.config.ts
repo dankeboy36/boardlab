@@ -1,4 +1,10 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
 import { defineConfig } from '@playwright/test'
+
+const workspaceRoot = path.dirname(fileURLToPath(import.meta.url))
+const monitorRoot = path.resolve(workspaceRoot, '..', 'monitor')
 
 export default defineConfig({
   testDir: './e2e',
@@ -11,8 +17,8 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
   webServer: {
-    command:
-      'npm --prefix packages/webviews/monitor run dev -- --host 127.0.0.1 --port 5173',
+    command: 'npm run dev -- --host 127.0.0.1 --port 5173',
+    cwd: monitorRoot,
     url: 'http://127.0.0.1:5173',
     reuseExistingServer: true,
     stdout: 'pipe',

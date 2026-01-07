@@ -53,6 +53,10 @@ import { MonitorFileSystemProvider } from './monitor/monitorFs'
 import { MonitorResourceStore } from './monitor/monitorResources'
 import { MonitorSelectionCoordinator } from './monitor/monitorSelections'
 import { MonitorStatusBar } from './monitor/monitorStatusBar'
+import {
+  logDetectedPorts,
+  logMonitorBridgeMetrics,
+} from './monitor/bridgeMetrics'
 import { formatMonitorUri, MONITOR_URI_SCHEME } from './monitor/monitorUri'
 import { collectCliDiagnostics } from './profile/cliDiagnostics'
 import { readProfile, readProfiles, updateProfile } from './profile/profiles'
@@ -1651,6 +1655,14 @@ export function activate(context: vscode.ExtensionContext) {
         }
         await plotterEditors.sendToolbarAction('resetYScale', active)
       }
+    ),
+    vscode.commands.registerCommand(
+      'boardlab.monitor.developer.logBridgeMetrics',
+      () => logMonitorBridgeMetrics(boardlabContext)
+    ),
+    vscode.commands.registerCommand(
+      'boardlab.monitor.developer.logDetectedPorts',
+      () => logDetectedPorts(boardlabContext)
     ),
     vscode.commands.registerCommand(
       'boardlab.monitor.configureLineEnding',

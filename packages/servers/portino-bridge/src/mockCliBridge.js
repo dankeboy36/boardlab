@@ -266,6 +266,23 @@ export class MockCliBridge {
     return res
   }
 
+  getMonitorSummaries() {
+    /** @type {import('./cliBridge.js').MonitorSummary[]} */
+    const summary = []
+    for (const key of Object.keys(this._monitors)) {
+      const ref = this._monitors[key]
+      const port = parsePortKey(key)
+      summary.push({
+        portKey: key,
+        port,
+        refs: ref.refs,
+        baudrate: ref.baudrate,
+        paused: ref.monitor.isPaused(),
+      })
+    }
+    return summary
+  }
+
   /** @type {import('./cliBridge.js').DisposeCallback} */
   async dispose() {
     for (const key of Object.keys(this._monitors)) {

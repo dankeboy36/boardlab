@@ -1,5 +1,6 @@
 // @ts-check
-import { expect, test } from '@playwright/test'
+import { test } from '@playwright/test'
+import { createPortKey } from 'boards-list'
 
 import { MockCliBridge, createServer } from './utils/bridge.js'
 
@@ -14,7 +15,6 @@ test.describe('Device detach/attach', () => {
     server = await createServer({
       port: 0,
       cliBridgeFactory: () => cliBridge,
-      testIntrospection: true,
     })
   })
 
@@ -23,33 +23,42 @@ test.describe('Device detach/attach', () => {
   })
 
   test('removing a device updates detected ports', async ({ page }) => {
-    const portKey = 'arduino+serial:///dev/tty.usbmock-1'
+    const portKey = createPortKey({
+      protocol: 'serial',
+      address: '/dev/tty.usbmock-1',
+    })
 
     await page.goto(`/?bridgeport=${server.port}`)
-    await expect(page.getByTitle(/WebSocket: connected/)).toBeVisible()
+    await page.waitForSelector('#root')
 
-    // Initial detected ports include the device
-    const initial = await fetch(
-      `http://localhost:${server.port}/__test__/detected-ports`
-    ).then((r) => r.json())
-    expect(initial[portKey]).toBeTruthy()
+    const findEntry = (list) => list.find((entry) => entry.portKey === portKey)
 
-    // Detach via mock bridge and expect it to vanish from server state
+    await test.expect
+      .poll(
+        async () => {
+          const json = await fetch(
+            `http://localhost:${server.port}/metrics/detected-ports`
+          ).then((r) => r.json())
+          return findEntry(json)
+        },
+        { intervals: [200, 400, 800], timeout: 10_000 }
+      )
+      .toBeTruthy()
+
     cliBridge.detachPort(portKey)
     await test.expect
       .poll(
         async () => {
           const res = await fetch(
-            `http://localhost:${server.port}/__test__/detected-ports`
+            `http://localhost:${server.port}/metrics/detected-ports`
           )
           const json = await res.json()
-          return json[portKey]
+          return findEntry(json)
         },
         { intervals: [200, 400, 800], timeout: 10_000 }
       )
       .toBeUndefined()
 
-    // Re-attach and expect it to show up again
     cliBridge.attachPort({
       protocol: 'serial',
       address: '/dev/tty.usbmock-1',
@@ -59,10 +68,10 @@ test.describe('Device detach/attach', () => {
       .poll(
         async () => {
           const res = await fetch(
-            `http://localhost:${server.port}/__test__/detected-ports`
+            `http://localhost:${server.port}/metrics/detected-ports`
           )
           const json = await res.json()
-          return !!json[portKey]
+          return !!findEntry(json)
         },
         { intervals: [200, 400, 800], timeout: 10_000 }
       )

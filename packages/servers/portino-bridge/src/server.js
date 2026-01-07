@@ -134,8 +134,6 @@ class AttachmentRegistry {
  */
 export async function createServer(options = {}) {
   const DEBUG = true // options.debug ?? process.env.PORTINO_DEBUG === '1'
-  const TEST_INTROSPECTION =
-    options.testIntrospection ?? process.env.PORTINO_TEST === '1'
   const v = (/** @type {unknown[]} */ ...args) => {
     if (DEBUG) console.log(...args)
   }
@@ -189,6 +187,12 @@ export async function createServer(options = {}) {
   const attachmentRegistry = new AttachmentRegistry()
   attachmentRegistry.configure(options.control ?? {})
 
+  /** @type {import('./boardListWatch.js').BoardListStateWatcher | undefined} */
+  const watcher = await cliBridge.createBoardListWatch()
+
+  /** Tracks RequestClientConnect count */
+  let clientConnectCount = 0
+
   app.post('/control/attach', (req, res) => {
     try {
       const clientId =
@@ -231,41 +235,100 @@ export async function createServer(options = {}) {
     })
   })
 
-  // --- Test-only metrics (guarded) ---
-  /** Tracks RequestClientConnect count */
-  let clientConnectCount = 0
-  if (TEST_INTROSPECTION) {
-    app.get('/__test__/metrics', (_req, res) => {
-      // Debugging aid: track metrics route usage and current active stream counts
-      try {
-        /** @type {Record<string, number>} */
-        const counts = {}
-        for (const [key, entry] of activeSerialStreams.entries()) {
-          counts[key] = entry.clients.size
-        }
-        v(
-          `[metrics] ws=${portinoConnections.size} active=${JSON.stringify(counts)}`
-        )
-      } catch {}
-      /** @type {Record<string, { clientCount: number; lastCount?: number }>} */
-      const active = {}
-      for (const [key, entry] of activeSerialStreams.entries()) {
-        active[key] = {
-          clientCount: entry.clients.size,
-          lastCount: entry.lastCount,
-        }
-      }
-      res.json({
-        wsConnections: portinoConnections.size,
-        clientConnectCount,
-        globalClientCount: globalClientIndex.size,
-        activeStreams: active,
-      })
-    })
-    app.get('/__test__/detected-ports', (_req, res) => {
-      res.json(watcher.state)
-    })
+  const describeDetectedPorts = () => {
+    const state = watcher?.state ?? {}
+    return Object.entries(state).map(([portKey, entry]) => ({
+      portKey,
+      port: toPortIdentifier(entry.port),
+      boards: (entry?.boards ?? []).map((board) => ({
+        name: board.name,
+        fqbn: board.fqbn,
+      })),
+    }))
   }
+
+  const describeActiveStreams = () => {
+    const streams = []
+    for (const [portKey, entry] of activeSerialStreams.entries()) {
+      streams.push({
+        portKey,
+        clientCount: entry.clients.size,
+        lastCount: entry.lastCount,
+        clientIds: Array.from(entry.clientIndex.keys()),
+      })
+    }
+    return streams
+  }
+
+  const describeRunningMonitors = () => {
+    const monitors = []
+    for (const [portKey, info] of runningMonitorsByKey.entries()) {
+      const stream = activeSerialStreams.get(portKey)
+      monitors.push({
+        portKey,
+        port: info.port,
+        baudrate: info.baudrate,
+        clientCount: stream?.clients.size ?? 0,
+        lastCount: stream?.lastCount,
+      })
+    }
+    return monitors
+  }
+
+  const describePortinoConnections = () => {
+    return Array.from(portinoConnections).map(({ clientId }) => ({
+      clientId: clientId ?? null,
+    }))
+  }
+
+  app.get('/metrics', (_req, res) => {
+    try {
+      /** @type {Record<string, number>} */
+      const counts = {}
+      for (const [key, entry] of activeSerialStreams.entries()) {
+        counts[key] = entry.clients.size
+      }
+      v(
+        `[metrics] ws=${portinoConnections.size} active=${JSON.stringify(
+          counts
+        )}`
+      )
+    } catch {
+      // ignore logging failures
+    }
+    const detectedPorts = describeDetectedPorts()
+    const activeStreams = describeActiveStreams()
+    const runningMonitors = describeRunningMonitors()
+    const monitorRefs = cliBridge.getMonitorSummaries()
+    res.json({
+      timestamp: new Date().toISOString(),
+      host,
+      bridgePort: boundPort,
+      httpBaseUrl,
+      wsBaseUrl,
+      attachments: {
+        total: attachmentRegistry.size,
+      },
+      connections: {
+        wsConnections: portinoConnections.size,
+        details: describePortinoConnections(),
+      },
+      clientConnectCount,
+      globalClientCount: globalClientIndex.size,
+      detectedPorts,
+      runningMonitors,
+      activeStreams,
+      monitorRefs,
+      cliBridge: {
+        selectedBaudrates: cliBridge.selectedBaudrates,
+        suspendedPortKeys: cliBridge.suspendedPortKeys,
+      },
+    })
+  })
+
+  app.get('/metrics/detected-ports', (_req, res) => {
+    res.json(describeDetectedPorts())
+  })
 
   const listenPort = options.port ?? 3000
   await new Promise((resolve, reject) => {
@@ -833,7 +896,6 @@ export async function createServer(options = {}) {
     req.on('aborted', onReqGone)
   })
 
-  const watcher = await cliBridge.createBoardListWatch()
   watcher.emitter.on('update', async () => {
     // Track seen protocols and proactively fetch their monitor settings
     try {

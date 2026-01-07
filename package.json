@@ -60,7 +60,8 @@
     "prereset": "npm run reset --workspaces",
     "reset": "rimraf schemas out node_modules .vscode-test",
     "test": "vitest run --config ./packages/extension/vitest.config.ts",
-    "test:ci": "npm run test:ci --workspaces --if-present && npm test && npm run test:vsix",
+    "test:ci": "npm run test:ci --workspaces --if-present && npm run test:e2e && npm test && npm run test:vsix",
+    "test:e2e": "npm --workspaces --if-present run test:e2e",
     "pretest:vsix": "npm run compile",
     "test:vsix": "node ./out/test/runTest.js",
     "watch": "tsc -watch -p ./"
@@ -276,6 +277,16 @@
         "title": "Configure Baudrate",
         "category": "BoardLab",
         "icon": "$(pulse)"
+      },
+      {
+        "command": "boardlab.monitor.developer.logBridgeMetrics",
+        "title": "Log Monitor Bridge Metrics",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.monitor.developer.logDetectedPorts",
+        "title": "Log Monitor Detected Ports",
+        "category": "BoardLab"
       },
       {
         "command": "boardlab.plotter.focus",
