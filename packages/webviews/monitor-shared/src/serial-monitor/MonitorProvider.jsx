@@ -7,18 +7,18 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { HOST_EXTENSION } from 'vscode-messenger-common'
 
 import { vscode } from '@boardlab/base'
 import {
-  getMonitorSelection,
   notifyMonitorEditorStatus,
-  notifyMonitorSelectionChanged,
   notifyPlotterEditorStatus,
 } from '@boardlab/protocol'
 
+import { createExtensionClient } from './extensionClient.js'
 import { selectSerialMonitor } from './serialMonitorSelectors.js'
 import {
   connect as connectAction,
@@ -35,6 +35,8 @@ import {
   updateDetectedPorts,
 } from './serialMonitorSlice.js'
 import { useSerialMonitorConnection } from './useSerialMonitorConnection.js'
+
+/** @typedef {import('@boardlab/protocol').ExtensionClient} ExtensionClient */
 
 /**
  * @typedef {{
@@ -66,11 +68,16 @@ const MonitorContext = createContext(
  * @param {{
  *   client: import('./client.js').MonitorClient
  *   children: import('react').ReactNode
+ *   extensionClient?: ExtensionClient
  * }} props
  */
-export function MonitorProvider({ client, children }) {
+export function MonitorProvider({ client, children, extensionClient }) {
   const dispatch = useDispatch()
   const serialState = useSelector(selectSerialMonitor)
+  const [ownedService] = useState(
+    () => extensionClient ?? createExtensionClient()
+  )
+  const service = extensionClient ?? ownedService
 
   const selectedBaudrate = useMemo(() => {
     const selectedPort = serialState.selectedPort
@@ -82,26 +89,34 @@ export function MonitorProvider({ client, children }) {
   }, [serialState.selectedPort, serialState.selectedBaudrates])
 
   // Track listeners for stream events; kept outside state to avoid rerenders
-  const listenersRef = useRef(new Set())
+  const listenersRef = useRef(
+    /** @type {Set<MonitorStreamListener>} */ (new Set())
+  )
 
-  const notify = useCallback((type, payload) => {
-    for (const listener of listenersRef.current) {
-      try {
-        if (type === 'start') listener.onStart?.()
-        else if (type === 'stop') listener.onStop?.()
-        else if (type === 'text') listener.onText?.(payload)
-      } catch (err) {
-        console.error('Monitor listener error:', err)
+  const notify = useCallback(
+    (/** @type {string} */ type, /** @type {string} */ payload = '') => {
+      for (const listener of listenersRef.current) {
+        try {
+          if (type === 'start') listener.onStart?.()
+          else if (type === 'stop') listener.onStop?.()
+          else if (type === 'text') listener.onText?.(payload)
+        } catch (err) {
+          console.error('Monitor listener error:', err)
+        }
       }
-    }
-  }, [])
+    },
+    []
+  )
 
-  const registerListener = useCallback((listener) => {
-    listenersRef.current.add(listener)
-    return () => {
-      listenersRef.current.delete(listener)
-    }
-  }, [])
+  const registerListener = useCallback(
+    (/** @type {MonitorStreamListener} */ listener) => {
+      listenersRef.current.add(listener)
+      return () => {
+        listenersRef.current.delete(listener)
+      }
+    },
+    []
+  )
 
   const onStreamStart = useCallback(() => {
     dispatch(startMonitor())
@@ -114,7 +129,7 @@ export function MonitorProvider({ client, children }) {
   }, [dispatch, notify])
 
   const onStreamText = useCallback(
-    (text) => {
+    (/** @type {string} */ text) => {
       notify('text', text)
     },
     [notify]
@@ -129,6 +144,19 @@ export function MonitorProvider({ client, children }) {
     () => ({ disconnectHoldMs: 1500, coldStartMs: 1000 }),
     []
   )
+
+  useEffect(() => {
+    if (extensionClient) {
+      return undefined
+    }
+    return () => {
+      try {
+        ownedService?.dispose?.()
+      } catch (error) {
+        console.error('Failed to dispose extension client', error)
+      }
+    }
+  }, [extensionClient, ownedService])
 
   const selectedPortRef = useRef(serialState.selectedPort)
   useEffect(() => {
@@ -145,7 +173,7 @@ export function MonitorProvider({ client, children }) {
     startedRef.current = serialState.started
   }, [serialState.started])
 
-  const lastEditorStatusRef = useRef()
+  const lastEditorStatusRef = useRef('')
 
   useEffect(() => {
     const messenger = vscode.messenger
@@ -154,7 +182,9 @@ export function MonitorProvider({ client, children }) {
     }
     const webviewType =
       typeof window !== 'undefined'
-        ? window.__BOARDLAB_WEBVIEW_TYPE__
+        ? /** @type {Window & { __BOARDLAB_WEBVIEW_TYPE__?: string }} */ (
+            window
+          ).__BOARDLAB_WEBVIEW_TYPE__
         : undefined
     const editorStatusNotification =
       webviewType === 'plotter'
@@ -225,12 +255,26 @@ export function MonitorProvider({ client, children }) {
   const readyToControl = Boolean(client)
 
   const requestedInitialSelectionRef = useRef(false)
+  const lastSelectionSignatureRef = useRef('')
 
   const applySelection = useCallback(
+    /**
+     * @param {{
+     *   port?: import('boards-list').PortIdentifier
+     *   baudrate?: string
+     * }} params
+     */
     ({ port, baudrate }) => {
+      const incomingKey = port ? createPortKey(port) : undefined
+      const selectionSignature = `${incomingKey ?? ''}|${baudrate ?? ''}`
+      if (lastSelectionSignatureRef.current === selectionSignature) {
+        return
+      }
+      lastSelectionSignatureRef.current = selectionSignature
+
       const current = selectedPortRef.current
       const currentKey = current ? createPortKey(current) : undefined
-      const incomingKey = port ? createPortKey(port) : undefined
+      const selectionChanged = incomingKey !== currentKey
       const wantsAutoPlay = autoPlayRef.current
       console.debug('[monitor-shared] applySelection', {
         incomingKey,
@@ -241,11 +285,13 @@ export function MonitorProvider({ client, children }) {
 
       if (!port) {
         if (currentKey) {
-          dispatch(setSelectedPort(undefined))
+          // Avoid dropping the current selection when unrelated events push an empty selection.
+          return
         }
         if (startedRef.current && readyToControl) {
           stopRef.current()
         }
+        dispatch(setSelectedPort(undefined))
         return
       }
 
@@ -257,7 +303,7 @@ export function MonitorProvider({ client, children }) {
         dispatch(mergeSelectedBaudrate({ port, baudrate }))
       }
 
-      if (readyToControl) {
+      if (readyToControl && selectionChanged) {
         if (wantsAutoPlay) {
           playRef.current()
         } else if (startedRef.current) {
@@ -269,38 +315,26 @@ export function MonitorProvider({ client, children }) {
   )
 
   useEffect(() => {
-    const messenger = vscode.messenger
-    if (!messenger) {
-      return
+    if (!service) {
+      return undefined
     }
-    const disposable = messenger.onNotification(
-      notifyMonitorSelectionChanged,
-      applySelection
-    )
-    return () => {
-      try {
-        disposable?.dispose?.()
-      } catch (error) {
-        console.error('Failed to dispose selection listener', error)
-      }
-    }
-  }, [applySelection])
+    return service.onSelectionChanged(applySelection)
+  }, [applySelection, service])
 
   useEffect(() => {
-    const messenger = vscode.messenger
-    if (!messenger) {
-      return
+    if (!service) {
+      return undefined
     }
     if (!client) {
       requestedInitialSelectionRef.current = false
-      return
+      return undefined
     }
     if (requestedInitialSelectionRef.current) {
-      return
+      return undefined
     }
     requestedInitialSelectionRef.current = true
-    messenger
-      .sendRequest(getMonitorSelection, HOST_EXTENSION)
+    service
+      .getMonitorSelection()
       .then((selection) => {
         if (selection) {
           applySelection(selection)
@@ -310,7 +344,7 @@ export function MonitorProvider({ client, children }) {
         console.error('Failed to resolve monitor selection', error)
         requestedInitialSelectionRef.current = false
       })
-  }, [applySelection, client])
+  }, [applySelection, client, service])
 
   const previousStatusRef = useRef(serialState.status)
   useEffect(() => {

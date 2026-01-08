@@ -28,8 +28,6 @@ import { notifyError, notifyInfo } from '@boardlab/base'
  * @property {() => void} onStart
  * @property {() => void} onStop
  * @property {() => void} onBusy // called when server indicates HTTP 423
- * @property {(port: import('boards-list').PortIdentifier) => void} onPause
- * @property {(port: import('boards-list').PortIdentifier) => void} onResume
  * @property {boolean} [enabled=true] Default is `true`
  * @property {boolean} [autoPlay=true] Default is `true`
  * @property {UseSerialMonitorConnectionOptions} [options]

@@ -1,6 +1,7 @@
 export { MonitorClient } from './client.js'
 export { MonitorClientContext } from './contexts/MonitorClientContext.js'
 export { MonitorClientContextProvider } from './contexts/MonitorClientContextProvider.jsx'
+export { createExtensionClient } from './extensionClient.js'
 export { default as MonitorPlayStopButton } from './MonitorPlayStopButton.jsx'
 export {
   MonitorProvider,
