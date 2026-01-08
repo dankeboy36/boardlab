@@ -38,19 +38,47 @@ const DEFAULT_HOST = '127.0.0.1'
 
 class AttachmentRegistry {
   constructor() {
-    /** @type {Map<string, { clientId?: string; attachedAt: number }>} */
+    /**
+     * @type {Map<
+     *   string,
+     *   { clientId?: string; attachedAt: number; lastSeen: number }
+     * >}
+     */
     this.attachments = new Map()
     this.idleTimer = undefined
     this.idleTimeoutMs = 0
     this.onIdle = undefined
+    this.heartbeatTimeoutMs = 0
+    this.heartbeatSweepMs = 0
+    this.heartbeatTimer = undefined
   }
 
-  /** @param {{ idleTimeoutMs?: number; onIdle?: () => void | Promise<void> }} [options] */
+  /**
+   * @param {{
+   *   idleTimeoutMs?: number
+   *   onIdle?: () => void | Promise<void>
+   *   heartbeatTimeoutMs?: number
+   *   heartbeatSweepMs?: number
+   * }} [options]
+   */
   configure(options = {}) {
-    const { idleTimeoutMs, onIdle } = options
+    const { idleTimeoutMs, onIdle, heartbeatTimeoutMs, heartbeatSweepMs } =
+      options
     this.idleTimeoutMs =
       typeof idleTimeoutMs === 'number' && idleTimeoutMs > 0 ? idleTimeoutMs : 0
     this.onIdle = typeof onIdle === 'function' ? onIdle : undefined
+    this.heartbeatTimeoutMs =
+      typeof heartbeatTimeoutMs === 'number' && heartbeatTimeoutMs > 0
+        ? heartbeatTimeoutMs
+        : 0
+    this.heartbeatSweepMs =
+      typeof heartbeatSweepMs === 'number' && heartbeatSweepMs > 0
+        ? heartbeatSweepMs
+        : this.heartbeatTimeoutMs > 0
+          ? Math.min(5_000, Math.max(1_000, this.heartbeatTimeoutMs / 2))
+          : 0
+
+    this.refreshHeartbeatSweep()
     if (this.attachments.size === 0) {
       // Re-evaluate idle scheduling under the new configuration.
       this.clearTimer()
@@ -64,22 +92,78 @@ class AttachmentRegistry {
 
   attach(clientId) {
     const token = randomUUID()
-    this.attachments.set(token, { clientId, attachedAt: Date.now() })
+    const now = Date.now()
+    this.attachments.set(token, { clientId, attachedAt: now, lastSeen: now })
     this.clearTimer()
+    this.refreshHeartbeatSweep()
     return { token }
   }
 
   detach(token) {
     this.attachments.delete(token)
     if (this.attachments.size === 0) {
+      this.clearHeartbeatTimer()
       this.scheduleIdleShutdown()
     }
     return this.attachments.size
   }
 
+  touch(token) {
+    const entry = this.attachments.get(token)
+    if (!entry) {
+      return false
+    }
+    entry.lastSeen = Date.now()
+    return true
+  }
+
   dispose() {
     this.clearTimer()
+    this.clearHeartbeatTimer()
     this.attachments.clear()
+  }
+
+  pruneStale() {
+    if (this.heartbeatTimeoutMs <= 0 || this.attachments.size === 0) {
+      return
+    }
+    const now = Date.now()
+    let removed = false
+    for (const [token, entry] of this.attachments.entries()) {
+      const lastSeen = entry.lastSeen ?? entry.attachedAt
+      if (now - lastSeen > this.heartbeatTimeoutMs) {
+        this.attachments.delete(token)
+        removed = true
+      }
+    }
+    if (removed && this.attachments.size === 0) {
+      this.clearHeartbeatTimer()
+      this.scheduleIdleShutdown()
+    }
+  }
+
+  refreshHeartbeatSweep() {
+    if (this.heartbeatTimeoutMs <= 0 || this.attachments.size === 0) {
+      this.clearHeartbeatTimer()
+      return
+    }
+    if (this.heartbeatTimer) {
+      return
+    }
+    if (this.heartbeatSweepMs <= 0) {
+      return
+    }
+    this.heartbeatTimer = setInterval(() => {
+      this.pruneStale()
+    }, this.heartbeatSweepMs)
+  }
+
+  clearHeartbeatTimer() {
+    if (!this.heartbeatTimer) {
+      return
+    }
+    clearInterval(this.heartbeatTimer)
+    this.heartbeatTimer = undefined
   }
 
   scheduleIdleShutdown() {
@@ -198,7 +282,12 @@ function createMonitorBridgeLogStream() {
  * @property {boolean} [testIntrospection]
  * @property {string} [cliPath]
  * @property {string} [host='127.0.0.1'] Default is `'127.0.0.1'`
- * @property {{ idleTimeoutMs?: number; onIdle?: () => void | Promise<void> }} [control]
+ * @property {{
+ *   idleTimeoutMs?: number
+ *   onIdle?: () => void | Promise<void>
+ *   heartbeatTimeoutMs?: number
+ *   heartbeatSweepMs?: number
+ * }} [control]
  * @property {() =>
  *   | import('./cliBridge.js').CliBridge
  *   | Promise<import('./cliBridge.js').CliBridge>} [cliBridgeFactory]
@@ -224,6 +313,7 @@ export async function createServer(options = {}) {
       logFileStream.write(`${line}\n`)
     }
   }
+  let lastHeartbeatLogAt = 0
   const broadcastBridgeLog = (entry) => {
     portinoConnections.forEach((connection) => {
       try {
@@ -358,6 +448,33 @@ export async function createServer(options = {}) {
     } catch (error) {
       console.error('[PortinoServer] attach failed', error)
       res.status(500).json({ error: 'attach_failed' })
+    }
+  })
+
+  app.post('/control/heartbeat', (req, res) => {
+    try {
+      const token = req.body?.token
+      if (!token) {
+        res.status(400).json({ error: 'missing_token' })
+        return
+      }
+      const ok = attachmentRegistry.touch(token)
+      if (!ok) {
+        res.status(404).json({ error: 'unknown_token' })
+        return
+      }
+      const now = Date.now()
+      if (now - lastHeartbeatLogAt > 10_000) {
+        lastHeartbeatLogAt = now
+        logEntry('debug', ['Heartbeat received'], {
+          token,
+          attachments: attachmentRegistry.size,
+        })
+      }
+      res.json({ ok: true })
+    } catch (error) {
+      console.error('[PortinoServer] heartbeat failed', error)
+      res.status(500).json({ error: 'heartbeat_failed' })
     }
   })
 

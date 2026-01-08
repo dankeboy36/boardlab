@@ -721,6 +721,24 @@
             "advanced"
           ]
         },
+        "boardlab.monitor.bridgeHeartbeatIntervalMs": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 0,
+          "markdownDescription": "Interval in milliseconds for the extension to ping the monitor bridge. Set to 0 to disable heartbeats and stale attachment pruning.",
+          "tags": [
+            "advanced"
+          ]
+        },
+        "boardlab.monitor.bridgeHeartbeatTimeoutMs": {
+          "type": "number",
+          "default": 20000,
+          "minimum": 0,
+          "markdownDescription": "Time in milliseconds after the last heartbeat before the monitor bridge prunes an attachment. Set to 0 to disable heartbeats and stale attachment pruning.",
+          "tags": [
+            "advanced"
+          ]
+        },
         "boardlab.cli.daemonDebug": {
           "type": "boolean",
           "default": false,

@@ -47,9 +47,12 @@ import {
 
 const DEFAULT_BRIDGE_HOST = '127.0.0.1'
 const DEFAULT_BRIDGE_PORT = 55888
+const DEFAULT_HEARTBEAT_INTERVAL_MS = 5_000
+const DEFAULT_HEARTBEAT_TIMEOUT_MS = 20_000
 const WAIT_ATTEMPTS = 50
 const WAIT_DELAY_MS = 200
 const PROBE_TIMEOUT_MS = 1_000_000
+const HEARTBEAT_REQUEST_TIMEOUT_MS = 5_000
 
 interface ServiceReadyInfo extends MonitorBridgeInfo {
   readonly ownerPid: number
@@ -95,6 +98,8 @@ export interface MonitorBridgeServiceClientOptions {
   readonly preferredPort?: number
   readonly mode?: MonitorBridgeMode
   readonly inProcessServerFactory?: InProcessServerFactory
+  readonly heartbeatIntervalMs?: number
+  readonly heartbeatTimeoutMs?: number
 }
 
 export type MonitorBridgeMode = 'external-process' | 'in-process'
@@ -156,6 +161,10 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
   private attachToken: string | undefined
   private disposed = false
   private inProcessServer: InProcessServerInstance | undefined
+  private heartbeatTimer: NodeJS.Timeout | undefined
+  private heartbeatInFlight = false
+  private readonly heartbeatIntervalMs: number
+  private readonly heartbeatTimeoutMs: number
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -179,6 +188,16 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
     this.mode = options.mode ?? DEFAULT_BRIDGE_MODE
     this.inProcessServerFactory =
       options.inProcessServerFactory ?? defaultInProcessServerFactory
+    this.heartbeatIntervalMs =
+      typeof options.heartbeatIntervalMs === 'number' &&
+      options.heartbeatIntervalMs > 0
+        ? options.heartbeatIntervalMs
+        : 0
+    this.heartbeatTimeoutMs =
+      typeof options.heartbeatTimeoutMs === 'number' &&
+      options.heartbeatTimeoutMs > 0
+        ? options.heartbeatTimeoutMs
+        : 0
   }
 
   async getBridgeInfo(): Promise<ServiceReadyInfo> {
@@ -189,6 +208,7 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
 
   dispose(): void {
     this.disposed = true
+    this.stopHeartbeat()
     this.detach().catch((error) => {
       this.logError('Failed to detach from monitor bridge service', error)
     })
@@ -368,6 +388,9 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
           port,
           cliPath,
         })
+        server.attachmentRegistry.configure({
+          heartbeatTimeoutMs: this.heartbeatTimeoutMs,
+        })
         this.inProcessServer = server
         return server.port
       } catch (error) {
@@ -382,7 +405,15 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
 
     const cliPath = await this.resolveCliPath()
     const entry = this.serviceEntryPoint
-    const args = [entry, '--cli-path', cliPath, '--port', String(port)]
+    const args = [
+      entry,
+      '--cli-path',
+      cliPath,
+      '--port',
+      String(port),
+      '--heartbeat-timeout-ms',
+      String(this.heartbeatTimeoutMs),
+    ]
 
     this.log('Launching monitor bridge service', {
       entry,
@@ -427,6 +458,7 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
 
   private async ensureAttached(info: ServiceReadyInfo): Promise<void> {
     if (this.attachToken) {
+      this.startHeartbeat(info)
       return
     }
     if (this.attachPromise) {
@@ -456,6 +488,7 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
       }
       const data = (await response.json()) as AttachResponse
       this.attachToken = data.token
+      this.startHeartbeat(info)
     } catch (error) {
       this.attachToken = undefined
       this.readyInfo = undefined
@@ -472,6 +505,7 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
     const token = this.attachToken
     const { httpBaseUrl } = this.readyInfo
     this.attachToken = undefined
+    this.stopHeartbeat()
     try {
       await fetch(`${httpBaseUrl}/control/detach`, {
         method: 'POST',
@@ -482,6 +516,88 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
       })
     } catch (error) {
       this.logError('Failed to notify monitor bridge service detach', error)
+    }
+  }
+
+  private startHeartbeat(info: ServiceReadyInfo): void {
+    if (this.heartbeatIntervalMs <= 0 || this.heartbeatTimeoutMs <= 0) {
+      return
+    }
+    if (this.heartbeatTimer) {
+      return
+    }
+    const interval = this.heartbeatIntervalMs
+    this.heartbeatTimer = setInterval(() => {
+      if (this.disposed) {
+        this.stopHeartbeat()
+        return
+      }
+      const token = this.attachToken
+      const ready = this.readyInfo ?? info
+      if (!token || !ready) {
+        this.stopHeartbeat()
+        return
+      }
+      this.sendHeartbeat(ready.httpBaseUrl, token).catch((error) => {
+        this.logError('Monitor bridge heartbeat failed', error)
+      })
+    }, interval)
+  }
+
+  private stopHeartbeat(): void {
+    if (!this.heartbeatTimer) {
+      return
+    }
+    clearInterval(this.heartbeatTimer)
+    this.heartbeatTimer = undefined
+    this.heartbeatInFlight = false
+  }
+
+  private async sendHeartbeat(
+    httpBaseUrl: string,
+    token: string
+  ): Promise<void> {
+    if (this.heartbeatInFlight) {
+      return
+    }
+    this.heartbeatInFlight = true
+    const controller = new AbortController()
+    const timeout = setTimeout(
+      () => controller.abort(),
+      HEARTBEAT_REQUEST_TIMEOUT_MS
+    )
+    try {
+      const response = await fetch(`${httpBaseUrl}/control/heartbeat`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify({ token }),
+        signal: controller.signal,
+      })
+      if (response.status === 404) {
+        this.attachToken = undefined
+        this.stopHeartbeat()
+        return
+      }
+      if (!response.ok) {
+        this.log('Monitor bridge heartbeat rejected', {
+          status: response.status,
+        })
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return
+      }
+      if (!this.disposed) {
+        this.attachToken = undefined
+        this.stopHeartbeat()
+        throw error
+      }
+    } finally {
+      clearTimeout(timeout)
+      this.heartbeatInFlight = false
     }
   }
 
@@ -590,8 +706,49 @@ export class MonitorManager implements vscode.Disposable {
       DEFAULT_BRIDGE_MODE
       // defaultMode
     )
+    const configuredHeartbeatInterval = configuration.get<number>(
+      'bridgeHeartbeatIntervalMs',
+      DEFAULT_HEARTBEAT_INTERVAL_MS
+    )
+    const configuredHeartbeatTimeout = configuration.get<number>(
+      'bridgeHeartbeatTimeoutMs',
+      DEFAULT_HEARTBEAT_TIMEOUT_MS
+    )
+    let heartbeatIntervalMs =
+      typeof configuredHeartbeatInterval === 'number' &&
+      Number.isFinite(configuredHeartbeatInterval)
+        ? Math.max(0, configuredHeartbeatInterval)
+        : DEFAULT_HEARTBEAT_INTERVAL_MS
+    let heartbeatTimeoutMs =
+      typeof configuredHeartbeatTimeout === 'number' &&
+      Number.isFinite(configuredHeartbeatTimeout)
+        ? Math.max(0, configuredHeartbeatTimeout)
+        : DEFAULT_HEARTBEAT_TIMEOUT_MS
+    if (heartbeatIntervalMs <= 0 || heartbeatTimeoutMs <= 0) {
+      heartbeatIntervalMs = 0
+      heartbeatTimeoutMs = 0
+    }
 
     const overrides = options.serviceClientOptions ?? {}
+    const resolvedHeartbeatInterval =
+      typeof overrides.heartbeatIntervalMs === 'number' &&
+      Number.isFinite(overrides.heartbeatIntervalMs)
+        ? Math.max(0, overrides.heartbeatIntervalMs)
+        : heartbeatIntervalMs
+    const resolvedHeartbeatTimeout =
+      typeof overrides.heartbeatTimeoutMs === 'number' &&
+      Number.isFinite(overrides.heartbeatTimeoutMs)
+        ? Math.max(0, overrides.heartbeatTimeoutMs)
+        : heartbeatTimeoutMs
+    const heartbeatDisabled =
+      resolvedHeartbeatInterval <= 0 || resolvedHeartbeatTimeout <= 0
+    const effectiveHeartbeatInterval = heartbeatDisabled
+      ? 0
+      : resolvedHeartbeatInterval
+    const effectiveHeartbeatTimeout = heartbeatDisabled
+      ? 0
+      : resolvedHeartbeatTimeout
+
     const serviceClientOptions: MonitorBridgeServiceClientOptions = {
       preferredPort:
         overrides.preferredPort !== undefined
@@ -599,6 +756,8 @@ export class MonitorManager implements vscode.Disposable {
           : preferredPort,
       mode: overrides.mode !== undefined ? overrides.mode : configuredMode,
       inProcessServerFactory: overrides.inProcessServerFactory,
+      heartbeatIntervalMs: effectiveHeartbeatInterval,
+      heartbeatTimeoutMs: effectiveHeartbeatTimeout,
     }
 
     const serviceClientFactory =

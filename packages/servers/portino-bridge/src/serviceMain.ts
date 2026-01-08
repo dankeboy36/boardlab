@@ -1,25 +1,47 @@
 import { createServer } from './server.js'
+import { MockCliBridge } from './mockCliBridge.js'
 
 const HOST = '127.0.0.1'
 const IDLE_TIMEOUT_MS = 30_000
+const DEFAULT_HEARTBEAT_TIMEOUT_MS = 20_000
 
 interface ServiceOptions {
   port?: number
   cliPath?: string
+  idleTimeoutMs?: number
+  heartbeatTimeoutMs?: number
+  heartbeatSweepMs?: number
+  mockCli?: boolean
 }
 
 async function main() {
   const options = parseArgs(process.argv.slice(2))
   const desiredPort = options.port ?? 0
+  const heartbeatTimeoutMs =
+    options.heartbeatTimeoutMs ?? DEFAULT_HEARTBEAT_TIMEOUT_MS
+  const heartbeatSweepMs = options.heartbeatSweepMs
+  const idleTimeoutMs = options.idleTimeoutMs ?? IDLE_TIMEOUT_MS
+  const useMockCli = options.mockCli === true || process.env.MOCK_CLI === 'true'
 
   const { close, attachmentRegistry } = await createServer({
     port: desiredPort,
     cliPath: options.cliPath,
     host: HOST,
+    control: {
+      heartbeatTimeoutMs,
+      heartbeatSweepMs,
+    },
+    cliBridgeFactory: useMockCli ? () => new MockCliBridge() : undefined,
   })
 
+  if (useMockCli) {
+    console.log('[PortinoService] using mock CLI bridge')
+  }
+
   attachmentRegistry.configure({
-    idleTimeoutMs: IDLE_TIMEOUT_MS,
+    idleTimeoutMs,
+    heartbeatTimeoutMs,
+    heartbeatSweepMs,
     onIdle: async () => {
       console.log('[PortinoService] idle timeout reached; shutting down')
       await shutdown('idle-timeout', close)
@@ -54,6 +76,10 @@ function parseArgs(args: readonly string[]): ServiceOptions {
     if (!arg.startsWith('--')) continue
     const name = arg.slice(2)
     const value = args[index + 1]
+    if (name === 'mock-cli') {
+      result.mockCli = true
+      continue
+    }
     if (!value || value.startsWith('--')) continue
     switch (name) {
       case 'cli-path':
@@ -65,6 +91,33 @@ function parseArgs(args: readonly string[]): ServiceOptions {
           const parsed = Number.parseInt(value, 10)
           if (Number.isInteger(parsed) && parsed >= 0 && parsed <= 65535) {
             result.port = parsed
+          }
+          index++
+        }
+        break
+      case 'idle-timeout-ms':
+        {
+          const parsed = Number.parseInt(value, 10)
+          if (Number.isInteger(parsed) && parsed >= 0) {
+            result.idleTimeoutMs = parsed
+          }
+          index++
+        }
+        break
+      case 'heartbeat-timeout-ms':
+        {
+          const parsed = Number.parseInt(value, 10)
+          if (Number.isInteger(parsed) && parsed >= 0) {
+            result.heartbeatTimeoutMs = parsed
+          }
+          index++
+        }
+        break
+      case 'heartbeat-sweep-ms':
+        {
+          const parsed = Number.parseInt(value, 10)
+          if (Number.isInteger(parsed) && parsed >= 0) {
+            result.heartbeatSweepMs = parsed
           }
           index++
         }
