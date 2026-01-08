@@ -6,6 +6,12 @@ import { Provider } from 'react-redux'
 import { configureStore } from '@reduxjs/toolkit'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import {
+  MonitorProvider,
+  useMonitorStream,
+} from '@boardlab/monitor-shared/serial-monitor'
+import serialMonitorReducer from '@boardlab/monitor-shared/serial-monitor/serialMonitorSlice'
+
 const streamMetrics = {
   startCalls: 0,
   stopCalls: 0,
@@ -15,11 +21,7 @@ vi.mock(
   '@boardlab/monitor-shared/serial-monitor/useSerialMonitorConnection',
   () => {
     return {
-      useSerialMonitorConnection: ({
-        onStart,
-        onStop,
-        onText,
-      }) => {
+      useSerialMonitorConnection: ({ onStart, onStop, onText }) => {
         return {
           play() {
             streamMetrics.startCalls += 1
@@ -37,15 +39,11 @@ vi.mock(
   }
 )
 
-import {
-  MonitorProvider,
-  useMonitorStream,
-} from '@boardlab/monitor-shared/serial-monitor'
-import serialMonitorReducer from '@boardlab/monitor-shared/serial-monitor/serialMonitorSlice'
-
 const PORT = { protocol: 'serial', address: '/dev/tty.test' }
 
-function createFakeExtensionClient(selection = { port: PORT, baudrate: '9600' }) {
+function createFakeExtensionClient(
+  selection = { port: PORT, baudrate: '9600' }
+) {
   const listeners = new Set()
   return {
     onSelectionChanged(listener) {
