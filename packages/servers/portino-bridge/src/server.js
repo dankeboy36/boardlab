@@ -2,6 +2,9 @@
 import { randomUUID } from 'node:crypto'
 import http from 'node:http'
 import util from 'node:util'
+import os from 'node:os'
+import path from 'node:path'
+import { createWriteStream, mkdirSync } from 'node:fs'
 
 import { Port } from 'ardunno-cli'
 import { createPortKey } from 'boards-list'
@@ -154,6 +157,34 @@ function formatBridgeLogMessage(args) {
     .join(' ')
 }
 
+const MONITOR_BRIDGE_LOG_DIR = path.join(
+  os.tmpdir(),
+  '.boardlab',
+  'monitor-bridge'
+)
+
+function createMonitorBridgeLogStream() {
+  try {
+    mkdirSync(MONITOR_BRIDGE_LOG_DIR, { recursive: true })
+  } catch (error) {
+    baseConsoleFunctions.error(
+      '[monitor bridge] failed to create log directory',
+      error instanceof Error ? (error.stack ?? error.message) : String(error)
+    )
+  }
+  const timestamp = new Date().toISOString().replace(/:/g, '-')
+  const fileName = `log-${timestamp}.txt`
+  const filePath = path.join(MONITOR_BRIDGE_LOG_DIR, fileName)
+  const stream = createWriteStream(filePath, { flags: 'a' })
+  stream.on('error', (error) => {
+    baseConsoleFunctions.error(
+      '[monitor bridge] failed to write to log file',
+      error instanceof Error ? (error.stack ?? error.message) : String(error)
+    )
+  })
+  return { stream, filePath }
+}
+
 /**
  * @typedef {Object} PortinoConnection
  * @property {import('vscode-jsonrpc').MessageConnection} messageConnection
@@ -185,13 +216,50 @@ function formatBridgeLogMessage(args) {
  */
 export async function createServer(options = {}) {
   const DEBUG = true // options.debug ?? process.env.PORTINO_DEBUG === '1'
-  let broadcastBridgeLog = (_entry) => {}
-  const logEntry = (level, args) => {
+  /** @type {Set<PortinoConnection>} */
+  const portinoConnections = new Set()
+  const { stream: logFileStream } = createMonitorBridgeLogStream()
+  const writeLogFile = (line) => {
+    if (logFileStream && !logFileStream.destroyed) {
+      logFileStream.write(`${line}\n`)
+    }
+  }
+  const broadcastBridgeLog = (entry) => {
+    portinoConnections.forEach((connection) => {
+      try {
+        connection.messageConnection.sendNotification(
+          NotifyMonitorBridgeLog,
+          entry
+        )
+      } catch (error) {
+        portinoConnections.delete(connection)
+        const message =
+          error instanceof Error ? error.message : String(error ?? '')
+        if (!/disposed|closed/i.test(message)) {
+          baseConsoleFunctions.error(
+            '[monitor bridge] failed to send log notification',
+            error instanceof Error
+              ? (error.stack ?? error.message)
+              : String(error)
+          )
+        }
+      }
+    })
+  }
+
+  const logEntry = (level, args, context) => {
     const entry = {
       level,
       message: formatBridgeLogMessage(args),
       timestamp: new Date().toISOString(),
+      ...(context && Object.keys(context).length ? { context } : undefined),
     }
+    const contextString =
+      entry.context && Object.keys(entry.context).length
+        ? ` ${JSON.stringify(entry.context)}`
+        : ''
+    const line = `${entry.timestamp} [${entry.level}] ${entry.message}${contextString}`
+    writeLogFile(line)
     try {
       broadcastBridgeLog(entry)
     } catch (error) {
@@ -207,6 +275,10 @@ export async function createServer(options = {}) {
           ? baseConsoleFunctions.error
           : baseConsoleFunctions.log
     target(...args)
+  }
+
+  const bridgeLog = (level, message, context) => {
+    logEntry(level, [message], context)
   }
   console.log = (...args) => logEntry('info', args)
   console.info = (...args) => logEntry('info', args)
@@ -426,22 +498,10 @@ export async function createServer(options = {}) {
     typeof address === 'object' && address ? address.port : listenPort
   httpBaseUrl = `http://${host}:${boundPort}`
   wsBaseUrl = `ws://${host}:${boundPort}/serial`
-  /** @type {Set<PortinoConnection>} */
-  const portinoConnections = new Set()
-  broadcastBridgeLog = (entry) => {
-    portinoConnections.forEach(({ messageConnection }) => {
-      try {
-        messageConnection.sendNotification(NotifyMonitorBridgeLog, entry)
-      } catch (error) {
-        baseConsoleFunctions.error(
-          '[monitor bridge] failed to send log notification',
-          error instanceof Error
-            ? (error.stack ?? error.message)
-            : String(error)
-        )
-      }
-    })
-  }
+  bridgeLog('info', 'Monitor bridge service ready', {
+    httpBaseUrl,
+    wsBaseUrl,
+  })
   // Broadcast hub for raw serial streams: one monitor per unique port+baudrate+fqbn
   /**
    * @type {Map<
@@ -482,6 +542,10 @@ export async function createServer(options = {}) {
         baudrate: finalBaudrate,
       })
       broadcastMonitorDidStart(portJson, finalBaudrate)
+      bridgeLog('info', 'Monitor started', {
+        port: portJson,
+        baudrate: finalBaudrate,
+      })
     } else {
       runningMonitorsByKey.set(portKey, {
         port: portJson,
@@ -492,6 +556,9 @@ export async function createServer(options = {}) {
 
   function notifyMonitorStopped(portKey, port) {
     if (runningMonitorsByKey.delete(portKey)) {
+      bridgeLog('info', 'Monitor stopped', {
+        port: toPortIdentifier(port),
+      })
       broadcastMonitorDidStop(toPortIdentifier(port))
     }
   }
@@ -532,6 +599,10 @@ export async function createServer(options = {}) {
     if (!mapping) return
     const { portKey: prevPortKey, res: prevRes } = mapping
     const prevEntry = activeSerialStreams.get(prevPortKey)
+    bridgeLog('info', 'Force disconnecting serial client', {
+      clientId,
+      portKey: prevPortKey,
+    })
 
     // Remove from indices first so writers stop targeting this response
     if (prevEntry) {
@@ -1000,6 +1071,11 @@ export async function createServer(options = {}) {
       protocols.forEach((p) => knownProtocols.add(p))
       await cliBridge.fetchMonitorSettingsForProtocol(...protocols)
       const snapshot = await buildMonitorSettingsSnapshot()
+      const detectedPortKeys = Object.keys(watcher.state)
+      bridgeLog('info', 'Detected ports updated', {
+        detectedPortKeys,
+        protocols: Array.from(protocols),
+      })
       // Broadcast settings to all clients
       portinoConnections.forEach(({ messageConnection }) => {
         messageConnection.sendNotification(
@@ -1030,7 +1106,9 @@ export async function createServer(options = {}) {
     // Forward board list updates to client
     const updateHandler = () => {
       const detectedPorts = watcher.state
-      console.log(`Detected ports: ${JSON.stringify(detectedPorts)}`)
+      bridgeLog('info', 'Detected ports pushed to client', {
+        detectedPortKeys: Object.keys(detectedPorts),
+      })
       messageConnection.sendNotification(
         NotifyDidChangeDetectedPorts,
         detectedPorts
@@ -1168,7 +1246,11 @@ export async function createServer(options = {}) {
 
         portinoConnection.clientId = clientId
         clientConnectCount += 1
-        console.log(`Client connected: ${clientId}`)
+        bridgeLog('info', `Client connected: ${clientId}`, {
+          clientId,
+          selectedPort,
+          selectedBaudrate,
+        })
 
         // Update the selected baudrate for this port if given
         if (selectedPort && selectedBaudrate) {
@@ -1203,12 +1285,10 @@ export async function createServer(options = {}) {
         (v) => v.messageConnection === messageConnection
       )
       if (portinoConnection) {
-        console.log(
-          `Client disconnected: ${
-            portinoConnection.clientId ?? '(no clientId set)'
-          }`
-        )
         portinoConnections.delete(portinoConnection)
+        bridgeLog('info', 'Client disconnected', {
+          clientId: portinoConnection.clientId,
+        })
       }
 
       messageConnection.dispose()
@@ -1244,6 +1324,9 @@ export async function createServer(options = {}) {
           await cliBridge.dispose()
         } catch {}
       }
+      try {
+        logFileStream.end()
+      } catch {}
       attachmentRegistry.dispose()
     },
   }

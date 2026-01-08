@@ -267,6 +267,16 @@
         "icon": "$(clear-all)"
       },
       {
+        "command": "boardlab.monitorBridge.listLogs",
+        "title": "List Monitor Bridge Logs",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.monitorBridge.tailLatestLog",
+        "title": "Tail Latest Monitor Bridge Log",
+        "category": "BoardLab"
+      },
+      {
         "command": "boardlab.monitor.configureLineEnding",
         "title": "Select Line Ending",
         "category": "BoardLab",

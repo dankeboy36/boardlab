@@ -242,12 +242,22 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
   }
 
   private async tryPreferredPort(): Promise<ServiceReadyInfo | undefined> {
-    return this.fetchHealth(this.preferredPort).catch((error) => {
+    const reused = await this.fetchHealth(this.preferredPort).catch((error) => {
       if (error instanceof BridgeInUseError) {
         throw error
       }
       return undefined
     })
+    if (!reused) {
+      return undefined
+    }
+    if (this.mode === 'in-process' && reused.ownerPid !== process.pid) {
+      throw new BridgeInUseError(
+        this.preferredPort,
+        `owner-pid-${reused.ownerPid || 'unknown'}`
+      )
+    }
+    return reused
   }
 
   private async waitForBridge(port: number): Promise<ServiceReadyInfo> {
@@ -571,9 +581,14 @@ export class MonitorManager implements vscode.Disposable {
     const configuredPort = configuration.get<number>('bridgePort', 0)
     const preferredPort =
       configuredPort > 0 ? configuredPort : DEFAULT_BRIDGE_PORT
+    // const defaultMode =
+    //   context.extensionMode === vscode.ExtensionMode.Production
+    //     ? DEFAULT_BRIDGE_MODE
+    //     : 'in-process'
     const configuredMode = configuration.get<MonitorBridgeMode>(
       'bridgeMode',
       DEFAULT_BRIDGE_MODE
+      // defaultMode
     )
 
     const overrides = options.serviceClientOptions ?? {}
@@ -608,6 +623,9 @@ export class MonitorManager implements vscode.Disposable {
       resolveBridgeInfo: async () => this.serviceClient.getBridgeInfo(),
     })
     this.disposables.push(this.bridgeClient)
+    this.disposables.push(
+      this.bridgeClient.onBridgeLog((entry) => this.handleBridgeLog(entry))
+    )
     this.disposables.push(this.onDidChangeMonitorStateEmitter)
     this.disposables.push(this.onDidChangeRunningMonitorsEmitter)
     this.disposables.push(
@@ -969,9 +987,6 @@ export class MonitorManager implements vscode.Disposable {
         this.removeRunningMonitor(port)
       })
     )
-    this.disposables.push(
-      this.bridgeClient.onBridgeLog((entry) => this.handleBridgeLog(entry))
-    )
   }
 
   private forEachClient(
@@ -1093,9 +1108,8 @@ export class MonitorManager implements vscode.Disposable {
       entry.context && Object.keys(entry.context).length
         ? ` ${JSON.stringify(entry.context)}`
         : ''
-    this.bridgeLogChannel.appendLine(
-      `[monitor bridge] ${timestamp} [${entry.level}] ${entry.message}${context}`
-    )
+    const line = `[monitor bridge] ${timestamp} [${entry.level}] ${entry.message}${context}`
+    this.bridgeLogChannel.appendLine(line)
     if (entry.level === 'error' || entry.level === 'warn') {
       this.bridgeLogChannel.show(true)
     }

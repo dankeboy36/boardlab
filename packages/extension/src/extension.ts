@@ -1,4 +1,5 @@
 import { promises as fs } from 'node:fs'
+import os from 'node:os'
 import * as path from 'node:path'
 
 import type { Mutable, PortIdentifier } from 'boards-list'
@@ -99,6 +100,104 @@ const TERMINAL_SETTING_KEYS = [
   'boardlab.monitor.scrollback',
   'boardlab.monitor.fontSize',
 ]
+
+const MONITOR_BRIDGE_LOG_DIR = path.join(
+  os.tmpdir(),
+  '.boardlab',
+  'monitor-bridge'
+)
+
+interface MonitorBridgeLogFile {
+  readonly name: string
+  readonly path: string
+  readonly mtime: number
+}
+
+async function readMonitorBridgeLogFiles(): Promise<MonitorBridgeLogFile[]> {
+  try {
+    const entries = await fs.readdir(MONITOR_BRIDGE_LOG_DIR, {
+      withFileTypes: true,
+    })
+    const details = await Promise.all(
+      entries
+        .filter((entry) => entry.isFile())
+        .map(async (entry) => {
+          const name = entry.name
+          const filePath = path.join(MONITOR_BRIDGE_LOG_DIR, name)
+          const stats = await fs.stat(filePath).catch(() => undefined)
+          if (!stats) {
+            return undefined
+          }
+          return { name, path: filePath, mtime: stats.mtimeMs }
+        })
+    )
+    return details
+      .filter((entry): entry is MonitorBridgeLogFile => Boolean(entry))
+      .sort((a, b) => b.mtime - a.mtime)
+  } catch (error) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error as { code?: string }).code === 'ENOENT'
+    ) {
+      return []
+    }
+    throw error
+  }
+}
+
+async function openMonitorBridgeLogFile(
+  file: MonitorBridgeLogFile,
+  options?: { ensureTail?: boolean }
+) {
+  const document = await vscode.workspace.openTextDocument(
+    vscode.Uri.file(file.path)
+  )
+  const editor = await vscode.window.showTextDocument(document, {
+    preview: true,
+  })
+  if (options?.ensureTail && document.lineCount > 0) {
+    const lastLine = Math.max(0, document.lineCount - 1)
+    editor.revealRange(
+      new vscode.Range(lastLine, 0, lastLine, 0),
+      vscode.TextEditorRevealType.InCenterIfOutsideViewport
+    )
+  }
+}
+
+async function tailLatestMonitorBridgeLog() {
+  const files = await readMonitorBridgeLogFiles()
+  if (!files.length) {
+    vscode.window.showInformationMessage(
+      'No monitor bridge log files are available yet.'
+    )
+    return
+  }
+  await openMonitorBridgeLogFile(files[0], { ensureTail: true })
+}
+
+async function showMonitorBridgeLogPicker() {
+  const files = await readMonitorBridgeLogFiles()
+  if (!files.length) {
+    vscode.window.showInformationMessage(
+      'No monitor bridge log files are available yet.'
+    )
+    return
+  }
+  const picks = files.map((file) => ({
+    label: file.name,
+    description: new Date(file.mtime).toLocaleString(),
+    detail: file.path,
+    file,
+  }))
+  const selection = await vscode.window.showQuickPick(picks, {
+    placeHolder: 'Select a monitor bridge log file',
+  })
+  if (selection) {
+    await openMonitorBridgeLogFile(selection.file, { ensureTail: true })
+  }
+}
 
 interface SketchTaskParamsInput {
   sketchPath?: string
@@ -1633,6 +1732,38 @@ export function activate(context: vscode.ExtensionContext) {
       }
       await monitorEditors.sendToolbarAction('clear', active)
     }),
+    vscode.commands.registerCommand(
+      'boardlab.monitorBridge.listLogs',
+      async () => {
+        try {
+          await showMonitorBridgeLogPicker()
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : String(error ?? 'Unknown error')
+          vscode.window.showErrorMessage(
+            `Failed to list monitor bridge log files: ${message}`
+          )
+        }
+      }
+    ),
+    vscode.commands.registerCommand(
+      'boardlab.monitorBridge.tailLatestLog',
+      async () => {
+        try {
+          await tailLatestMonitorBridgeLog()
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : String(error ?? 'Unknown error')
+          vscode.window.showErrorMessage(
+            `Failed to open monitor bridge log: ${message}`
+          )
+        }
+      }
+    ),
     vscode.commands.registerCommand('boardlab.plotter.clear', async () => {
       const active = plotterEditors.getActiveDocument()
       if (!active) {
