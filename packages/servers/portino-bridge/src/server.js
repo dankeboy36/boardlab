@@ -1,6 +1,7 @@
 // @ts-check
 import { randomUUID } from 'node:crypto'
 import http from 'node:http'
+import util from 'node:util'
 
 import { Port } from 'ardunno-cli'
 import { createPortKey } from 'boards-list'
@@ -8,7 +9,7 @@ import cors from 'cors'
 import express from 'express'
 import { FQBN } from 'fqbn'
 import { ClientError } from 'nice-grpc'
-import { ConsoleLogger, createWebSocketConnection } from 'vscode-ws-jsonrpc'
+import { createWebSocketConnection } from 'vscode-ws-jsonrpc'
 import { WebSocketServer } from 'ws'
 
 import {
@@ -19,6 +20,7 @@ import {
   NotifyMonitorDidResume,
   NotifyMonitorDidStart,
   NotifyMonitorDidStop,
+  NotifyMonitorBridgeLog,
   RequestClientConnect,
   RequestDetectedPorts,
   RequestPauseMonitor,
@@ -103,6 +105,55 @@ class AttachmentRegistry {
   }
 }
 
+const baseConsoleFunctions = {
+  log: console.log.bind(console),
+  info: console.info.bind(console),
+  warn: console.warn.bind(console),
+  error: console.error.bind(console),
+}
+
+class BridgeWebSocketLogger {
+  constructor(baseConsole) {
+    this.baseConsole = baseConsole
+  }
+
+  error(...args) {
+    this.baseConsole.error(...args)
+  }
+
+  warn(...args) {
+    this.baseConsole.warn(...args)
+  }
+
+  info(...args) {
+    this.baseConsole.info(...args)
+  }
+
+  log(...args) {
+    this.baseConsole.log(...args)
+  }
+}
+
+function formatBridgeLogMessage(args) {
+  return args
+    .map((value) => {
+      if (typeof value === 'string') {
+        return value
+      }
+      if (value instanceof Error) {
+        return value.stack ?? value.message
+      }
+      try {
+        return typeof value === 'object'
+          ? util.inspect(value, { depth: 3 })
+          : String(value)
+      } catch {
+        return String(value)
+      }
+    })
+    .join(' ')
+}
+
 /**
  * @typedef {Object} PortinoConnection
  * @property {import('vscode-jsonrpc').MessageConnection} messageConnection
@@ -134,6 +185,33 @@ class AttachmentRegistry {
  */
 export async function createServer(options = {}) {
   const DEBUG = true // options.debug ?? process.env.PORTINO_DEBUG === '1'
+  let broadcastBridgeLog = (_entry) => {}
+  const logEntry = (level, args) => {
+    const entry = {
+      level,
+      message: formatBridgeLogMessage(args),
+      timestamp: new Date().toISOString(),
+    }
+    try {
+      broadcastBridgeLog(entry)
+    } catch (error) {
+      baseConsoleFunctions.error(
+        '[monitor bridge] failed to broadcast log',
+        error instanceof Error ? (error.stack ?? error.message) : String(error)
+      )
+    }
+    const target =
+      level === 'warn'
+        ? baseConsoleFunctions.warn
+        : level === 'error'
+          ? baseConsoleFunctions.error
+          : baseConsoleFunctions.log
+    target(...args)
+  }
+  console.log = (...args) => logEntry('info', args)
+  console.info = (...args) => logEntry('info', args)
+  console.warn = (...args) => logEntry('warn', args)
+  console.error = (...args) => logEntry('error', args)
   const v = (/** @type {unknown[]} */ ...args) => {
     if (DEBUG) console.log(...args)
   }
@@ -350,6 +428,20 @@ export async function createServer(options = {}) {
   wsBaseUrl = `ws://${host}:${boundPort}/serial`
   /** @type {Set<PortinoConnection>} */
   const portinoConnections = new Set()
+  broadcastBridgeLog = (entry) => {
+    portinoConnections.forEach(({ messageConnection }) => {
+      try {
+        messageConnection.sendNotification(NotifyMonitorBridgeLog, entry)
+      } catch (error) {
+        baseConsoleFunctions.error(
+          '[monitor bridge] failed to send log notification',
+          error instanceof Error
+            ? (error.stack ?? error.message)
+            : String(error)
+        )
+      }
+    })
+  }
   // Broadcast hub for raw serial streams: one monitor per unique port+baudrate+fqbn
   /**
    * @type {Map<
@@ -931,7 +1023,7 @@ export async function createServer(options = {}) {
     }
 
     // Create and start the JSON-RPC connection
-    const logger = new ConsoleLogger()
+    const logger = new BridgeWebSocketLogger(baseConsoleFunctions)
     const messageConnection = createWebSocketConnection(socket, logger)
     portinoConnections.add({ messageConnection })
 

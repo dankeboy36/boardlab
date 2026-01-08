@@ -214,6 +214,25 @@ export const notifyMonitorBridgeError: MessengerNotificationType<{
   method: 'boardlab/monitor/bridge-error',
 }
 
+export type MonitorBridgeLogLevel =
+  | 'trace'
+  | 'debug'
+  | 'info'
+  | 'warn'
+  | 'error'
+
+export interface MonitorBridgeLogEntry {
+  readonly level: MonitorBridgeLogLevel
+  readonly message: string
+  readonly timestamp?: string
+  readonly context?: Record<string, unknown>
+}
+
+export const NotifyMonitorBridgeLog =
+  new JsonRpcNotificationType<MonitorBridgeLogEntry>(
+    'boardlab/monitor/bridge-log'
+  )
+
 export const notifyMonitorThemeChanged: MessengerNotificationType<void> = {
   method: 'boardlab/monitor/theme-changed',
 }

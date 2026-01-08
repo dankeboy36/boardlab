@@ -36,10 +36,14 @@ import {
   type RequestPauseResumeMonitorParams,
   type RequestSendMonitorMessageParams,
   type RequestUpdateBaudrateParams,
+  type MonitorBridgeLogEntry,
 } from '@boardlab/protocol'
 
 import type { CliContext } from '../cli/context'
-import { MonitorBridgeClient } from './monitorBridgeClient'
+import {
+  MonitorBridgeClient,
+  type MonitorBridgeClientOptions,
+} from './monitorBridgeClient'
 
 const DEFAULT_BRIDGE_HOST = '127.0.0.1'
 const DEFAULT_BRIDGE_PORT = 55888
@@ -496,62 +500,59 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
   }
 }
 
-type MonitorBridgeClientOptions = ConstructorParameters<
-  typeof MonitorBridgeClient
->[0]
-
 export interface MonitorManagerOptions {
-  readonly serviceClientOptions?: Partial<MonitorBridgeServiceClientOptions>
+  readonly serviceClientOptions?: MonitorBridgeServiceClientOptions
   readonly serviceClientFactory?: (
     context: vscode.ExtensionContext,
-    resolveCliPath: () => Promise<string>,
+    resolver: () => Promise<string>,
     outputChannel: vscode.OutputChannel,
-    options: MonitorBridgeServiceClientOptions
+    clientOptions: MonitorBridgeServiceClientOptions
   ) => MonitorBridgeServiceClient
   readonly bridgeClientFactory?: (
-    options: MonitorBridgeClientOptions
+    clientOptions: MonitorBridgeClientOptions
   ) => MonitorBridgeClient
 }
 
 export class MonitorManager implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = []
-  private readonly serviceClient: MonitorBridgeServiceClient
-  private readonly bridgeClient: MonitorBridgeClient
-  private readonly outputChannel: vscode.OutputChannel
   private readonly clientSessions = new Map<string, MessageParticipant>()
-  private bridgeEventsRegistered = false
-  private bridgeConflictNotified = false
-  private selectionResolver?: (
-    sender?: MessageParticipant
-  ) =>
-    | MonitorSelectionNotification
-    | Promise<MonitorSelectionNotification>
-    | undefined
-
-  private readonly selectedBaudrateCache = new Map<string, string>()
   private readonly runningMonitors = new Map<
     string,
     { port: PortIdentifier; baudrate?: string }
   >()
 
   private readonly monitorStates = new Map<string, MonitorRuntimeState>()
+  private readonly selectedBaudrateCache = new Map<string, string>()
   private readonly onDidChangeMonitorStateEmitter =
     new vscode.EventEmitter<MonitorStateChangeEvent>()
-
-  readonly onDidChangeMonitorState = this.onDidChangeMonitorStateEmitter.event
-
-  private monitorSettingsByProtocol: MonitorSettingsByProtocol = {
-    protocols: {},
-  }
-
-  private detectedPorts: DetectedPorts = {}
 
   private readonly onDidChangeRunningMonitorsEmitter = new vscode.EventEmitter<
     ReadonlyArray<{ port: PortIdentifier; baudrate?: string }>
   >()
 
+  readonly onDidChangeMonitorState = this.onDidChangeMonitorStateEmitter.event
+
   readonly onDidChangeRunningMonitors =
     this.onDidChangeRunningMonitorsEmitter.event
+
+  private bridgeEventsRegistered = false
+  private bridgeConflictNotified = false
+  private monitorSettingsByProtocol: MonitorSettingsByProtocol = {
+    protocols: {},
+  }
+
+  private selectionResolver:
+    | ((
+        sender?: MessageParticipant
+      ) => MonitorSelectionNotification | Promise<MonitorSelectionNotification>)
+    | undefined
+
+  private readonly bridgeLogChannel: vscode.OutputChannel
+  private serviceClient: MonitorBridgeServiceClient
+  private bridgeClient: MonitorBridgeClient
+  private readonly outputChannel: vscode.OutputChannel
+
+  private detectedPorts: DetectedPorts = {}
 
   constructor(
     context: vscode.ExtensionContext,
@@ -561,6 +562,11 @@ export class MonitorManager implements vscode.Disposable {
     options: MonitorManagerOptions = {}
   ) {
     this.outputChannel = outputChannel
+    this.bridgeLogChannel = vscode.window.createOutputChannel(
+      'BoardLab - Monitor Bridge',
+      { log: true }
+    )
+    this.disposables.push(this.bridgeLogChannel)
     const configuration = vscode.workspace.getConfiguration('boardlab.monitor')
     const configuredPort = configuration.get<number>('bridgePort', 0)
     const preferredPort =
@@ -666,7 +672,10 @@ export class MonitorManager implements vscode.Disposable {
   }
 
   getMonitorState(port: PortIdentifier): MonitorRuntimeState {
-    return this.monitorStates.get(createPortKey(port)) ?? 'disconnected'
+    const key = createPortKey(port)
+    const state = this.monitorStates.get(key) ?? 'disconnected'
+    this.log('Queried monitor state', { key, state })
+    return state
   }
 
   isPortDetected(port: PortIdentifier): boolean {
@@ -960,6 +969,9 @@ export class MonitorManager implements vscode.Disposable {
         this.removeRunningMonitor(port)
       })
     )
+    this.disposables.push(
+      this.bridgeClient.onBridgeLog((entry) => this.handleBridgeLog(entry))
+    )
   }
 
   private forEachClient(
@@ -1038,6 +1050,12 @@ export class MonitorManager implements vscode.Disposable {
     } else {
       this.monitorStates.set(key, state)
     }
+    this.log('Monitor state changed', {
+      key,
+      previous,
+      state,
+      reason,
+    })
     this.onDidChangeMonitorStateEmitter.fire({ port, state, reason })
   }
 
@@ -1067,6 +1085,20 @@ export class MonitorManager implements vscode.Disposable {
 
   private logError(message: string, error: unknown): void {
     this.outputChannel.appendLine(`${message} ${formatError(error)}`)
+  }
+
+  private handleBridgeLog(entry: MonitorBridgeLogEntry): void {
+    const timestamp = entry.timestamp ?? new Date().toISOString()
+    const context =
+      entry.context && Object.keys(entry.context).length
+        ? ` ${JSON.stringify(entry.context)}`
+        : ''
+    this.bridgeLogChannel.appendLine(
+      `[monitor bridge] ${timestamp} [${entry.level}] ${entry.message}${context}`
+    )
+    if (entry.level === 'error' || entry.level === 'warn') {
+      this.bridgeLogChannel.show(true)
+    }
   }
 
   private async handleGetBridgeInfo(

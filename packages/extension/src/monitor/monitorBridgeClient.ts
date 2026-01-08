@@ -16,6 +16,7 @@ import {
   NotifyDidChangeBaudrate,
   NotifyDidChangeDetectedPorts,
   NotifyDidChangeMonitorSettings,
+  NotifyMonitorBridgeLog,
   NotifyMonitorDidPause,
   NotifyMonitorDidResume,
   NotifyMonitorDidStart,
@@ -33,12 +34,13 @@ import {
   type DidStopMonitorNotification,
   type HostConnectClientResult,
   type MonitorBridgeInfo,
+  type MonitorBridgeLogEntry,
   type MonitorSettingsByProtocol,
 } from '@boardlab/protocol'
 
 import { createNodeSocketAdapter } from './wsAdapters'
 
-interface BridgeClientOptions {
+export interface MonitorBridgeClientOptions {
   readonly resolveBridgeInfo: () => Promise<MonitorBridgeInfo>
 }
 
@@ -77,6 +79,9 @@ export class MonitorBridgeClient implements vscode.Disposable {
   private readonly onDidStopMonitorEmitter =
     new vscode.EventEmitter<PortIdentifier>()
 
+  private readonly onBridgeLogEmitter =
+    new vscode.EventEmitter<MonitorBridgeLogEntry>()
+
   private readonly onDidChangeDetectedPortsEmitter =
     new vscode.EventEmitter<DetectedPorts>()
 
@@ -92,7 +97,7 @@ export class MonitorBridgeClient implements vscode.Disposable {
   private readonly onDidResumeMonitorEmitter =
     new vscode.EventEmitter<DidResumeMonitorNotification>()
 
-  constructor(private readonly options: BridgeClientOptions) {}
+  constructor(private readonly options: MonitorBridgeClientOptions) {}
 
   get onDidChangeDetectedPorts(): vscode.Event<DetectedPorts> {
     return this.onDidChangeDetectedPortsEmitter.event
@@ -123,6 +128,10 @@ export class MonitorBridgeClient implements vscode.Disposable {
 
   get onDidStopMonitor(): vscode.Event<PortIdentifier> {
     return this.onDidStopMonitorEmitter.event
+  }
+
+  get onBridgeLog(): vscode.Event<MonitorBridgeLogEntry> {
+    return this.onBridgeLogEmitter.event
   }
 
   async connectClient(
@@ -191,6 +200,7 @@ export class MonitorBridgeClient implements vscode.Disposable {
     this.onDidResumeMonitorEmitter.dispose()
     this.onDidStartMonitorEmitter.dispose()
     this.onDidStopMonitorEmitter.dispose()
+    this.onBridgeLogEmitter.dispose()
   }
 
   private async ensureConnection(): Promise<MessageConnection> {
@@ -299,6 +309,12 @@ export class MonitorBridgeClient implements vscode.Disposable {
           this.runningMonitorKeys.delete(key)
           this.toggleSuspended(payload.port, false)
           this.onDidStopMonitorEmitter.fire(payload.port)
+        }
+      ),
+      connection.onNotification(
+        NotifyMonitorBridgeLog,
+        (payload: MonitorBridgeLogEntry) => {
+          this.onBridgeLogEmitter.fire(payload)
         }
       )
     )
