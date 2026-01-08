@@ -2,7 +2,7 @@
 
 import { HOST_EXTENSION } from 'vscode-messenger-common'
 
-import { vscode } from '@boardlab/base'
+import { messengerx, vscode } from '@boardlab/base'
 import {
   getMonitorSelection,
   notifyMonitorSelectionChanged,
@@ -46,7 +46,8 @@ export function createExtensionClient({
     }
   }
 
-  const disposable = messenger.onNotification(
+  const disposable = messengerx.onNotification(
+    messenger,
     notifyMonitorSelectionChanged,
     notifyListeners
   )

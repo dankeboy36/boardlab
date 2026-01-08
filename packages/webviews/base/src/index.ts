@@ -17,3 +17,4 @@ export {
 export { notifyError, notifyInfo, notifyWarning } from './notifications'
 export { vscode } from './vscode'
 export type { Store } from './vscode'
+export { messengerx } from './messenger'

@@ -15,6 +15,7 @@ import {
 
 import {
   Tree,
+  messengerx,
   useCodiconStylesheet,
   vscode,
   type TreeNode,
@@ -113,9 +114,16 @@ export function App(): JSX.Element {
     if (!messenger) {
       return
     }
-    messenger.onNotification(notifyDidChangeSelectedBoard, (board) => {
-      setSelectedBoard(board ?? undefined)
-    })
+    const disposable = messengerx.onNotification(
+      messenger,
+      notifyDidChangeSelectedBoard,
+      (board) => {
+        setSelectedBoard(board ?? undefined)
+      }
+    )
+    return () => {
+      disposable.dispose()
+    }
   }, [])
 
   useEffect(() => {
@@ -211,18 +219,25 @@ export function App(): JSX.Element {
     if (!messenger) {
       return
     }
-    messenger.onNotification(notifyExamplesToolbarAction, ({ action }) => {
-      if (action === 'refresh') {
-        setQuery('')
-        setMatchCase(false)
-        setMatchWholeWord(false)
-        setUseRegex(false)
-        setRegexError(undefined)
-        setTreeResetKey((key) => key + 1)
-        setReloadKey((key) => key + 1)
-        focusSearchInput()
+    const disposable = messengerx.onNotification(
+      messenger,
+      notifyExamplesToolbarAction,
+      ({ action }) => {
+        if (action === 'refresh') {
+          setQuery('')
+          setMatchCase(false)
+          setMatchWholeWord(false)
+          setUseRegex(false)
+          setRegexError(undefined)
+          setTreeResetKey((key) => key + 1)
+          setReloadKey((key) => key + 1)
+          focusSearchInput()
+        }
       }
-    })
+    )
+    return () => {
+      disposable.dispose()
+    }
   }, [focusSearchInput])
 
   useEffect(() => {

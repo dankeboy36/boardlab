@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid'
 import defer from 'p-defer'
 import { CancellationTokenImpl, HOST_EXTENSION } from 'vscode-messenger-common'
 
+import { messengerx } from '@boardlab/base'
 import {
   connectMonitorClient,
   disconnectMonitorClient,
@@ -27,24 +28,34 @@ class MessengerControlTransport {
     this._didPauseMonitor = new EventEmitter()
     this._didResumeMonitor = new EventEmitter()
 
-    this._messenger.onNotification(
-      notifyMonitorViewDidChangeDetectedPorts,
-      (ports) => this._didChangeDetectedPorts.fire(ports)
-    )
-    this._messenger.onNotification(
-      notifyMonitorViewDidChangeMonitorSettings,
-      (payload) => this._didChangeMonitorSettings.fire(payload)
-    )
-    this._messenger.onNotification(
-      notifyMonitorViewDidChangeBaudrate,
-      (payload) => this._didChangeBaudrate.fire(payload)
-    )
-    this._messenger.onNotification(notifyMonitorViewDidPause, (payload) =>
-      this._didPauseMonitor.fire(payload)
-    )
-    this._messenger.onNotification(notifyMonitorViewDidResume, (payload) =>
-      this._didResumeMonitor.fire(payload)
-    )
+    const messengerRef = this._messenger
+    const messengerDisposables = [
+      messengerx.onNotification(
+        messengerRef,
+        notifyMonitorViewDidChangeDetectedPorts,
+        (ports) => this._didChangeDetectedPorts.fire(ports)
+      ),
+      messengerx.onNotification(
+        messengerRef,
+        notifyMonitorViewDidChangeMonitorSettings,
+        (payload) => this._didChangeMonitorSettings.fire(payload)
+      ),
+      messengerx.onNotification(
+        messengerRef,
+        notifyMonitorViewDidChangeBaudrate,
+        (payload) => this._didChangeBaudrate.fire(payload)
+      ),
+      messengerx.onNotification(
+        messengerRef,
+        notifyMonitorViewDidPause,
+        (payload) => this._didPauseMonitor.fire(payload)
+      ),
+      messengerx.onNotification(
+        messengerRef,
+        notifyMonitorViewDidResume,
+        (payload) => this._didResumeMonitor.fire(payload)
+      ),
+    ]
 
     this._disposables = [
       this._didChangeDetectedPorts,
@@ -52,6 +63,7 @@ class MessengerControlTransport {
       this._didChangeBaudrate,
       this._didPauseMonitor,
       this._didResumeMonitor,
+      ...messengerDisposables,
     ]
   }
 
