@@ -52,6 +52,16 @@ export function useSerialMonitorConnection({
   enabled = true,
   autoPlay = true,
 }) {
+  const selectedProtocol = selectedPort?.protocol
+  const protocolEntry = selectedProtocol
+    ? monitorSettingsByProtocol?.protocols?.[selectedProtocol]
+    : undefined
+  const protocolError = protocolEntry?.error
+  const hasProtocolSettings = Boolean(protocolEntry)
+  const requiresBaudrate = Array.isArray(protocolEntry?.settings)
+    ? !!protocolEntry.settings.find((s) => s.settingId === 'baudrate')
+    : false
+
   const autoplayRef = useRef(options?.autoplay ?? true)
   const disconnectHoldMsRef = useRef(options?.disconnectHoldMs ?? 1500)
   const coldStartMsRef = useRef(options?.coldStartMs ?? 1000)
@@ -119,9 +129,13 @@ export function useSerialMonitorConnection({
       return
     }
 
-    if (!prevDetectedRef.current && isDetected) {
+    const wasDetected = prevDetectedRef.current
+    if (!wasDetected && isDetected) {
       prevDetectedRef.current = isDetected
-    } else if (prevDetectedRef.current && !isDetected) {
+      if (!userStoppedRef.current && autoplayRef.current) {
+        triggerReconnect()
+      }
+    } else if (wasDetected && !isDetected) {
       sawAbsentRef.current = true
       prevDetectedRef.current = isDetected
     } else {
@@ -191,20 +205,15 @@ export function useSerialMonitorConnection({
     }
 
     // Ensure monitor settings for this protocol are resolved first
-    const proto = selectedPort.protocol
-    const entry = monitorSettingsByProtocol?.protocols?.[proto]
-    if (!entry) {
+    if (!hasProtocolSettings) {
       // Not resolved yet: do not attempt to start
       return
     }
-    if (entry.error) {
+    if (protocolError) {
       // Protocol not supported for monitor
       return
     }
-    const hasBaudSetting = Array.isArray(entry.settings)
-      ? !!entry.settings.find((s) => s.settingId === 'baudrate')
-      : false
-    if (hasBaudSetting && !selectedBaudrate) {
+    if (requiresBaudrate && !selectedBaudrate) {
       console.info('[monitor] effect waiting for baudrate')
       awaitingBaudRef.current = true
       return
@@ -443,7 +452,9 @@ export function useSerialMonitorConnection({
   }, [
     client,
     selectedPort,
-    monitorSettingsByProtocol,
+    hasProtocolSettings,
+    protocolError,
+    requiresBaudrate,
     forceReconnect,
     onBusy,
     onStart,
@@ -458,12 +469,8 @@ export function useSerialMonitorConnection({
   useEffect(() => {
     if (!client || !selectedPort) return
     if (!awaitingBaudRef.current) return
-    const entry = monitorSettingsByProtocol?.protocols?.[selectedPort.protocol]
-    if (!entry || entry.error) return
-    const hasBaudSetting = Array.isArray(entry.settings)
-      ? !!entry.settings.find((s) => s.settingId === 'baudrate')
-      : false
-    if (hasBaudSetting && !selectedBaudrate) return
+    if (!hasProtocolSettings || protocolError) return
+    if (requiresBaudrate && !selectedBaudrate) return
     awaitingBaudRef.current = false
     if (!abortRef.current && !userStoppedRef.current && autoplayRef.current) {
       triggerReconnect()
@@ -472,7 +479,9 @@ export function useSerialMonitorConnection({
     client,
     selectedPort,
     selectedBaudrate,
-    monitorSettingsByProtocol,
+    hasProtocolSettings,
+    protocolError,
+    requiresBaudrate,
     triggerReconnect,
   ])
 

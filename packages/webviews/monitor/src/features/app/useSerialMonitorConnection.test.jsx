@@ -29,6 +29,7 @@ const MONITOR_SETTINGS = {
   },
 }
 
+/** @param {AbortSignal} signal */
 function createBlockingReader(signal) {
   let aborted = signal?.aborted ?? false
 
@@ -53,6 +54,23 @@ function createBlockingReader(signal) {
   return {
     read: vi.fn(() => waitForAbort()),
     releaseLock: vi.fn(),
+  }
+}
+
+function createControlledReader() {
+  let resolveRead
+  const read = vi.fn(
+    () =>
+      new Promise((resolve) => {
+        resolveRead = resolve
+      })
+  )
+  return {
+    reader: {
+      read,
+      releaseLock: vi.fn(),
+    },
+    stop: () => resolveRead?.({ value: undefined, done: true }),
   }
 }
 
@@ -111,6 +129,36 @@ const StatefulHarness = forwardRef(
   }
 )
 StatefulHarness.displayName = 'StatefulHarness'
+
+const SingleHarness = forwardRef(({ client, initialAutoPlay = true }, ref) => {
+  const [detectedPorts, setDetectedPorts] = useState({})
+  const [autoPlay, setAutoPlay] = useState(initialAutoPlay)
+
+  const controls = useSerialMonitorConnection({
+    client,
+    selectedPort: SERIAL_PORT,
+    detectedPorts,
+    selectedBaudrate: '9600',
+    monitorSettingsByProtocol: MONITOR_SETTINGS,
+    onText: () => {},
+    onStart: () => {},
+    onStop: () => {},
+    onBusy: () => {},
+    options: { coldStartMs: 0, disconnectHoldMs: 0 },
+    enabled: true,
+    autoPlay,
+  })
+
+  useImperativeHandle(ref, () => ({
+    setDetectedPorts,
+    setAutoPlay,
+    play: controls.play,
+    stop: controls.stop,
+  }))
+
+  return null
+})
+SingleHarness.displayName = 'SingleHarness'
 
 describe('useSerialMonitorConnection', () => {
   beforeEach(() => {
@@ -176,7 +224,7 @@ describe('useSerialMonitorConnection', () => {
     }
 
     render(
-      <StatefulHarness
+      <SingleHarness
         client={client}
         ref={(value) => {
           controls.current = value
@@ -190,5 +238,57 @@ describe('useSerialMonitorConnection', () => {
 
     await waitFor(() => expect(openMonitor).toHaveBeenCalled())
     await waitFor(() => expect(notifyError).toHaveBeenCalledWith('Port busted'))
+  })
+
+  it('reconnects when the device disappears and reappears', async () => {
+    let controller
+    const openMonitor = vi.fn(() => {
+      controller = createControlledReader()
+      return Promise.resolve(controller.reader)
+    })
+    const client = { openMonitor }
+
+    const detectedPortsWithDevice = {
+      '/dev/mock0': { port: { ...SERIAL_PORT } },
+    }
+
+    const controls = {
+      current:
+        /** @type {null | { setDetectedPorts: (ports: any) => void }} */ (null),
+    }
+
+    render(
+      <StatefulHarness
+        client={client}
+        ref={(value) => {
+          controls.current = value
+        }}
+      />
+    )
+
+    act(() => {
+      controls.current?.setDetectedPorts(detectedPortsWithDevice)
+    })
+
+    await waitFor(() => expect(openMonitor).toHaveBeenCalled())
+    await waitFor(() => expect(controller.reader.read).toHaveBeenCalled())
+    const initialCalls = openMonitor.mock.calls.length
+
+    act(() => {
+      controls.current?.setDetectedPorts({})
+    })
+    await act(async () => {})
+
+    act(() => {
+      controller.stop()
+    })
+
+    act(() => {
+      controls.current?.setDetectedPorts(detectedPortsWithDevice)
+    })
+
+    await waitFor(() =>
+      expect(openMonitor.mock.calls.length).toBeGreaterThan(initialCalls)
+    )
   })
 })
