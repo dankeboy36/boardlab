@@ -739,6 +739,14 @@
             "advanced"
           ]
         },
+        "boardlab.monitor.bridgeLogHeartbeat": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Log monitor bridge heartbeat pings. Enable for debugging only.",
+          "tags": [
+            "advanced"
+          ]
+        },
         "boardlab.cli.daemonDebug": {
           "type": "boolean",
           "default": false,

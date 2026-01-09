@@ -108,6 +108,7 @@ export interface MonitorBridgeServiceClientOptions {
   readonly heartbeatIntervalMs?: number
   readonly heartbeatTimeoutMs?: number
   readonly identity?: MonitorBridgeIdentity
+  readonly logging?: MonitorBridgeLoggingOptions
 }
 
 // TODO: portino server must define and export the types
@@ -118,6 +119,11 @@ interface MonitorBridgeIdentity {
   readonly commit?: string
 }
 
+// TODO: portino server must define and export the types
+interface MonitorBridgeLoggingOptions {
+  readonly heartbeat?: boolean
+}
+
 export type MonitorBridgeMode = 'external-process' | 'in-process'
 
 type InProcessServerInstance = Awaited<ReturnType<typeof createServer>>
@@ -126,6 +132,7 @@ type InProcessServerFactory = (params: {
   port: number
   cliPath: string
   identity?: MonitorBridgeIdentity
+  logging?: MonitorBridgeLoggingOptions
 }) => Promise<InProcessServerInstance>
 
 const DEFAULT_BRIDGE_MODE: MonitorBridgeMode = 'external-process'
@@ -134,11 +141,13 @@ const defaultInProcessServerFactory: InProcessServerFactory = async ({
   port,
   cliPath,
   identity,
+  logging,
 }) => {
   return createServer({
     port,
     cliPath,
     identity,
+    logging,
   })
 }
 
@@ -202,6 +211,7 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
   private readonly heartbeatIntervalMs: number
   private readonly heartbeatTimeoutMs: number
   private readonly identity: MonitorBridgeIdentity
+  private logging: MonitorBridgeLoggingOptions
   private versionConflictNotified = false
 
   constructor(
@@ -237,12 +247,41 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
         ? options.heartbeatTimeoutMs
         : 0
     this.identity = options.identity ?? {}
+    this.logging = options.logging ?? {}
   }
 
   async getBridgeInfo(): Promise<ServiceReadyInfo> {
     const ready = await this.ensureService()
     await this.ensureAttached(ready)
     return ready
+  }
+
+  async updateLoggingOptions(
+    options: MonitorBridgeLoggingOptions
+  ): Promise<void> {
+    this.logging = options
+    const ready = this.readyInfo
+    if (!ready) {
+      return
+    }
+    const reachable = await this.isBridgeReachable(ready).catch(() => false)
+    if (!reachable || !this.readyInfo) {
+      return
+    }
+    try {
+      await fetch(`${this.readyInfo.httpBaseUrl}/control/logging`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify({
+          heartbeat: options.heartbeat,
+        }),
+      })
+    } catch (error) {
+      this.logError('Failed to update monitor bridge logging', error)
+    }
   }
 
   dispose(): void {
@@ -518,6 +557,7 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
             ...this.identity,
             mode: this.mode,
           },
+          logging: this.logging,
         })
         server.attachmentRegistry.configure({
           heartbeatTimeoutMs: this.heartbeatTimeoutMs,
@@ -558,6 +598,9 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
     }
     if (this.identity.commit) {
       args.push('--boardlab-commit', this.identity.commit)
+    }
+    if (this.logging.heartbeat) {
+      args.push('--log-heartbeat')
     }
 
     this.log('Launching monitor bridge service', {
@@ -859,6 +902,10 @@ export class MonitorManager implements vscode.Disposable {
       'bridgeHeartbeatTimeoutMs',
       DEFAULT_HEARTBEAT_TIMEOUT_MS
     )
+    const configuredLogHeartbeat = configuration.get<boolean>(
+      'bridgeLogHeartbeat',
+      false
+    )
     let heartbeatIntervalMs =
       typeof configuredHeartbeatInterval === 'number' &&
       Number.isFinite(configuredHeartbeatInterval)
@@ -895,6 +942,12 @@ export class MonitorManager implements vscode.Disposable {
     const effectiveHeartbeatTimeout = heartbeatDisabled
       ? 0
       : resolvedHeartbeatTimeout
+    const resolvedLogHeartbeat =
+      typeof overrides.logging?.heartbeat === 'boolean'
+        ? overrides.logging.heartbeat
+        : typeof configuredLogHeartbeat === 'boolean'
+          ? configuredLogHeartbeat
+          : false
     const baseIdentity = resolveBridgeIdentity(context, resolvedMode)
     const resolvedIdentity = {
       ...baseIdentity,
@@ -912,6 +965,9 @@ export class MonitorManager implements vscode.Disposable {
       heartbeatIntervalMs: effectiveHeartbeatInterval,
       heartbeatTimeoutMs: effectiveHeartbeatTimeout,
       identity: resolvedIdentity,
+      logging: {
+        heartbeat: resolvedLogHeartbeat,
+      },
     }
 
     const serviceClientFactory =
@@ -1004,6 +1060,10 @@ export class MonitorManager implements vscode.Disposable {
 
   getBridgeClient(): MonitorBridgeClient {
     return this.bridgeClient
+  }
+
+  async updateBridgeLogging(heartbeat: boolean): Promise<void> {
+    await this.serviceClient.updateLoggingOptions({ heartbeat })
   }
 
   getMonitorState(port: PortIdentifier): MonitorRuntimeState {

@@ -2130,6 +2130,15 @@ export function activate(context: vscode.ExtensionContext) {
       if (event.affectsConfiguration('boardlab.monitor.bridgeMode')) {
         promptBridgeModeReload()
       }
+      if (event.affectsConfiguration('boardlab.monitor.bridgeLogHeartbeat')) {
+        const config = vscode.workspace.getConfiguration('boardlab.monitor')
+        const enabled = config.get<boolean>('bridgeLogHeartbeat', false)
+        boardlabContext.monitorManager
+          .updateBridgeLogging(Boolean(enabled))
+          .catch((error) =>
+            console.error('Failed to update monitor bridge logging', error)
+          )
+      }
       if (event.affectsConfiguration('boardlab.cli.daemonDebug')) {
         promptDaemonDebugReload()
       }

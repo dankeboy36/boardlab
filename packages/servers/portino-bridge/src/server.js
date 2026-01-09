@@ -334,6 +334,7 @@ function createMonitorBridgeLogStream() {
  *   heartbeatTimeoutMs?: number
  *   heartbeatSweepMs?: number
  * }} [control]
+ * @property {{ heartbeat?: boolean }} [logging]
  * @property {Partial<MonitorBridgeIdentity>} [identity]
  * @property {() =>
  *   | import('./cliBridge.js').CliBridge
@@ -355,6 +356,13 @@ export async function createServer(options = {}) {
   const bridgeIdentity = buildBridgeIdentity(options.identity)
   /** @type {Set<PortinoConnection>} */
   const portinoConnections = new Set()
+  const envHeartbeat = process.env.PORTINO_LOG_HEARTBEAT === 'true'
+  const loggingConfig = {
+    heartbeat:
+      typeof options.logging?.heartbeat === 'boolean'
+        ? options.logging.heartbeat
+        : envHeartbeat,
+  }
   const { stream: logFileStream } = createMonitorBridgeLogStream()
   const writeLogFile = (line) => {
     if (logFileStream && !logFileStream.destroyed) {
@@ -511,13 +519,15 @@ export async function createServer(options = {}) {
         res.status(404).json({ error: 'unknown_token' })
         return
       }
-      const now = Date.now()
-      if (now - lastHeartbeatLogAt > 10_000) {
-        lastHeartbeatLogAt = now
-        logEntry('debug', ['Heartbeat received'], {
-          token,
-          attachments: attachmentRegistry.size,
-        })
+      if (loggingConfig.heartbeat) {
+        const now = Date.now()
+        if (now - lastHeartbeatLogAt > 10_000) {
+          lastHeartbeatLogAt = now
+          logEntry('debug', ['Heartbeat received'], {
+            token,
+            attachments: attachmentRegistry.size,
+          })
+        }
       }
       res.json({ ok: true })
     } catch (error) {
@@ -542,6 +552,21 @@ export async function createServer(options = {}) {
     }
   })
 
+  app.post('/control/logging', (req, res) => {
+    try {
+      if (typeof req.body?.heartbeat === 'boolean') {
+        loggingConfig.heartbeat = req.body.heartbeat
+        logEntry('info', ['Logging config updated'], {
+          heartbeat: loggingConfig.heartbeat,
+        })
+      }
+      res.json({ logging: loggingConfig })
+    } catch (error) {
+      console.error('[PortinoServer] logging config failed', error)
+      res.status(500).json({ error: 'logging_config_failed' })
+    }
+  })
+
   app.post('/control/health', (_req, res) => {
     res.json({
       ok: true,
@@ -556,6 +581,7 @@ export async function createServer(options = {}) {
       commit: bridgeIdentity.commit,
       nodeVersion: bridgeIdentity.nodeVersion,
       platform: bridgeIdentity.platform,
+      logging: loggingConfig,
     })
   })
 

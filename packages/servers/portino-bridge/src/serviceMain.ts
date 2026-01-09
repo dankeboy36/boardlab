@@ -16,6 +16,7 @@ interface ServiceOptions {
   extensionPath?: string
   bridgeMode?: string
   commit?: string
+  logHeartbeat?: boolean
 }
 
 async function main() {
@@ -33,6 +34,8 @@ async function main() {
   const bridgeMode =
     options.bridgeMode ?? process.env.BOARDLAB_BRIDGE_MODE ?? 'external-process'
   const commit = options.commit ?? process.env.BOARDLAB_COMMIT
+  const logHeartbeat =
+    options.logHeartbeat ?? process.env.PORTINO_LOG_HEARTBEAT === 'true'
 
   const { close, attachmentRegistry } = await createServer({
     port: desiredPort,
@@ -48,6 +51,9 @@ async function main() {
       mode: bridgeMode,
       extensionPath,
       commit,
+    },
+    logging: {
+      heartbeat: logHeartbeat,
     },
   })
 
@@ -96,6 +102,10 @@ function parseArgs(args: readonly string[]): ServiceOptions {
     const value = args[index + 1]
     if (name === 'mock-cli') {
       result.mockCli = true
+      continue
+    }
+    if (name === 'log-heartbeat') {
+      result.logHeartbeat = true
       continue
     }
     if (!value || value.startsWith('--')) continue
