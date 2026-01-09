@@ -221,6 +221,52 @@ class BridgeWebSocketLogger {
   }
 }
 
+// TODO: create .d.ts from these, import them in the extension code
+/**
+ * @typedef {Object} MonitorBridgeIdentity
+ * @property {string} [version]
+ * @property {string} [mode]
+ * @property {number} pid
+ * @property {number} [port]
+ * @property {string} startedAt
+ * @property {string} [extensionPath]
+ * @property {string} [commit]
+ * @property {string} [nodeVersion]
+ * @property {string} [platform]
+ */
+
+function buildBridgeIdentity(
+  /** @type {Partial<MonitorBridgeIdentity>} */ info
+) {
+  const startedAt =
+    typeof info?.startedAt === 'string' && info.startedAt
+      ? info.startedAt
+      : new Date().toISOString()
+  return {
+    version: info?.version,
+    mode: info?.mode,
+    pid: process.pid,
+    port: info?.port,
+    startedAt,
+    extensionPath: info?.extensionPath,
+    commit: info?.commit,
+    nodeVersion: process.version,
+    platform: process.platform,
+  }
+}
+
+function formatBridgeIdentityBanner(
+  /** @type {MonitorBridgeIdentity} */ identity
+) {
+  const version = identity.version ?? 'unknown'
+  const mode = identity.mode ?? 'unknown'
+  const port = identity.port ?? 0
+  const startedAt = identity.startedAt ?? new Date().toISOString()
+  const extensionPath = identity.extensionPath ?? 'unknown'
+  const commit = identity.commit ? ` commit=${identity.commit}` : ''
+  return `[boardlab] monitor-bridge v${version} mode=${mode} pid=${identity.pid} port=${port} startedAt=${startedAt} extPath=${extensionPath}${commit}`
+}
+
 function formatBridgeLogMessage(args) {
   return args
     .map((value) => {
@@ -288,6 +334,7 @@ function createMonitorBridgeLogStream() {
  *   heartbeatTimeoutMs?: number
  *   heartbeatSweepMs?: number
  * }} [control]
+ * @property {Partial<MonitorBridgeIdentity>} [identity]
  * @property {() =>
  *   | import('./cliBridge.js').CliBridge
  *   | Promise<import('./cliBridge.js').CliBridge>} [cliBridgeFactory]
@@ -305,6 +352,7 @@ function createMonitorBridgeLogStream() {
  */
 export async function createServer(options = {}) {
   const DEBUG = true // options.debug ?? process.env.PORTINO_DEBUG === '1'
+  const bridgeIdentity = buildBridgeIdentity(options.identity)
   /** @type {Set<PortinoConnection>} */
   const portinoConnections = new Set()
   const { stream: logFileStream } = createMonitorBridgeLogStream()
@@ -496,9 +544,18 @@ export async function createServer(options = {}) {
 
   app.post('/control/health', (_req, res) => {
     res.json({
+      ok: true,
       status: 'ok',
       attachments: attachmentRegistry.size,
-      pid: process.pid,
+      pid: bridgeIdentity.pid,
+      version: bridgeIdentity.version,
+      mode: bridgeIdentity.mode,
+      port: bridgeIdentity.port,
+      startedAt: bridgeIdentity.startedAt,
+      extensionPath: bridgeIdentity.extensionPath,
+      commit: bridgeIdentity.commit,
+      nodeVersion: bridgeIdentity.nodeVersion,
+      platform: bridgeIdentity.platform,
     })
   })
 
@@ -615,6 +672,8 @@ export async function createServer(options = {}) {
     typeof address === 'object' && address ? address.port : listenPort
   httpBaseUrl = `http://${host}:${boundPort}`
   wsBaseUrl = `ws://${host}:${boundPort}/serial`
+  bridgeIdentity.port = boundPort
+  logEntry('info', [formatBridgeIdentityBanner(bridgeIdentity)])
   bridgeLog('info', 'Monitor bridge service ready', {
     httpBaseUrl,
     wsBaseUrl,

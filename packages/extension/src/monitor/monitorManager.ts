@@ -57,7 +57,13 @@ const HEARTBEAT_REQUEST_TIMEOUT_MS = 5_000
 interface ServiceReadyInfo extends MonitorBridgeInfo {
   readonly ownerPid: number
   readonly port: number
-  readonly startedAt?: number
+  readonly startedAt?: string
+  readonly version?: string
+  readonly mode?: string
+  readonly extensionPath?: string
+  readonly commit?: string
+  readonly nodeVersion?: string
+  readonly platform?: string
 }
 
 interface AttachResponse {
@@ -94,12 +100,22 @@ export class BridgeInUseError extends Error {
   }
 }
 
+// TODO: portino server must define and export the types
 export interface MonitorBridgeServiceClientOptions {
   readonly preferredPort?: number
   readonly mode?: MonitorBridgeMode
   readonly inProcessServerFactory?: InProcessServerFactory
   readonly heartbeatIntervalMs?: number
   readonly heartbeatTimeoutMs?: number
+  readonly identity?: MonitorBridgeIdentity
+}
+
+// TODO: portino server must define and export the types
+interface MonitorBridgeIdentity {
+  readonly version?: string
+  readonly mode?: string
+  readonly extensionPath?: string
+  readonly commit?: string
 }
 
 export type MonitorBridgeMode = 'external-process' | 'in-process'
@@ -109,6 +125,7 @@ type InProcessServerInstance = Awaited<ReturnType<typeof createServer>>
 type InProcessServerFactory = (params: {
   port: number
   cliPath: string
+  identity?: MonitorBridgeIdentity
 }) => Promise<InProcessServerInstance>
 
 const DEFAULT_BRIDGE_MODE: MonitorBridgeMode = 'external-process'
@@ -116,10 +133,12 @@ const DEFAULT_BRIDGE_MODE: MonitorBridgeMode = 'external-process'
 const defaultInProcessServerFactory: InProcessServerFactory = async ({
   port,
   cliPath,
+  identity,
 }) => {
   return createServer({
     port,
     cliPath,
+    identity,
   })
 }
 
@@ -150,6 +169,23 @@ function formatError(error: unknown): string {
   return String(error)
 }
 
+function resolveBridgeIdentity(
+  context: vscode.ExtensionContext,
+  mode: MonitorBridgeMode
+): MonitorBridgeIdentity {
+  const extension = context.extension
+  const pkg = extension?.packageJSON as { version?: unknown; commit?: unknown }
+  const version = typeof pkg?.version === 'string' ? pkg.version : undefined
+  const commit = typeof pkg?.commit === 'string' ? pkg.commit : undefined
+  const extensionPath = extension?.extensionPath ?? context.extensionPath
+  return {
+    version,
+    mode,
+    extensionPath,
+    commit,
+  }
+}
+
 class MonitorBridgeServiceClient implements vscode.Disposable {
   private readonly clientId = randomUUID()
   private preferredPort: number
@@ -165,6 +201,8 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
   private heartbeatInFlight = false
   private readonly heartbeatIntervalMs: number
   private readonly heartbeatTimeoutMs: number
+  private readonly identity: MonitorBridgeIdentity
+  private versionConflictNotified = false
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -198,6 +236,7 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
       options.heartbeatTimeoutMs > 0
         ? options.heartbeatTimeoutMs
         : 0
+    this.identity = options.identity ?? {}
   }
 
   async getBridgeInfo(): Promise<ServiceReadyInfo> {
@@ -271,6 +310,10 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
     if (!reused) {
       return undefined
     }
+    const handled = await this.handleVersionMismatch(reused)
+    if (handled === 'killed') {
+      return undefined
+    }
     if (this.mode === 'in-process' && reused.ownerPid !== process.pid) {
       throw new BridgeInUseError(
         this.preferredPort,
@@ -334,17 +377,44 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
       }
 
       const wsUrl = `ws://${DEFAULT_BRIDGE_HOST}:${port}/serial`
+      const payloadPort =
+        typeof payload.port === 'number' && Number.isFinite(payload.port)
+          ? payload.port
+          : port
       const pid =
         typeof payload.pid === 'number' && Number.isFinite(payload.pid)
           ? payload.pid
           : 0
+      const startedAt =
+        typeof payload.startedAt === 'string' ? payload.startedAt : undefined
+      const version =
+        typeof payload.version === 'string' ? payload.version : undefined
+      const mode = typeof payload.mode === 'string' ? payload.mode : undefined
+      const extensionPath =
+        typeof payload.extensionPath === 'string'
+          ? payload.extensionPath
+          : undefined
+      const commit =
+        typeof payload.commit === 'string' ? payload.commit : undefined
+      const nodeVersion =
+        typeof payload.nodeVersion === 'string'
+          ? payload.nodeVersion
+          : undefined
+      const platform =
+        typeof payload.platform === 'string' ? payload.platform : undefined
 
       return {
         ownerPid: pid,
-        port,
+        port: payloadPort,
         wsUrl,
         httpBaseUrl,
-        startedAt: Date.now(),
+        startedAt,
+        version,
+        mode,
+        extensionPath,
+        commit,
+        nodeVersion,
+        platform,
       }
     } catch (error) {
       // Used by a 3rd party process
@@ -379,6 +449,63 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
     }
   }
 
+  private async handleVersionMismatch(
+    info: ServiceReadyInfo
+  ): Promise<'none' | 'killed' | 'kept'> {
+    const expectedVersion = this.identity.version
+    if (!expectedVersion) {
+      return 'none'
+    }
+    const runningVersion = info.version
+    if (runningVersion && runningVersion === expectedVersion) {
+      return 'none'
+    }
+    if (this.versionConflictNotified) {
+      return 'kept'
+    }
+    this.versionConflictNotified = true
+
+    const runningLabel = runningVersion ?? 'unknown'
+    const choice = await vscode.window.showWarningMessage(
+      `BoardLab monitor bridge v${runningLabel} is already running on port ${info.port} (pid ${info.ownerPid}). This extension is v${expectedVersion}. Stop the existing bridge?`,
+      { modal: true },
+      'Stop bridge',
+      'Keep running'
+    )
+    if (choice !== 'Stop bridge') {
+      this.log('Keeping existing monitor bridge process', {
+        pid: info.ownerPid,
+        port: info.port,
+        version: runningLabel,
+      })
+      return 'kept'
+    }
+    const stopped = await this.stopBridgeProcess(info)
+    return stopped ? 'killed' : 'kept'
+  }
+
+  private async stopBridgeProcess(info: ServiceReadyInfo): Promise<boolean> {
+    if (!info.ownerPid || info.ownerPid === process.pid) {
+      this.log('Refusing to stop monitor bridge process', {
+        pid: info.ownerPid,
+      })
+      return false
+    }
+    this.log('Stopping monitor bridge process', {
+      pid: info.ownerPid,
+      port: info.port,
+      version: info.version,
+    })
+    try {
+      process.kill(info.ownerPid)
+      await delay(200)
+      return true
+    } catch (error) {
+      this.logError('Failed to stop monitor bridge process', error)
+      return false
+    }
+  }
+
   private async launchService(port: number): Promise<number> {
     if (this.mode === 'in-process') {
       await this.shutdownInProcessServer()
@@ -387,6 +514,10 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
         const server = await this.inProcessServerFactory({
           port,
           cliPath,
+          identity: {
+            ...this.identity,
+            mode: this.mode,
+          },
         })
         server.attachmentRegistry.configure({
           heartbeatTimeoutMs: this.heartbeatTimeoutMs,
@@ -414,6 +545,20 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
       '--heartbeat-timeout-ms',
       String(this.heartbeatTimeoutMs),
     ]
+    if (this.identity.version) {
+      args.push('--boardlab-version', this.identity.version)
+    }
+    if (this.identity.extensionPath) {
+      args.push('--extension-path', this.identity.extensionPath)
+    }
+    if (this.identity.mode) {
+      args.push('--bridge-mode', this.identity.mode)
+    } else {
+      args.push('--bridge-mode', this.mode)
+    }
+    if (this.identity.commit) {
+      args.push('--boardlab-commit', this.identity.commit)
+    }
 
     this.log('Launching monitor bridge service', {
       entry,
@@ -730,6 +875,8 @@ export class MonitorManager implements vscode.Disposable {
     }
 
     const overrides = options.serviceClientOptions ?? {}
+    const resolvedMode =
+      overrides.mode !== undefined ? overrides.mode : configuredMode
     const resolvedHeartbeatInterval =
       typeof overrides.heartbeatIntervalMs === 'number' &&
       Number.isFinite(overrides.heartbeatIntervalMs)
@@ -748,16 +895,23 @@ export class MonitorManager implements vscode.Disposable {
     const effectiveHeartbeatTimeout = heartbeatDisabled
       ? 0
       : resolvedHeartbeatTimeout
+    const baseIdentity = resolveBridgeIdentity(context, resolvedMode)
+    const resolvedIdentity = {
+      ...baseIdentity,
+      ...(overrides.identity ?? {}),
+      mode: overrides.identity?.mode ?? baseIdentity.mode,
+    }
 
     const serviceClientOptions: MonitorBridgeServiceClientOptions = {
       preferredPort:
         overrides.preferredPort !== undefined
           ? overrides.preferredPort
           : preferredPort,
-      mode: overrides.mode !== undefined ? overrides.mode : configuredMode,
+      mode: resolvedMode,
       inProcessServerFactory: overrides.inProcessServerFactory,
       heartbeatIntervalMs: effectiveHeartbeatInterval,
       heartbeatTimeoutMs: effectiveHeartbeatTimeout,
+      identity: resolvedIdentity,
     }
 
     const serviceClientFactory =

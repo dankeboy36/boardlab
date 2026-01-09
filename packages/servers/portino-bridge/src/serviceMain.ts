@@ -12,6 +12,10 @@ interface ServiceOptions {
   heartbeatTimeoutMs?: number
   heartbeatSweepMs?: number
   mockCli?: boolean
+  boardlabVersion?: string
+  extensionPath?: string
+  bridgeMode?: string
+  commit?: string
 }
 
 async function main() {
@@ -22,6 +26,13 @@ async function main() {
   const heartbeatSweepMs = options.heartbeatSweepMs
   const idleTimeoutMs = options.idleTimeoutMs ?? IDLE_TIMEOUT_MS
   const useMockCli = options.mockCli === true || process.env.MOCK_CLI === 'true'
+  const boardlabVersion =
+    options.boardlabVersion ?? process.env.BOARDLAB_VERSION
+  const extensionPath =
+    options.extensionPath ?? process.env.BOARDLAB_EXTENSION_PATH
+  const bridgeMode =
+    options.bridgeMode ?? process.env.BOARDLAB_BRIDGE_MODE ?? 'external-process'
+  const commit = options.commit ?? process.env.BOARDLAB_COMMIT
 
   const { close, attachmentRegistry } = await createServer({
     port: desiredPort,
@@ -32,6 +43,12 @@ async function main() {
       heartbeatSweepMs,
     },
     cliBridgeFactory: useMockCli ? () => new MockCliBridge() : undefined,
+    identity: {
+      version: boardlabVersion,
+      mode: bridgeMode,
+      extensionPath,
+      commit,
+    },
   })
 
   if (useMockCli) {
@@ -69,6 +86,7 @@ async function main() {
   })
 }
 
+// TODO: use a lib
 function parseArgs(args: readonly string[]): ServiceOptions {
   const result: ServiceOptions = {}
   for (let index = 0; index < args.length; index++) {
@@ -94,6 +112,22 @@ function parseArgs(args: readonly string[]): ServiceOptions {
           }
           index++
         }
+        break
+      case 'boardlab-version':
+        result.boardlabVersion = value
+        index++
+        break
+      case 'extension-path':
+        result.extensionPath = value
+        index++
+        break
+      case 'bridge-mode':
+        result.bridgeMode = value
+        index++
+        break
+      case 'boardlab-commit':
+        result.commit = value
+        index++
         break
       case 'idle-timeout-ms':
         {
