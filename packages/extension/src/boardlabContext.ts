@@ -304,8 +304,8 @@ export class BoardLabContextImpl implements BoardLabContext {
       outputChannel
     )
     this.monitorsRegistry = new InMemoryMonitorsRegistry()
-    this.boardsListWatcher = new BoardsListWatcher(() =>
-      this.monitorManager.getBridgeInfo()
+    this.boardsListWatcher = new BoardsListWatcher(
+      this.monitorManager.getBridgeClient()
     )
     this.boardsListWatcher.start()
     // Load active profiles from global state

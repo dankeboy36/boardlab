@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 
 import type { DetectedPorts, PortIdentifier } from 'boards-list'
 import { createPortKey } from 'boards-list'
+import deepEqual from 'fast-deep-equal'
 import * as vscode from 'vscode'
 import type { Disposable, MessageConnection } from 'vscode-jsonrpc'
 import { ConsoleLogger, createWebSocketConnection } from 'vscode-ws-jsonrpc'
@@ -155,8 +156,7 @@ export class MonitorBridgeClient implements vscode.Disposable {
     const ports = await connection.sendRequest<DetectedPorts>(
       RequestDetectedPorts.method
     )
-    this.currentDetectedPorts = ports
-    this.onDidChangeDetectedPortsEmitter.fire(ports)
+    this.updateDetectedPortsIfNotEqual(ports)
     return ports
   }
 
@@ -266,8 +266,7 @@ export class MonitorBridgeClient implements vscode.Disposable {
       connection.onClose(() => this.handleConnectionLost()),
       connection.onError((error) => this.handleConnectionLost(error)),
       connection.onNotification(NotifyDidChangeDetectedPorts, (ports) => {
-        this.currentDetectedPorts = ports
-        this.onDidChangeDetectedPortsEmitter.fire(ports)
+        this.updateDetectedPortsIfNotEqual(ports)
       }),
       connection.onNotification(NotifyDidChangeMonitorSettings, (payload) => {
         this.currentMonitorSettings = payload
@@ -372,7 +371,7 @@ export class MonitorBridgeClient implements vscode.Disposable {
 
   private applyInitialSnapshot(snapshot: HostConnectClientResult) {
     this.lastConnectResult = snapshot
-    this.currentDetectedPorts = snapshot.detectedPorts
+    this.updateDetectedPortsIfNotEqual(snapshot.detectedPorts)
     this.currentMonitorSettings = snapshot.monitorSettingsByProtocol
     this.currentSelectedBaudrates = snapshot.selectedBaudrates ?? []
     this.runningMonitorKeys.clear()
@@ -388,6 +387,15 @@ export class MonitorBridgeClient implements vscode.Disposable {
     } else {
       this.currentSuspendedPortKeys = []
     }
+    this.onDidChangeMonitorSettingsEmitter.fire(this.currentMonitorSettings)
+  }
+
+  private updateDetectedPortsIfNotEqual(ports: DetectedPorts): void {
+    if (deepEqual(this.currentDetectedPorts, ports)) {
+      return
+    }
+    this.currentDetectedPorts = ports
+    this.onDidChangeDetectedPortsEmitter.fire(ports)
   }
 
   private updateSelectedBaudrate(port: PortIdentifier, baudrate: string) {

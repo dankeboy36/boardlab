@@ -1002,6 +1002,10 @@ export class MonitorManager implements vscode.Disposable {
     return Array.from(this.runningMonitors.values())
   }
 
+  getBridgeClient(): MonitorBridgeClient {
+    return this.bridgeClient
+  }
+
   getMonitorState(port: PortIdentifier): MonitorRuntimeState {
     const key = createPortKey(port)
     const state = this.monitorStates.get(key) ?? 'disconnected'
