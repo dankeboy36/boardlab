@@ -55,6 +55,7 @@ export interface HostConnectClientResult extends ConnectClientResult {
   readonly runningMonitors?: ReadonlyArray<{
     readonly port: PortIdentifier
     readonly baudrate?: string
+    readonly monitorSessionId?: string
   }>
 }
 
@@ -111,6 +112,7 @@ export const NotifyMonitorDidResume =
 export interface DidStartMonitorNotification {
   readonly port: PortIdentifier
   readonly baudrate?: string
+  readonly monitorSessionId?: string
 }
 
 export const NotifyMonitorDidStart =
@@ -120,6 +122,7 @@ export const NotifyMonitorDidStart =
 
 export interface DidStopMonitorNotification {
   readonly port: PortIdentifier
+  readonly monitorSessionId?: string
 }
 
 export const NotifyMonitorDidStop =

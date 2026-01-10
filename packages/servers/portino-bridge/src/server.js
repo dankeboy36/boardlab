@@ -602,6 +602,7 @@ export async function createServer(options = {}) {
     for (const [portKey, entry] of activeSerialStreams.entries()) {
       streams.push({
         portKey,
+        monitorSessionId: entry.sessionId,
         clientCount: entry.clients.size,
         lastCount: entry.lastCount,
         clientIds: Array.from(entry.clientIndex.keys()),
@@ -618,6 +619,7 @@ export async function createServer(options = {}) {
         portKey,
         port: info.port,
         baudrate: info.baudrate,
+        monitorSessionId: info.monitorSessionId,
         clientCount: stream?.clients.size ?? 0,
         lastCount: stream?.lastCount,
       })
@@ -713,6 +715,8 @@ export async function createServer(options = {}) {
    *     monitor: import('./monitor.js').PortinoMonitor | undefined
    *     clients: Set<import('express').Response>
    *     clientIndex: Map<string, import('express').Response>
+   *     sessionId?: string
+   *     baudrate?: string
    *     closed?: boolean
    *     lastCount?: number
    *   }
@@ -725,7 +729,11 @@ export async function createServer(options = {}) {
    *
    * @type {Map<
    *   string,
-   *   { port: import('boards-list').PortIdentifier; baudrate?: string }
+   *   {
+   *     port: import('boards-list').PortIdentifier
+   *     baudrate?: string
+   *     monitorSessionId?: string
+   *   }
    * >}
    */
   const runningMonitorsByKey = new Map()
@@ -734,7 +742,10 @@ export async function createServer(options = {}) {
     return typeof port?.toJSON === 'function' ? port.toJSON() : port
   }
 
-  function notifyMonitorStarted(portKey, port, baudrate) {
+  const createMonitorSessionId = () =>
+    `ms_${Date.now()}_${randomUUID().slice(0, 8)}`
+
+  function notifyMonitorStarted(portKey, port, baudrate, monitorSessionId) {
     const portJson = toPortIdentifier(port)
     const existing = runningMonitorsByKey.get(portKey)
     const finalBaudrate = baudrate ?? existing?.baudrate
@@ -742,26 +753,30 @@ export async function createServer(options = {}) {
       runningMonitorsByKey.set(portKey, {
         port: portJson,
         baudrate: finalBaudrate,
+        monitorSessionId,
       })
-      broadcastMonitorDidStart(portJson, finalBaudrate)
+      broadcastMonitorDidStart(portJson, finalBaudrate, monitorSessionId)
       bridgeLog('info', 'Monitor started', {
         port: portJson,
         baudrate: finalBaudrate,
+        monitorSessionId,
       })
     } else {
       runningMonitorsByKey.set(portKey, {
         port: portJson,
         baudrate: finalBaudrate,
+        monitorSessionId: monitorSessionId ?? existing?.monitorSessionId,
       })
     }
   }
 
-  function notifyMonitorStopped(portKey, port) {
+  function notifyMonitorStopped(portKey, port, monitorSessionId) {
     if (runningMonitorsByKey.delete(portKey)) {
       bridgeLog('info', 'Monitor stopped', {
         port: toPortIdentifier(port),
+        monitorSessionId,
       })
-      broadcastMonitorDidStop(toPortIdentifier(port))
+      broadcastMonitorDidStop(toPortIdentifier(port), monitorSessionId)
     }
   }
 
@@ -770,9 +785,11 @@ export async function createServer(options = {}) {
       return
     }
     if (runningMonitorsByKey.has(portKey)) {
+      const existing = runningMonitorsByKey.get(portKey)
       runningMonitorsByKey.set(portKey, {
         port: toPortIdentifier(port),
         baudrate,
+        monitorSessionId: existing?.monitorSessionId,
       })
     }
   }
@@ -804,6 +821,7 @@ export async function createServer(options = {}) {
     bridgeLog('info', 'Force disconnecting serial client', {
       clientId,
       portKey: prevPortKey,
+      monitorSessionId: prevEntry?.sessionId,
     })
 
     // Remove from indices first so writers stop targeting this response
@@ -827,7 +845,7 @@ export async function createServer(options = {}) {
           )
         }
         prevEntry.closed = true
-        notifyMonitorStopped(prevPortKey, prevEntry.port)
+        notifyMonitorStopped(prevPortKey, prevEntry.port, prevEntry.sessionId)
         try {
           await prevEntry.monitor.dispose?.()
         } catch {}
@@ -885,18 +903,22 @@ export async function createServer(options = {}) {
     })
   }
 
-  const broadcastMonitorDidStart = (port, baudrate) => {
+  const broadcastMonitorDidStart = (port, baudrate, monitorSessionId) => {
     portinoConnections.forEach(({ messageConnection }) => {
       messageConnection.sendNotification(NotifyMonitorDidStart, {
         port,
         baudrate,
+        monitorSessionId,
       })
     })
   }
 
-  const broadcastMonitorDidStop = (port) => {
+  const broadcastMonitorDidStop = (port, monitorSessionId) => {
     portinoConnections.forEach(({ messageConnection }) => {
-      messageConnection.sendNotification(NotifyMonitorDidStop, { port })
+      messageConnection.sendNotification(NotifyMonitorDidStop, {
+        port,
+        monitorSessionId,
+      })
     })
   }
 
@@ -913,6 +935,12 @@ export async function createServer(options = {}) {
 
     // Create a unique key for this serial stream
     const portKey = createPortKey({ protocol, address })
+    const existingEntry = activeSerialStreams.get(portKey)
+    const monitorSessionId =
+      existingEntry?.sessionId ?? createMonitorSessionId()
+    if (!res.headersSent) {
+      res.setHeader('x-monitor-session-id', monitorSessionId)
+    }
     v(
       `[serial] [/serial-data] client=${clientId} request port=${portKey} baud=${
         typeof baudrate === 'string' ? baudrate : '-'
@@ -939,7 +967,10 @@ export async function createServer(options = {}) {
     }
 
     // Lookup (or lazily create) the active entry for this port after any cleanup
-    let entry = activeSerialStreams.get(portKey)
+    let entry = existingEntry
+    if (entry && !entry.sessionId) {
+      entry.sessionId = monitorSessionId
+    }
 
     if (!entry) {
       // Ensure monitor settings for the selected protocol were retrieved successfully
@@ -981,6 +1012,8 @@ export async function createServer(options = {}) {
         monitor: undefined,
         clients,
         clientIndex,
+        sessionId: monitorSessionId,
+        baudrate: requestBaudrate,
         lastCount: undefined,
       }
       activeSerialStreams.set(portKey, entry)
@@ -1091,6 +1124,7 @@ export async function createServer(options = {}) {
        *   monitor: import('./monitor.js').PortinoMonitor | undefined
        *   clients: Set<import('express').Response>
        *   clientIndex: Map<string, import('express').Response>
+       *   sessionId?: string
        *   closed?: boolean
        *   lastCount?: number
        *   baudrate?: string
@@ -1160,7 +1194,7 @@ export async function createServer(options = {}) {
               clientRes.end()
             } catch {}
           }
-          notifyMonitorStopped(portKey, streamEntry.port)
+          notifyMonitorStopped(portKey, streamEntry.port, streamEntry.sessionId)
           try {
             await cliBridge.releaseMonitor(port)
           } catch {}
@@ -1186,6 +1220,7 @@ export async function createServer(options = {}) {
      *   lastCount?: number
      *   baudrate?: string
      *   startedNotified?: boolean
+     *   sessionId: string
      * }}
      */ (activeSerialStreams.get(portKey))
     if (!streamEntry) {
@@ -1204,6 +1239,11 @@ export async function createServer(options = {}) {
       req.socket.setKeepAlive(true)
     }
 
+    entry.sessionId = monitorSessionId
+    if (requestBaudrate) {
+      entry.baudrate = requestBaudrate
+    }
+
     // Register this response as a client
     streamEntry.clients.add(res)
     streamEntry.clientIndex.set(clientId, res)
@@ -1216,7 +1256,8 @@ export async function createServer(options = {}) {
       notifyMonitorStarted(
         portKey,
         streamEntry.port,
-        requestBaudrate ?? runningMonitorsByKey.get(portKey)?.baudrate
+        requestBaudrate ?? runningMonitorsByKey.get(portKey)?.baudrate,
+        streamEntry.sessionId
       )
     } else if (requestBaudrate) {
       updateMonitorBaudrate(portKey, streamEntry.port, requestBaudrate)
@@ -1242,7 +1283,7 @@ export async function createServer(options = {}) {
       if (remaining === 0) {
         v(`[serial] last client -> closing monitor for ${portKey}`)
         streamEntry.closed = true
-        notifyMonitorStopped(portKey, streamEntry.port)
+        notifyMonitorStopped(portKey, streamEntry.port, streamEntry.sessionId)
         try {
           await streamEntry.monitor?.dispose?.()
         } catch {}
@@ -1421,7 +1462,13 @@ export async function createServer(options = {}) {
               : undefined
             const baudrate =
               entryBaudrate ?? runningMonitorsByKey.get(portKey)?.baudrate
-            notifyMonitorStarted(portKey, entry?.port ?? params.port, baudrate)
+            notifyMonitorStarted(
+              portKey,
+              entry?.port ?? params.port,
+              baudrate,
+              entry?.sessionId ??
+                runningMonitorsByKey.get(portKey)?.monitorSessionId
+            )
             v(`[serial] monitor resumed via RPC ${createPortKey(params.port)}`)
           }
           return shouldNotify

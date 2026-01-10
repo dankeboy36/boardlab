@@ -10,7 +10,10 @@ import type {
   MessageParticipant,
   NotificationType,
 } from 'vscode-messenger-common'
-import { isWebviewIdMessageParticipant } from 'vscode-messenger-common'
+import {
+  isWebviewIdMessageParticipant,
+  isWebviewTypeMessageParticipant,
+} from 'vscode-messenger-common'
 
 import { createServer } from '@boardlab/portino-bridge'
 import {
@@ -831,6 +834,7 @@ export interface MonitorManagerOptions {
 export class MonitorManager implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = []
   private readonly clientSessions = new Map<string, MessageParticipant>()
+  private readonly monitorSessionIds = new Map<string, string>()
   private readonly runningMonitors = new Map<
     string,
     { port: PortIdentifier; baudrate?: string }
@@ -1167,6 +1171,24 @@ export class MonitorManager implements vscode.Disposable {
     this.monitorSettingsByProtocol = result.monitorSettingsByProtocol
     this.detectedPorts = result.detectedPorts
     this.clientSessions.set(params.clientId, sender)
+    const senderContext: {
+      senderType?: MessageParticipant['type']
+      webviewId?: string
+      webviewType?: string
+    } = {}
+    if (isWebviewIdMessageParticipant(sender)) {
+      senderContext.webviewId = sender.webviewId
+    }
+    if (isWebviewTypeMessageParticipant(sender)) {
+      senderContext.webviewType = sender.webviewType
+    }
+    if (!senderContext.webviewId && !senderContext.webviewType) {
+      senderContext.senderType = sender.type
+    }
+    this.log('Monitor client connected', {
+      clientId: params.clientId,
+      ...senderContext,
+    })
     this.ensureBridgeEventForwarders()
 
     let selectedPort: PortIdentifier | undefined
@@ -1254,6 +1276,7 @@ export class MonitorManager implements vscode.Disposable {
       return
     }
     this.clientSessions.delete(params.clientId)
+    this.log('Monitor client disconnected', { clientId: params.clientId })
   }
 
   dropClientSessionsForParticipant(participant: MessageParticipant): void {
@@ -1370,14 +1393,21 @@ export class MonitorManager implements vscode.Disposable {
 
     this.disposables.push(
       this.bridgeClient.onDidStartMonitor((event) => {
+        if (event.monitorSessionId) {
+          this.monitorSessionIds.set(
+            createPortKey(event.port),
+            event.monitorSessionId
+          )
+        }
         this.updateSelectedBaudrateCache(event.port, event.baudrate)
         this.setRunningMonitor(event.port, event.baudrate)
       })
     )
 
     this.disposables.push(
-      this.bridgeClient.onDidStopMonitor((port) => {
-        this.removeRunningMonitor(port)
+      this.bridgeClient.onDidStopMonitor((event) => {
+        this.removeRunningMonitor(event.port)
+        this.monitorSessionIds.delete(createPortKey(event.port))
       })
     )
   }
@@ -1408,9 +1438,14 @@ export class MonitorManager implements vscode.Disposable {
   }
 
   private syncRunningMonitors(
-    entries: ReadonlyArray<{ port: PortIdentifier; baudrate?: string }>
+    entries: ReadonlyArray<{
+      port: PortIdentifier
+      baudrate?: string
+      monitorSessionId?: string
+    }>
   ) {
     this.runningMonitors.clear()
+    this.monitorSessionIds.clear()
     entries.forEach((entry) => {
       const key = createPortKey(entry.port)
       this.runningMonitors.set(key, {
@@ -1419,6 +1454,9 @@ export class MonitorManager implements vscode.Disposable {
       })
       if (entry.baudrate) {
         this.selectedBaudrateCache.set(key, entry.baudrate)
+      }
+      if (entry.monitorSessionId) {
+        this.monitorSessionIds.set(key, entry.monitorSessionId)
       }
       this.setMonitorState(entry.port, 'running')
     })
@@ -1463,6 +1501,7 @@ export class MonitorManager implements vscode.Disposable {
       previous,
       state,
       reason,
+      monitorSessionId: this.monitorSessionIds.get(key),
     })
     this.onDidChangeMonitorStateEmitter.fire({ port, state, reason })
   }
