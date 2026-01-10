@@ -264,7 +264,7 @@ function formatBridgeIdentityBanner(
   const startedAt = identity.startedAt ?? new Date().toISOString()
   const extensionPath = identity.extensionPath ?? 'unknown'
   const commit = identity.commit ? ` commit=${identity.commit}` : ''
-  return `[boardlab] monitor-bridge v${version} mode=${mode} pid=${identity.pid} port=${port} startedAt=${startedAt} extPath=${extensionPath}${commit}`
+  return `[boardlab] monitor-bridge ${version} mode=${mode} pid=${identity.pid} port=${port} startedAt=${startedAt} extPath=${extensionPath}${commit}`
 }
 
 function formatBridgeLogMessage(args) {
@@ -935,12 +935,6 @@ export async function createServer(options = {}) {
 
     // Create a unique key for this serial stream
     const portKey = createPortKey({ protocol, address })
-    const existingEntry = activeSerialStreams.get(portKey)
-    const monitorSessionId =
-      existingEntry?.sessionId ?? createMonitorSessionId()
-    if (!res.headersSent) {
-      res.setHeader('x-monitor-session-id', monitorSessionId)
-    }
     v(
       `[serial] [/serial-data] client=${clientId} request port=${portKey} baud=${
         typeof baudrate === 'string' ? baudrate : '-'
@@ -961,9 +955,24 @@ export async function createServer(options = {}) {
     // If this clientId already has a connection (possibly on a different port),
     // close the old one first using the global index for deterministic cleanup.
     const existing = globalClientIndex.get(clientId)
+    /** @type {import('express').Response | undefined} */
+    let previousRes
     if (existing) {
-      v(`[serial] client switch: ${clientId} ${existing.portKey} -> ${portKey}`)
-      await forceDisconnectClient(clientId)
+      if (existing.portKey === portKey) {
+        previousRes = existing.res
+      } else {
+        v(
+          `[serial] client switch: ${clientId} ${existing.portKey} -> ${portKey}`
+        )
+        await forceDisconnectClient(clientId)
+      }
+    }
+
+    const existingEntry = activeSerialStreams.get(portKey)
+    const monitorSessionId =
+      existingEntry?.sessionId ?? createMonitorSessionId()
+    if (!res.headersSent) {
+      res.setHeader('x-monitor-session-id', monitorSessionId)
     }
 
     // Lookup (or lazily create) the active entry for this port after any cleanup
@@ -1248,11 +1257,26 @@ export async function createServer(options = {}) {
     streamEntry.clients.add(res)
     streamEntry.clientIndex.set(clientId, res)
     globalClientIndex.set(clientId, { portKey, res })
+    if (previousRes && previousRes !== res) {
+      try {
+        previousRes.end()
+      } catch {}
+    }
+    bridgeLog('info', 'Monitor stream client attached', {
+      clientId,
+      portKey,
+      monitorSessionId: streamEntry.sessionId,
+    })
     v(
       `[serial] +client ${clientId} on ${portKey}; total=${streamEntry.clients.size}`
     )
 
     if (streamEntry.clients.size === 1) {
+      bridgeLog('info', 'Monitor stream opened', {
+        clientId,
+        portKey,
+        monitorSessionId: streamEntry.sessionId,
+      })
       notifyMonitorStarted(
         portKey,
         streamEntry.port,
@@ -1279,9 +1303,19 @@ export async function createServer(options = {}) {
       }
 
       const remaining = streamEntry.clients.size
+      bridgeLog('info', 'Monitor stream client detached', {
+        clientId,
+        portKey,
+        monitorSessionId: streamEntry.sessionId,
+        remaining,
+      })
       v(`[serial] -client ${clientId} on ${portKey}; remaining=${remaining}`)
       if (remaining === 0) {
         v(`[serial] last client -> closing monitor for ${portKey}`)
+        bridgeLog('info', 'Monitor stream closed', {
+          portKey,
+          monitorSessionId: streamEntry.sessionId,
+        })
         streamEntry.closed = true
         notifyMonitorStopped(portKey, streamEntry.port, streamEntry.sessionId)
         try {
@@ -1434,12 +1468,20 @@ export async function createServer(options = {}) {
         return entry.monitor.sendMessage(message)
       }),
       messageConnection.onRequest(RequestPauseMonitor, async (params) => {
-        v(`[serial] RequestPauseMonitor port=${createPortKey(params.port)}`)
+        const portKey = createPortKey(params.port)
+        v(`[serial] RequestPauseMonitor port=${portKey}`)
         try {
           const paused = await cliBridge.pauseMonitor(params.port)
           if (paused) {
             broadcastMonitorDidPause(params.port)
-            v(`[serial] monitor paused via RPC ${createPortKey(params.port)}`)
+            bridgeLog('info', 'Monitor paused', {
+              port: params.port,
+              portKey,
+              monitorSessionId:
+                activeSerialStreams.get(portKey)?.sessionId ??
+                runningMonitorsByKey.get(portKey)?.monitorSessionId,
+            })
+            v(`[serial] monitor paused via RPC ${portKey}`)
           }
           return paused
         } catch (error) {
@@ -1448,15 +1490,22 @@ export async function createServer(options = {}) {
         }
       }),
       messageConnection.onRequest(RequestResumeMonitor, async (params) => {
-        v(`[serial] RequestResumeMonitor port=${createPortKey(params.port)}`)
+        const portKey = createPortKey(params.port)
+        v(`[serial] RequestResumeMonitor port=${portKey}`)
         try {
           const resumed = await cliBridge.resumeMonitor(params.port)
-          const portKey = createPortKey(params.port)
           const entry = activeSerialStreams.get(portKey)
           const shouldNotify =
             resumed || entry || runningMonitorsByKey.has(portKey)
           if (shouldNotify) {
             broadcastMonitorDidResume(params.port)
+            bridgeLog('info', 'Monitor resumed', {
+              port: params.port,
+              portKey,
+              monitorSessionId:
+                entry?.sessionId ??
+                runningMonitorsByKey.get(portKey)?.monitorSessionId,
+            })
             const entryBaudrate = entry
               ? /** @type {any} */ (entry).baudrate
               : undefined

@@ -510,7 +510,7 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
 
     const runningLabel = runningVersion ?? 'unknown'
     const choice = await vscode.window.showWarningMessage(
-      `BoardLab monitor bridge v${runningLabel} is already running on port ${info.port} (pid ${info.ownerPid}). This extension is v${expectedVersion}. Stop the existing bridge?`,
+      `BoardLab monitor bridge ${runningLabel} is already running on port ${info.port} (pid ${info.ownerPid}). This extension is ${expectedVersion}. Stop the existing bridge?`,
       { modal: true },
       'Stop bridge',
       'Keep running'
