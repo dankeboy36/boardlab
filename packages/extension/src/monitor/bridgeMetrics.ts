@@ -261,7 +261,7 @@ function formatBoardList(
   boards?: ReadonlyArray<{ readonly name?: string; readonly fqbn?: string }>
 ): string {
   if (!boards || !boards.length) {
-    return 'no matching boards'
+    return 'no discovered boards'
   }
   return boards
     .map((board) => {
