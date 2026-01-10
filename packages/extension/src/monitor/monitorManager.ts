@@ -10,6 +10,7 @@ import type {
   MessageParticipant,
   NotificationType,
 } from 'vscode-messenger-common'
+import { isWebviewIdMessageParticipant } from 'vscode-messenger-common'
 
 import { createServer } from '@boardlab/portino-bridge'
 import {
@@ -1253,6 +1254,21 @@ export class MonitorManager implements vscode.Disposable {
       return
     }
     this.clientSessions.delete(params.clientId)
+  }
+
+  dropClientSessionsForParticipant(participant: MessageParticipant): void {
+    if (!isWebviewIdMessageParticipant(participant)) {
+      return
+    }
+    const targetId = participant.webviewId
+    for (const [clientId, session] of this.clientSessions.entries()) {
+      if (
+        isWebviewIdMessageParticipant(session) &&
+        session.webviewId === targetId
+      ) {
+        this.clientSessions.delete(clientId)
+      }
+    }
   }
 
   private async handleUpdateBaudrate(

@@ -208,6 +208,9 @@ abstract class MonitorBaseEditorProvider<
     protected readonly resourceStore: MonitorResourceStore,
     protected readonly selectionCoordinator: MonitorSelectionCoordinator,
     private readonly webviewAssetType: 'monitor' | 'plotter',
+    private readonly onPanelDisposed:
+      | ((participant: WebviewIdMessageParticipant) => void)
+      | undefined,
     private readonly stateConfig: {
       readonly titlePrefix: string
       readonly viewType: string
@@ -458,6 +461,7 @@ abstract class MonitorBaseEditorProvider<
     if (!binding) {
       return
     }
+    this.onPanelDisposed?.(binding.participant)
     binding.disposables.forEach((disposable) => {
       try {
         disposable.dispose()
@@ -588,7 +592,8 @@ export class MonitorEditors extends MonitorBaseEditorProvider<
     extensionMode: vscode.ExtensionMode,
     messenger: Messenger,
     resourceStore: MonitorResourceStore,
-    selectionCoordinator: MonitorSelectionCoordinator
+    selectionCoordinator: MonitorSelectionCoordinator,
+    onPanelDisposed?: (participant: WebviewIdMessageParticipant) => void
   ) {
     super(
       extensionUri,
@@ -597,6 +602,7 @@ export class MonitorEditors extends MonitorBaseEditorProvider<
       resourceStore,
       selectionCoordinator,
       'monitor',
+      onPanelDisposed,
       {
         titlePrefix: 'Monitor',
         viewType: 'boardlab.monitorEditor',
@@ -664,7 +670,8 @@ export class PlotterEditors extends MonitorBaseEditorProvider<
     extensionMode: vscode.ExtensionMode,
     messenger: Messenger,
     resourceStore: MonitorResourceStore,
-    selectionCoordinator: MonitorSelectionCoordinator
+    selectionCoordinator: MonitorSelectionCoordinator,
+    onPanelDisposed?: (participant: WebviewIdMessageParticipant) => void
   ) {
     super(
       extensionUri,
@@ -673,6 +680,7 @@ export class PlotterEditors extends MonitorBaseEditorProvider<
       resourceStore,
       selectionCoordinator,
       'plotter',
+      onPanelDisposed,
       {
         titlePrefix: 'Plotter',
         viewType: 'boardlab.plotterEditor',

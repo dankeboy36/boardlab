@@ -7,6 +7,7 @@ import { createPortKey } from 'boards-list'
 import { FQBN, valid as isValidFQBN } from 'fqbn'
 import * as vscode from 'vscode'
 import { Messenger } from 'vscode-messenger'
+import type { WebviewIdMessageParticipant } from 'vscode-messenger-common'
 
 import type {
   LibraryFilterTopic,
@@ -1362,19 +1363,25 @@ export function activate(context: vscode.ExtensionContext) {
     messenger,
     () => computeSelection()
   )
+  const dropMonitorClientSessions = (
+    participant: WebviewIdMessageParticipant
+  ) =>
+    boardlabContext.monitorManager.dropClientSessionsForParticipant(participant)
   const monitorEditors = new MonitorEditors(
     context.extensionUri,
     context.extensionMode,
     messenger,
     monitorResourceStore,
-    monitorSelectionCoordinator
+    monitorSelectionCoordinator,
+    dropMonitorClientSessions
   )
   const plotterEditors = new PlotterEditors(
     context.extensionUri,
     context.extensionMode,
     messenger,
     monitorResourceStore,
-    monitorSelectionCoordinator
+    monitorSelectionCoordinator,
+    dropMonitorClientSessions
   )
   const profilesDiagnostics =
     vscode.languages.createDiagnosticCollection('boardlabProfiles')
