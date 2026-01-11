@@ -552,6 +552,7 @@ export async function createServer(options = {}) {
     }
   })
 
+  /* curl -s -X POST http://127.0.0.1:55888/control/logging -H 'Content-Type: application/json' -d '{"heartbeat": true}' */
   app.post('/control/logging', (req, res) => {
     try {
       if (typeof req.body?.heartbeat === 'boolean') {
