@@ -568,6 +568,10 @@ export async function createServer(options = {}) {
   })
 
   app.post('/control/health', (_req, res) => {
+    const heartbeatEnabled = attachmentRegistry.heartbeatTimeoutMs > 0
+    const heartbeatStatus = heartbeatEnabled
+      ? 'enabled'
+      : 'disabled (heartbeatTimeoutMs=0)'
     res.json({
       ok: true,
       status: 'ok',
@@ -582,6 +586,12 @@ export async function createServer(options = {}) {
       nodeVersion: bridgeIdentity.nodeVersion,
       platform: bridgeIdentity.platform,
       logging: loggingConfig,
+      timeouts: {
+        idleTimeoutMs: attachmentRegistry.idleTimeoutMs,
+        heartbeatTimeoutMs: attachmentRegistry.heartbeatTimeoutMs,
+        heartbeatSweepMs: attachmentRegistry.heartbeatSweepMs,
+        heartbeatStatus,
+      },
     })
   })
 
