@@ -1197,22 +1197,31 @@ export async function createServer(options = {}) {
           }
         } finally {
           v(`[serial] monitor ended for ${portKey} (stream finished)`)
-          // Cleanup when monitor ends
-          for (const clientRes of clients) {
+          const keepEntry = monitor?.isPaused?.()
+          if (keepEntry) {
+            v(`[serial] monitor paused; keeping entry for ${portKey}`)
+          } else {
+            // Cleanup when monitor ends
+            for (const clientRes of clients) {
+              try {
+                clientRes.end()
+              } catch {}
+            }
+            notifyMonitorStopped(
+              portKey,
+              streamEntry.port,
+              streamEntry.sessionId
+            )
             try {
-              clientRes.end()
+              await cliBridge.releaseMonitor(port)
             } catch {}
-          }
-          notifyMonitorStopped(portKey, streamEntry.port, streamEntry.sessionId)
-          try {
-            await cliBridge.releaseMonitor(port)
-          } catch {}
-          // Only delete if this entry is still the active one for the key and not already closed
-          const current = activeSerialStreams.get(portKey)
-          if (current && current.monitor === monitor && !current.closed) {
-            current.closed = true
-            activeSerialStreams.delete(portKey)
-            v(`[serial] monitor removed for ${portKey}`)
+            // Only delete if this entry is still the active one for the key and not already closed
+            const current = activeSerialStreams.get(portKey)
+            if (current && current.monitor === monitor && !current.closed) {
+              current.closed = true
+              activeSerialStreams.delete(portKey)
+              v(`[serial] monitor removed for ${portKey}`)
+            }
           }
         }
       })()
@@ -1311,6 +1320,13 @@ export async function createServer(options = {}) {
       })
       v(`[serial] -client ${clientId} on ${portKey}; remaining=${remaining}`)
       if (remaining === 0) {
+        const isPaused = streamEntry.monitor?.isPaused?.()
+        if (isPaused) {
+          v(
+            `[serial] last client while paused -> keeping monitor for ${portKey}`
+          )
+          return
+        }
         v(`[serial] last client -> closing monitor for ${portKey}`)
         bridgeLog('info', 'Monitor stream closed', {
           portKey,

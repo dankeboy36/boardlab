@@ -138,6 +138,19 @@ export interface BoardLabContext extends ArduinoContext {
   readonly monitorsRegistry: MonitorsRegistry
   readonly extensionUri: vscode.Uri
   readonly outputChannel: vscode.OutputChannel
+  withMonitorSuspended<T extends MonitorSuspensionResult>(
+    port: PortIdentifier,
+    run: (options?: MonitorSuspensionOptions) => Promise<T>,
+    options?: MonitorSuspensionOptions
+  ): Promise<T>
+}
+
+export interface MonitorSuspensionOptions {
+  retry?: number
+}
+
+export interface MonitorSuspensionResult {
+  result: Promise<PortIdentifier | undefined>
 }
 
 type SketchPort = SketchFolder['port']
@@ -1621,6 +1634,64 @@ export class BoardLabContextImpl implements BoardLabContext {
       id: platformId,
       name: quick?.label,
       version,
+    }
+  }
+
+  async withMonitorSuspended<T extends MonitorSuspensionResult>(
+    port: PortIdentifier,
+    run: (options?: MonitorSuspensionOptions) => Promise<T>,
+    options?: MonitorSuspensionOptions
+  ): Promise<T> {
+    const paused = await this.monitorManager.pauseMonitor(port)
+    const retry = paused && options?.retry === undefined ? 5 : options?.retry
+    const runOptions = retry === undefined ? options : { ...options, retry }
+
+    const resume = async (target: PortIdentifier) => {
+      if (!paused) {
+        return
+      }
+      console.log('[monitor] resume after suspension', {
+        port: target,
+        paused,
+      })
+
+      const attemptResume = async (remaining: number): Promise<void> => {
+        try {
+          await this.monitorManager.resumeMonitor(target)
+        } catch (error) {
+          if (remaining <= 0) {
+            console.error('Failed to resume monitor', error)
+            return
+          }
+        }
+
+        const state = this.monitorManager.getMonitorState(target)
+        if (state === 'running' || remaining <= 0) {
+          return
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        return attemptResume(remaining - 1)
+      }
+
+      await attemptResume(5)
+    }
+
+    try {
+      // TODO: use p-retry?
+      const result = await run(runOptions)
+      result.result
+        .then((updatedPort) => resume(updatedPort ?? port))
+        .catch((error) => {
+          console.error('Monitor task error', error)
+          return resume(port)
+        })
+      return result
+    } catch (error) {
+      await resume(port).catch((resumeError) =>
+        console.error('Failed to resume monitor', resumeError)
+      )
+      throw error
     }
   }
 

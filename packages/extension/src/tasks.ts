@@ -471,15 +471,34 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
           .programmer
         const compileConfig = vscode.workspace.getConfiguration('upload')
         const verbose = compileConfig.get<boolean>('verbose') ?? false
-        return this.withMonitorSuspended(port, async () =>
-          arduino.uploadUsingProgrammer({
+        const portIdentifier = port
+          ? { protocol: port.protocol, address: port.address }
+          : undefined
+
+        if (!portIdentifier) {
+          const { pty } = arduino.uploadUsingProgrammer({
             sketchPath: resolvedTask.sketchPath,
             fqbn: resolvedTask.fqbn,
             port,
             programmer,
             verbose,
           })
+          return pty
+        }
+
+        const { pty } = await this.boardlabContext.withMonitorSuspended(
+          portIdentifier,
+          async (options) =>
+            arduino.uploadUsingProgrammer({
+              sketchPath: resolvedTask.sketchPath,
+              fqbn: resolvedTask.fqbn,
+              port,
+              programmer,
+              verbose,
+              retry: options?.retry,
+            })
         )
+        return pty
       })
     )
   }
@@ -505,13 +524,30 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
           revivePort(resolvedTask.port)
         const programmer = (resolvedTask as BurnBootloaderTaskDefinition)
           .programmer
-        return this.withMonitorSuspended(port, async () =>
-          arduino.burnBootloader({
+        const portIdentifier = port
+          ? { protocol: port.protocol, address: port.address }
+          : undefined
+
+        if (!portIdentifier) {
+          const { pty } = arduino.burnBootloader({
             fqbn: resolvedTask.fqbn,
             port,
             programmer, // https://github.com/arduino/arduino-cli/issues/3043
           })
+          return pty
+        }
+
+        const { pty } = await this.boardlabContext.withMonitorSuspended(
+          portIdentifier,
+          async (options) =>
+            arduino.burnBootloader({
+              fqbn: resolvedTask.fqbn,
+              port,
+              programmer, // https://github.com/arduino/arduino-cli/issues/3043
+              retry: options?.retry,
+            })
         )
+        return pty
       })
     )
   }
@@ -644,14 +680,32 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
           vscode.workspace.getConfiguration('boardlab.upload')
         const verbose = compileConfig.get<boolean>('verbose') ?? false
 
-        return this.withMonitorSuspended(port, async () =>
-          arduino.upload({
+        const portIdentifier = port
+          ? { protocol: port.protocol, address: port.address }
+          : undefined
+
+        if (!portIdentifier) {
+          const { pty } = arduino.upload({
             sketchPath: resolvedTask.sketchPath,
             fqbn: resolvedTask.fqbn,
             port,
             verbose,
           })
+          return pty
+        }
+
+        const { pty } = await this.boardlabContext.withMonitorSuspended(
+          portIdentifier,
+          async (options) =>
+            arduino.upload({
+              sketchPath: resolvedTask.sketchPath,
+              fqbn: resolvedTask.fqbn,
+              port,
+              verbose,
+              retry: options?.retry,
+            })
         )
+        return pty
       })
     )
   }
@@ -1268,77 +1322,6 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
       return 'No port selected'
     }
     return label
-  }
-
-  private async withMonitorSuspended(
-    port: Port | undefined,
-    run: () => Promise<{
-      pty: vscode.Pseudoterminal
-      result: Promise<void>
-    }>
-  ): Promise<vscode.Pseudoterminal> {
-    if (!port) {
-      const { pty, result } = await run()
-      result.catch((error) => {
-        console.error('Upload error', error)
-      })
-      return pty
-    }
-
-    const portIdentifier = { protocol: port.protocol, address: port.address }
-    const paused =
-      await this.boardlabContext.monitorManager.pauseMonitor(portIdentifier)
-
-    const resume = async () => {
-      if (!paused) {
-        return
-      }
-      console.log('[tasks] resume monitor after suspension', {
-        port: portIdentifier,
-        paused,
-      })
-
-      const attemptResume = async (remaining: number): Promise<void> => {
-        try {
-          await this.boardlabContext.monitorManager.resumeMonitor(
-            portIdentifier
-          )
-        } catch (error) {
-          if (remaining <= 0) {
-            console.error('Failed to resume monitor', error)
-            return
-          }
-        }
-
-        const state =
-          this.boardlabContext.monitorManager.getMonitorState(portIdentifier)
-        if (state === 'running' || remaining <= 0) {
-          return
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 500))
-        return attemptResume(remaining - 1)
-      }
-
-      await attemptResume(5)
-    }
-
-    try {
-      const { pty, result } = await run()
-      result
-        .catch((error) => {
-          console.error('Upload error', error)
-        })
-        .finally(() => {
-          resume()
-        })
-      return pty
-    } catch (error) {
-      await resume().catch((resumeError) =>
-        console.error('Failed to resume monitor', resumeError)
-      )
-      throw error
-    }
   }
 }
 

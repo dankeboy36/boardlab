@@ -115,28 +115,31 @@ export interface Arduino extends vscode.Disposable {
     progress: vscode.Event<CompileProgressUpdate>
   }
 
+  // TODO: should be upload(req, {signal?, retry?})
   upload(
-    req: Partial<Omit<UploadRequest, 'instance'>>,
+    req: Partial<Omit<UploadRequest, 'instance'>> & { retry?: number },
     signal?: AbortSignal
   ): {
     pty: vscode.Pseudoterminal
-    result: Promise<void>
+    result: Promise<PortIdentifier | undefined>
   }
 
   uploadUsingProgrammer(
-    req: Partial<Omit<UploadUsingProgrammerRequest, 'instance'>>,
+    req: Partial<Omit<UploadUsingProgrammerRequest, 'instance'>> & {
+      retry?: number
+    },
     signal?: AbortSignal
   ): {
     pty: vscode.Pseudoterminal
-    result: Promise<void>
+    result: Promise<PortIdentifier | undefined>
   }
 
   burnBootloader(
-    req: Partial<Omit<BurnBootloaderRequest, 'instance'>>,
+    req: Partial<Omit<BurnBootloaderRequest, 'instance'>> & { retry?: number },
     signal?: AbortSignal
   ): {
     pty: vscode.Pseudoterminal
-    result: Promise<void>
+    result: Promise<PortIdentifier | undefined>
   }
   // #endregion
 
@@ -393,65 +396,127 @@ export class ArduinoCli implements Arduino {
     ]
     deferred.promise.finally(() => disposeAll(...toDispose))
     return {
-      pty: createPty<Streamable<BuilderResult>, BuilderResult>(streamable),
+      pty: createPty(streamable),
       result: deferred.promise,
       progress: onDidProgressEmitter.event,
     }
   }
 
   upload(
-    req: Partial<Omit<UploadRequest, 'instance'>>,
+    req: Partial<Omit<UploadRequest, 'instance'>> & { retry?: number },
     signal?: AbortSignal
   ): {
     pty: vscode.Pseudoterminal
-    result: Promise<void>
+    result: Promise<PortIdentifier | undefined>
   } {
-    return this.execute(() =>
-      this.client.upload({ ...req, instance: this.instance }, { signal })
+    const { retry, ...uploadRequest } = req
+    const retryOptions = buildRetryOptions(retry)
+    const deferred = defer<PortIdentifier | undefined>()
+    const streamable = createStreamable<
+      UploadResponse,
+      PortIdentifier | undefined
+    >(
+      (streamSignal) =>
+        this.client.upload(
+          { ...uploadRequest, instance: this.instance },
+          { signal: streamSignal }
+        ),
+      (response, emitter) => {
+        const message = response.message
+        if (message?.$case !== 'result') {
+          return
+        }
+        const updatedPort = message.result?.updatedUploadPort
+        if (updatedPort?.address && updatedPort.protocol) {
+          emitter.fire({
+            protocol: updatedPort.protocol,
+            address: updatedPort.address,
+          })
+        }
+      },
+      retryOptions ? { retry: retryOptions } : undefined
     )
+    const toDispose: vscode.Disposable[] = [
+      streamable.onDidComplete((result) => deferred.resolve(result)),
+      streamable.onDidReceiveError((error) => {
+        if (typeof error === 'string') {
+          return
+        }
+        if (isAbortError(error)) {
+          deferred.resolve(undefined)
+        } else {
+          deferred.reject(error)
+        }
+      }),
+    ]
+    deferred.promise.finally(() => disposeAll(...toDispose))
+    return {
+      pty: createPty(streamable),
+      result: deferred.promise,
+    }
   }
 
   uploadUsingProgrammer(
-    req: Partial<Omit<UploadUsingProgrammerRequest, 'instance'>>,
+    req: Partial<Omit<UploadUsingProgrammerRequest, 'instance'>> & {
+      retry?: number
+    },
     signal?: AbortSignal
   ): {
     pty: vscode.Pseudoterminal
-    result: Promise<void>
+    result: Promise<PortIdentifier | undefined>
   } {
-    return this.execute(() =>
-      this.client.uploadUsingProgrammer(
-        { ...req, instance: this.instance },
-        { signal }
-      )
+    const { retry, ...uploadRequest } = req
+    const retryOptions = buildRetryOptions(retry)
+    return this.execute<
+      UploadUsingProgrammerResponse,
+      PortIdentifier | undefined
+    >(
+      (streamSignal) =>
+        this.client.uploadUsingProgrammer(
+          { ...uploadRequest, instance: this.instance },
+          { signal: streamSignal }
+        ),
+      signal,
+      retryOptions ? { retry: retryOptions } : undefined
     )
   }
 
   burnBootloader(
-    req: Partial<Omit<BurnBootloaderRequest, 'instance'>>,
+    req: Partial<Omit<BurnBootloaderRequest, 'instance'>> & { retry?: number },
     signal?: AbortSignal
   ): {
     pty: vscode.Pseudoterminal
-    result: Promise<void>
+    result: Promise<PortIdentifier | undefined>
   } {
-    return this.execute(() =>
-      this.client.burnBootloader(
-        { ...req, instance: this.instance },
-        { signal }
-      )
+    const { retry, ...bootloaderRequest } = req
+    const retryOptions = buildRetryOptions(retry)
+    return this.execute<BurnBootloaderResponse, PortIdentifier | undefined>(
+      (streamSignal) =>
+        this.client.burnBootloader(
+          { ...bootloaderRequest, instance: this.instance },
+          { signal: streamSignal }
+        ),
+      signal,
+      retryOptions ? { retry: retryOptions } : undefined
     )
   }
 
-  private execute<RESP extends StdResponse>(
-    task: () => AsyncIterable<RESP>,
-    signal?: AbortSignal
+  private execute<RESP extends StdResponse, RESULT = void>(
+    task: (signal: AbortSignal) => AsyncIterable<RESP>,
+    signal?: AbortSignal,
+    options?: ExecuteOptions
   ): {
     pty: vscode.Pseudoterminal
-    result: Promise<void>
+    result: Promise<RESULT | undefined>
   } {
-    const deferred = defer<void>()
-    const streamable = createStreamable<RESP, void>(task)
+    const deferred = defer<RESULT | undefined>()
+    const streamable = createStreamable<RESP, RESULT>(
+      (streamSignal) => task(signal ?? streamSignal),
+      undefined,
+      options
+    )
     const toDispose: vscode.Disposable[] = [
-      streamable.onDidComplete(() => deferred.resolve()),
+      streamable.onDidComplete((result) => deferred.resolve(result)),
       streamable.onDidReceiveError((error) => {
         if (typeof error === 'string') {
           return
@@ -702,12 +767,83 @@ type StdResponse =
   | BurnBootloaderResponse
   | UploadUsingProgrammerResponse
 
+interface RetryOptions {
+  retries: number
+  delayMs?: number
+  shouldRetry?: (error: unknown) => boolean
+  shouldRetryMessage?: (message: string) => boolean
+  onRetry?: (
+    attempt: number,
+    maxRetries: number,
+    error: unknown
+  ) => string | undefined
+}
+
+interface ExecuteOptions {
+  retry?: RetryOptions
+}
+
+interface CreateStreamableOptions {
+  retry?: RetryOptions
+}
+
+const retryableUploadErrorPatterns = [
+  /resource busy/i,
+  /device or resource busy/i,
+  /could not open port/i,
+  /failed to open.*port/i,
+  /no device found/i,
+  /no such file or directory/i,
+  /port .*not found/i,
+]
+
+function formatErrorMessage(error: unknown): string {
+  if (typeof error === 'string') {
+    return error
+  }
+  if (isServiceError(error)) {
+    return error.details || error.message || String(error)
+  }
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string') {
+      return message
+    }
+  }
+  return String(error)
+}
+
+function isRetryableUploadError(error: unknown): boolean {
+  if (isAbortError(error)) {
+    return false
+  }
+  const message = formatErrorMessage(error).toLowerCase()
+  return retryableUploadErrorPatterns.some((pattern) => pattern.test(message))
+}
+
+function buildRetryOptions(retry?: number): RetryOptions | undefined {
+  const retryCount = typeof retry === 'number' ? Math.max(0, retry) : 0
+  if (retryCount <= 0) {
+    return undefined
+  }
+  return {
+    retries: retryCount,
+    delayMs: 500,
+    shouldRetry: isRetryableUploadError,
+    shouldRetryMessage: (message: string) =>
+      retryableUploadErrorPatterns.some((pattern) => pattern.test(message)),
+    onRetry: (attempt: number, maxRetries: number) =>
+      `Retrying upload (${attempt}/${maxRetries})...\n`,
+  }
+}
+
 function createStreamable<RESP extends StdResponse, RESULT = void>(
   command: (signal: AbortSignal) => AsyncIterable<RESP>,
   onResponse?: (
     response: RESP,
     onDidCompleteEmitter: vscode.EventEmitter<RESULT | undefined>
-  ) => void
+  ) => void,
+  options?: CreateStreamableOptions
 ): Streamable<RESULT> {
   const abortController = new AbortController()
   const signal = abortController.signal
@@ -726,36 +862,70 @@ function createStreamable<RESP extends StdResponse, RESULT = void>(
       data: Uint8Array | undefined,
       decoder: TextDecoder,
       emitter: vscode.EventEmitter<unknown>
-    ): void => {
+    ): string | undefined => {
       if (data && data.length) {
         const message = decoder.decode(data, { stream: true })
         if (message) {
           emitter.fire(message)
+          return message
         }
       }
+      return undefined
     }
     const messageDecoder = new TextDecoder()
     const errorDecoder = new TextDecoder()
-    try {
-      for await (const response of command(signal)) {
-        if (response.message?.$case === 'errStream') {
-          handleMessage(
-            response.message.errStream,
-            errorDecoder,
-            onDidReceiveErrorEmitter
-          )
-        } else if (response.message?.$case === 'outStream') {
-          handleMessage(
-            response.message.outStream,
-            messageDecoder,
-            onDidReceiveMessageEmitter
-          )
+    const retry = options?.retry
+    const maxRetries = retry?.retries ?? 0
+    let attempts = 0
+
+    while (true) {
+      let retryableOutputSeen = false
+      try {
+        for await (const response of command(signal)) {
+          if (response.message?.$case === 'errStream') {
+            const message = handleMessage(
+              response.message.errStream,
+              errorDecoder,
+              onDidReceiveErrorEmitter
+            )
+            if (message && retry?.shouldRetryMessage?.(message)) {
+              retryableOutputSeen = true
+            }
+          } else if (response.message?.$case === 'outStream') {
+            const message = handleMessage(
+              response.message.outStream,
+              messageDecoder,
+              onDidReceiveMessageEmitter
+            )
+            if (message && retry?.shouldRetryMessage?.(message)) {
+              retryableOutputSeen = true
+            }
+          }
+          onResponse?.(response, onDidCompleteEmitter)
         }
-        onResponse?.(response, onDidCompleteEmitter)
+        onDidCompleteEmitter.fire(undefined)
+        return
+      } catch (err) {
+        if (
+          retry &&
+          attempts < maxRetries &&
+          !isAbortError(err) &&
+          (retryableOutputSeen || (retry.shouldRetry?.(err) ?? true))
+        ) {
+          attempts += 1
+          const message = retry.onRetry?.(attempts, maxRetries, err)
+          if (message) {
+            onDidReceiveMessageEmitter.fire(message)
+          }
+          const delay = retry.delayMs ?? 0
+          if (delay > 0) {
+            await new Promise((resolve) => setTimeout(resolve, delay))
+          }
+          continue
+        }
+        onDidReceiveErrorEmitter.fire(err)
+        return
       }
-      onDidCompleteEmitter.fire(undefined)
-    } catch (err) {
-      onDidReceiveErrorEmitter.fire(err)
     }
   }
 
@@ -771,9 +941,7 @@ function createStreamable<RESP extends StdResponse, RESULT = void>(
   }
 }
 
-function createPty<S extends Streamable<T>, T = void>(
-  streamable: S
-): vscode.Pseudoterminal {
+function createPty<T = void>(streamable: Streamable<T>): vscode.Pseudoterminal {
   const onDidWriteEmitter = new vscode.EventEmitter<string>()
   const onDidCloseEmitter = new vscode.EventEmitter<void | number>()
   const toDispose: vscode.Disposable[] = [onDidWriteEmitter, onDidCloseEmitter]
