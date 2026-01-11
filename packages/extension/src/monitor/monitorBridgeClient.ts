@@ -171,6 +171,10 @@ export class MonitorBridgeClient implements vscode.Disposable {
     const connection = await this.ensureConnection()
     await connection.sendRequest(RequestUpdateBaudrate.method, params)
     this.updateSelectedBaudrate(params.port, params.baudrate)
+    this.onDidChangeBaudrateEmitter.fire({
+      port: params.port,
+      baudrate: params.baudrate,
+    })
   }
 
   async sendMonitorMessage(
