@@ -34,10 +34,24 @@ import {
 } from '@boardlab/protocol'
 
 import { DaemonCliBridge } from './cliBridge.js'
+import deepEqual from 'fast-deep-equal'
 import { TraceWriter, hashToken } from './traceWriter.js'
 import { LOG_DIR, ensureLogDir } from './logPaths.js'
 
 const DEFAULT_HOST = '127.0.0.1'
+const MAX_PROPERTY_STRING_LENGTH = 256
+const SENSITIVE_PROPERTY_TOKENS = [
+  'password',
+  'passwd',
+  'token',
+  'secret',
+  'apikey',
+  'authorization',
+  'cookie',
+  'session',
+  'jwt',
+  'privatekey',
+]
 
 class AttachmentRegistry {
   constructor() {
@@ -532,6 +546,7 @@ export async function createServer(options = {}) {
   /** @type {import('./boardListWatch.js').BoardListStateWatcher | undefined} */
   const watcher = await cliBridge.createBoardListWatch()
   let previousDetectedPortKeys = new Set()
+  let previousSanitizedPortsSnapshot = new Map()
 
   /** Tracks RequestClientConnect count */
   let clientConnectCount = 0
@@ -1452,8 +1467,9 @@ export async function createServer(options = {}) {
   watcher.emitter.on('update', async () => {
     // Track seen protocols and proactively fetch their monitor settings
     try {
+      const detectedPorts = watcher.state
       const protocols = new Set(knownProtocols)
-      for (const detected of Object.values(watcher.state)) {
+      for (const detected of Object.values(detectedPorts)) {
         const p = detected.port?.protocol
         if (p) protocols.add(p)
       }
@@ -1461,7 +1477,7 @@ export async function createServer(options = {}) {
       protocols.forEach((p) => knownProtocols.add(p))
       await cliBridge.fetchMonitorSettingsForProtocol(...protocols)
       const snapshot = await buildMonitorSettingsSnapshot()
-      const detectedPortKeys = Object.keys(watcher.state)
+      const detectedPortKeys = Object.keys(detectedPorts)
       const currentKeySet = new Set(detectedPortKeys)
       const added = detectedPortKeys.filter(
         (key) => !previousDetectedPortKeys.has(key)
@@ -1470,12 +1486,20 @@ export async function createServer(options = {}) {
         (key) => !currentKeySet.has(key)
       )
       previousDetectedPortKeys = currentKeySet
+      const sanitizedPorts = createSanitizedPortSnapshot(detectedPorts)
+      const { changed, snapshot } = recordSanitizedPortSnapshot(
+        sanitizedPorts,
+        previousSanitizedPortsSnapshot
+      )
+      previousSanitizedPortsSnapshot = snapshot
       traceWriter.emit(
         'portsDidUpdate',
         {
           count: detectedPortKeys.length,
           added: added.length,
           removed: removed.length,
+          changed,
+          ports: sanitizedPorts,
         },
         { layer: 'bridge' }
       )
@@ -1513,13 +1537,16 @@ export async function createServer(options = {}) {
     // Forward board list updates to client
     const updateHandler = () => {
       const detectedPorts = watcher.state
+      const detectedPortKeys = Object.keys(detectedPorts)
+      const sanitizedPorts = createSanitizedPortSnapshot(detectedPorts)
       bridgeLog('info', 'Detected ports pushed to client', {
-        detectedPortKeys: Object.keys(detectedPorts),
+        detectedPortKeys,
       })
       messageConnection.sendNotification(
         NotifyDidChangeDetectedPorts,
         detectedPorts
       )
+      emitPortsTraceEvent(traceWriter, detectedPortKeys, sanitizedPorts)
     }
     watcher.emitter.on('update', updateHandler)
     const disposables = [
@@ -1818,4 +1845,129 @@ export async function createServer(options = {}) {
       attachmentRegistry.dispose()
     },
   }
+}
+
+/**
+ * @param {Record<string, { port: import('boards-list').Port }>} detectedPorts
+ */
+function createSanitizedPortSnapshot(detectedPorts) {
+  return Object.keys(detectedPorts)
+    .sort()
+    .map((portKey) =>
+      createSanitizedPortEntry(portKey, /** @type {any} */ (detectedPorts)[portKey])
+    )
+}
+
+/**
+ * @param {Array<{ portKey: string }>} sanitizedPorts
+ * @param {Map<string, any>} previousSnapshot
+ */
+function recordSanitizedPortSnapshot(sanitizedPorts, previousSnapshot) {
+  const snapshot = new Map()
+  let changed = 0
+  for (const port of sanitizedPorts) {
+    const previous = previousSnapshot.get(port.portKey)
+    if (previous && !deepEqual(previous, port)) {
+      changed += 1
+    }
+    snapshot.set(port.portKey, port)
+  }
+  return { changed, snapshot }
+}
+
+/**
+ * @param {string} portKey
+ * @param {{ port?: import('boards-list').Port }} detectedPort
+ */
+function createSanitizedPortEntry(portKey, detectedPort) {
+  const port = detectedPort?.port ?? {}
+  const sanitizedProperties = sanitizePortProperties(port.properties)
+  return {
+    portKey,
+    protocol: port.protocol,
+    address: port.address,
+    label: port.label,
+    hardwareId: port.hardwareId,
+    properties: sanitizedProperties,
+  }
+}
+
+/**
+ * @param {import('boards-list').Port['properties']} properties
+ */
+function sanitizePortProperties(properties) {
+  if (!properties || typeof properties !== 'object') {
+    return undefined
+  }
+  const sanitized = {}
+  for (const [key, value] of Object.entries(properties)) {
+    const sanitizedValue = sanitizePortPropertyValue(key, value)
+    if (sanitizedValue !== undefined) {
+      sanitized[key] = sanitizedValue
+    }
+  }
+  return Object.keys(sanitized).length === 0 ? undefined : sanitized
+}
+
+/**
+ * @param {string} key
+ * @param {unknown} value
+ */
+function sanitizePortPropertyValue(key, value) {
+  if (value === undefined || value === null) {
+    return value
+  }
+  if (isSensitivePortKey(key)) {
+    return '***'
+  }
+  return sanitizePortPropertyRecursively(value)
+}
+
+function sanitizePortPropertyRecursively(value) {
+  if (value === null || value === undefined) {
+    return value
+  }
+  if (typeof value === 'string') {
+    return value.length > MAX_PROPERTY_STRING_LENGTH
+      ? value.slice(0, MAX_PROPERTY_STRING_LENGTH) + '…'
+      : value
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizePortPropertyRecursively(item))
+  }
+  if (typeof value === 'object') {
+    const sanitized = {}
+    for (const [childKey, childValue] of Object.entries(value)) {
+      const sanitizedChildValue = sanitizePortPropertyValue(
+        childKey,
+        childValue
+      )
+      if (sanitizedChildValue !== undefined) {
+        sanitized[childKey] = sanitizedChildValue
+      }
+    }
+    return sanitized
+  }
+  return value
+}
+
+function isSensitivePortKey(key) {
+  const lower = key.toLowerCase()
+  return SENSITIVE_PROPERTY_TOKENS.some((token) => lower.includes(token))
+}
+
+function emitPortsTraceEvent(
+  writer,
+  detectedPortKeys,
+  sanitizedPorts
+) {
+  writer.emit(
+    'portsDidPush',
+    {
+      count: detectedPortKeys.length,
+      keys: detectedPortKeys,
+      ports: sanitizedPorts,
+    },
+    { layer: 'bridge' }
+  )
 }
