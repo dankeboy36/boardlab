@@ -827,6 +827,7 @@ export async function createServer(options = {}) {
    * >}
    */
   const runningMonitorsByKey = new Map()
+  const monitorSessionBaudrates = new Map()
 
   function toPortIdentifier(port) {
     return typeof port?.toJSON === 'function' ? port.toJSON() : port
@@ -849,6 +850,7 @@ export async function createServer(options = {}) {
         'monitorDidStart',
         {
           baudrate: finalBaudrate,
+          paused: false,
         },
         {
           layer: 'bridge',
@@ -868,6 +870,10 @@ export async function createServer(options = {}) {
         baudrate: finalBaudrate,
         monitorSessionId: monitorSessionId ?? existing?.monitorSessionId,
       })
+    }
+    const sessionIdToSet = monitorSessionId ?? existing?.monitorSessionId
+    if (sessionIdToSet) {
+      monitorSessionBaudrates.set(sessionIdToSet, finalBaudrate)
     }
   }
 
@@ -889,21 +895,66 @@ export async function createServer(options = {}) {
         monitorSessionId,
       })
       broadcastMonitorDidStop(toPortIdentifier(port), monitorSessionId)
+      if (monitorSessionId) {
+        monitorSessionBaudrates.delete(monitorSessionId)
+      }
     }
   }
 
   function updateMonitorBaudrate(portKey, port, baudrate) {
     if (!baudrate) {
+      return false
+    }
+    const existing = runningMonitorsByKey.get(portKey)
+    const sessionId = existing?.monitorSessionId
+    const previousBaudrate = existing?.baudrate
+    if (previousBaudrate === baudrate) {
+      if (sessionId) {
+        monitorSessionBaudrates.set(sessionId, baudrate)
+      }
+      return false
+    }
+    runningMonitorsByKey.set(portKey, {
+      port: toPortIdentifier(port),
+      baudrate,
+      monitorSessionId: sessionId,
+    })
+    if (sessionId) {
+      const oldBaudrate = monitorSessionBaudrates.get(sessionId)
+      monitorSessionBaudrates.set(sessionId, baudrate)
+      emitMonitorDidChangeBaudrate(sessionId, portKey, oldBaudrate, baudrate)
+    }
+    return true
+  }
+
+  function emitMonitorDidChangeBaudrate(
+    sessionId,
+    portKey,
+    oldBaudrate,
+    newBaudrate
+  ) {
+    if (oldBaudrate === newBaudrate) {
       return
     }
-    if (runningMonitorsByKey.has(portKey)) {
-      const existing = runningMonitorsByKey.get(portKey)
-      runningMonitorsByKey.set(portKey, {
-        port: toPortIdentifier(port),
-        baudrate,
-        monitorSessionId: existing?.monitorSessionId,
-      })
-    }
+    traceWriter.emit(
+      'monitorDidChangeBaudrate',
+      {
+        oldBaudrate,
+        newBaudrate,
+        origin: 'bridge',
+      },
+      {
+        layer: 'bridge',
+        monitorSessionId: sessionId,
+        portKey,
+      }
+    )
+    bridgeLog('info', 'Monitor baudrate changed', {
+      portKey,
+      monitorSessionId: sessionId,
+      oldBaudrate,
+      newBaudrate,
+    })
   }
 
   /**
@@ -1598,6 +1649,17 @@ export async function createServer(options = {}) {
             params.port
           )} baud=${params.baudrate}`
         )
+        const portKey = createPortKey(params.port)
+        const current = runningMonitorsByKey.get(portKey)
+        const currentBaudrate = current?.baudrate
+        if (currentBaudrate && currentBaudrate === params.baudrate) {
+          traceWriter.emitLogLine('Monitor baudrate unchanged', 'debug', {
+            portKey,
+            monitorSessionId: current?.monitorSessionId,
+            baudrate: params.baudrate,
+          })
+          return true
+        }
         try {
           // Prefer updating via cliBridge (source of truth for monitors)
           await cliBridge.updateBaudrate(
