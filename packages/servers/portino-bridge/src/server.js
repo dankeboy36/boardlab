@@ -516,6 +516,7 @@ export async function createServer(options = {}) {
       ? Math.max(10_000, Math.min(30_000, heartbeatInfo.timeoutMs))
       : 15_000
   const heartbeatTraceTimestamps = new Map()
+  const heartbeatEmissionState = new Map()
   const broadcastBridgeLog = (entry) => {
     portinoConnections.forEach((connection) => {
       try {
@@ -681,6 +682,10 @@ export async function createServer(options = {}) {
         },
         { layer: 'bridge' }
       )
+      heartbeatEmissionState.set(attachment.token, {
+        firstEmitted: false,
+        lastEmitted: 0,
+      })
     } catch (error) {
       console.error('[PortinoServer] attach failed', error)
       res.status(500).json({ error: 'attach_failed' })
@@ -711,13 +716,23 @@ export async function createServer(options = {}) {
       }
       const now = Date.now()
       const ageMs = touch.ageMs ?? 0
-      const previousTraceTs = heartbeatTraceTimestamps.get(token)
-      const shouldTrace =
-        !previousTraceTs ||
-        now - previousTraceTs >= heartbeatTraceThrottleMs ||
-        (heartbeatInfo.timeoutMs > 0 && ageMs >= heartbeatInfo.timeoutMs)
-      if (shouldTrace) {
+      const state =
+        heartbeatEmissionState.get(token) ?? {
+          firstEmitted: false,
+          lastEmitted: 0,
+        }
+      const intervalMs = heartbeatInfo.intervalMs ?? 0
+      const lateThreshold = intervalMs > 0 ? intervalMs * 1.5 : heartbeatTraceThrottleMs
+      const isLate = intervalMs > 0 ? ageMs >= lateThreshold : false
+      const shouldEmit =
+        !state.firstEmitted ||
+        isLate ||
+        now - state.lastEmitted >= heartbeatTraceThrottleMs
+      if (shouldEmit) {
+        state.firstEmitted = true
+        state.lastEmitted = now
         heartbeatTraceTimestamps.set(token, now)
+        heartbeatEmissionState.set(token, state)
         traceWriter.emit(
           'heartbeatDidReceive',
           {
@@ -727,6 +742,17 @@ export async function createServer(options = {}) {
           },
           { layer: 'bridge' }
         )
+      } else {
+        traceWriter.emitLogLine({
+          message: 'Heartbeat suppressed',
+          level: 'debug',
+          logger: 'bridge',
+          fields: {
+            tokenHash: hashToken(token),
+            ageMs,
+            attachments: touch.attachments,
+          },
+        })
       }
       res.json({ ok: true })
     } catch (error) {
