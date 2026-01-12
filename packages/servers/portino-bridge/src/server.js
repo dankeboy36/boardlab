@@ -14,6 +14,7 @@ import { FQBN } from 'fqbn'
 import { ClientError } from 'nice-grpc'
 import { createWebSocketConnection } from 'vscode-ws-jsonrpc'
 import { WebSocketServer } from 'ws'
+import deepEqual from 'fast-deep-equal'
 
 import {
   NotifyDidChangeBaudrate,
@@ -34,7 +35,6 @@ import {
 } from '@boardlab/protocol'
 
 import { DaemonCliBridge } from './cliBridge.js'
-import deepEqual from 'fast-deep-equal'
 import { TraceWriter, hashToken } from './traceWriter.js'
 import { LOG_DIR, ensureLogDir } from './logPaths.js'
 
@@ -1357,6 +1357,27 @@ export async function createServer(options = {}) {
       return res.status(500).send('No active stream entry')
     }
 
+    // Deduplicate attaches for the same monitor session/client
+    if (
+      streamEntry.sessionId &&
+      streamEntry.sessionId === monitorSessionId &&
+      streamEntry.clientIndex.has(clientId)
+    ) {
+      traceWriter.emitLogLine(
+        'Duplicate monitor stream attach ignored',
+        'debug',
+        {
+          clientId,
+          portKey,
+          monitorSessionId: streamEntry.sessionId,
+        }
+      )
+      return res.status(409).json({
+        code: 'duplicate-attach',
+        message: 'Client already attached to this monitor session',
+      })
+    }
+
     // Setup HTTP response for this client
     res.setHeader('Content-Type', 'application/octet-stream')
     res.setHeader('Transfer-Encoding', 'chunked')
@@ -1476,7 +1497,7 @@ export async function createServer(options = {}) {
       // Update known protocols set
       protocols.forEach((p) => knownProtocols.add(p))
       await cliBridge.fetchMonitorSettingsForProtocol(...protocols)
-      const snapshot = await buildMonitorSettingsSnapshot()
+      const monitorSettingsSnapshot = await buildMonitorSettingsSnapshot()
       const detectedPortKeys = Object.keys(detectedPorts)
       const currentKeySet = new Set(detectedPortKeys)
       const added = detectedPortKeys.filter(
@@ -1511,7 +1532,7 @@ export async function createServer(options = {}) {
       portinoConnections.forEach(({ messageConnection }) => {
         messageConnection.sendNotification(
           NotifyDidChangeMonitorSettings,
-          snapshot
+          monitorSettingsSnapshot
         )
       })
     } catch (e) {
@@ -1847,19 +1868,15 @@ export async function createServer(options = {}) {
   }
 }
 
-/**
- * @param {Record<string, { port: import('boards-list').Port }>} detectedPorts
- */
+/** @param {Record<string, { port: import('boards-list').Port }>} detectedPorts */
 function createSanitizedPortSnapshot(detectedPorts) {
   return Object.keys(detectedPorts)
     .sort()
-    .map((portKey) =>
-      createSanitizedPortEntry(portKey, /** @type {any} */ (detectedPorts)[portKey])
-    )
+    .map((portKey) => createSanitizedPortEntry(portKey, detectedPorts[portKey]))
 }
 
 /**
- * @param {Array<{ portKey: string }>} sanitizedPorts
+ * @param {{ portKey: string }[]} sanitizedPorts
  * @param {Map<string, any>} previousSnapshot
  */
 function recordSanitizedPortSnapshot(sanitizedPorts, previousSnapshot) {
@@ -1877,10 +1894,10 @@ function recordSanitizedPortSnapshot(sanitizedPorts, previousSnapshot) {
 
 /**
  * @param {string} portKey
- * @param {{ port?: import('boards-list').Port }} detectedPort
+ * @param {{ port: import('boards-list').Port }} detectedPort
  */
 function createSanitizedPortEntry(portKey, detectedPort) {
-  const port = detectedPort?.port ?? {}
+  const port = detectedPort.port
   const sanitizedProperties = sanitizePortProperties(port.properties)
   return {
     portKey,
@@ -1892,9 +1909,7 @@ function createSanitizedPortEntry(portKey, detectedPort) {
   }
 }
 
-/**
- * @param {import('boards-list').Port['properties']} properties
- */
+/** @param {import('boards-list').Port['properties']} properties */
 function sanitizePortProperties(properties) {
   if (!properties || typeof properties !== 'object') {
     return undefined
@@ -1956,11 +1971,7 @@ function isSensitivePortKey(key) {
   return SENSITIVE_PROPERTY_TOKENS.some((token) => lower.includes(token))
 }
 
-function emitPortsTraceEvent(
-  writer,
-  detectedPortKeys,
-  sanitizedPorts
-) {
+function emitPortsTraceEvent(writer, detectedPortKeys, sanitizedPorts) {
   writer.emit(
     'portsDidPush',
     {
