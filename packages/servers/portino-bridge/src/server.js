@@ -416,6 +416,11 @@ export async function createServer(options = {}) {
     heartbeat: heartbeatInfo,
   })
   let lastHeartbeatLogAt = 0
+  const heartbeatTraceThrottleMs =
+    heartbeatInfo.timeoutMs > 0
+      ? Math.max(10_000, Math.min(30_000, heartbeatInfo.timeoutMs))
+      : 15_000
+  const heartbeatTraceTimestamps = new Map()
   const broadcastBridgeLog = (entry) => {
     portinoConnections.forEach((connection) => {
       try {
@@ -439,6 +444,7 @@ export async function createServer(options = {}) {
     })
   }
 
+  const loggerId = 'bridge'
   const logEntry = (level, args, context) => {
     const entry = {
       level,
@@ -450,9 +456,18 @@ export async function createServer(options = {}) {
       entry.context && Object.keys(entry.context).length
         ? ` ${JSON.stringify(entry.context)}`
         : ''
+    const normalizedMessage =
+      entry.message.length > 120
+        ? entry.message.slice(0, 120) + '…'
+        : entry.message
     const line = `${entry.timestamp} [${entry.level}] ${entry.message}${contextString}`
     writeLogFile(line)
-    traceWriter.emitLogLine(entry.message, entry.level, entry.context)
+    traceWriter.emitLogLine({
+      level: entry.level,
+      logger: loggerId,
+      message: normalizedMessage,
+      fields: entry.context,
+    })
     try {
       broadcastBridgeLog(entry)
     } catch (error) {
@@ -590,24 +605,34 @@ export async function createServer(options = {}) {
         return
       }
       if (loggingConfig.heartbeat) {
-        const now = Date.now()
-        if (now - lastHeartbeatLogAt > 10_000) {
-          lastHeartbeatLogAt = now
+        const logNow = Date.now()
+        if (logNow - lastHeartbeatLogAt > 10_000) {
+          lastHeartbeatLogAt = logNow
           logEntry('debug', ['Heartbeat received'], {
             token,
             attachments: attachmentRegistry.size,
           })
         }
       }
-      traceWriter.emit(
-        'heartbeatDidReceive',
-        {
-          tokenHash: hashToken(token),
-          ageMs: touch.ageMs,
-          attachments: touch.attachments,
-        },
-        { layer: 'bridge' }
-      )
+      const now = Date.now()
+      const ageMs = touch.ageMs ?? 0
+      const previousTraceTs = heartbeatTraceTimestamps.get(token)
+      const shouldTrace =
+        !previousTraceTs ||
+        now - previousTraceTs >= heartbeatTraceThrottleMs ||
+        (heartbeatInfo.timeoutMs > 0 && ageMs >= heartbeatInfo.timeoutMs)
+      if (shouldTrace) {
+        heartbeatTraceTimestamps.set(token, now)
+        traceWriter.emit(
+          'heartbeatDidReceive',
+          {
+            tokenHash: hashToken(token),
+            ageMs,
+            attachments: touch.attachments,
+          },
+          { layer: 'bridge' }
+        )
+      }
       res.json({ ok: true })
     } catch (error) {
       console.error('[PortinoServer] heartbeat failed', error)
@@ -624,6 +649,7 @@ export async function createServer(options = {}) {
         return
       }
       const remaining = attachmentRegistry.detach(token)
+      heartbeatTraceTimestamps.delete(token)
       res.json({ remaining })
     } catch (error) {
       console.error('[PortinoServer] detach failed', error)
@@ -1414,15 +1440,16 @@ export async function createServer(options = {}) {
       streamEntry.sessionId === monitorSessionId &&
       streamEntry.clientIndex.has(clientId)
     ) {
-      traceWriter.emitLogLine(
-        'Duplicate monitor stream attach ignored',
-        'debug',
-        {
+      traceWriter.emitLogLine({
+        message: 'Duplicate monitor stream attach ignored',
+        level: 'debug',
+        logger: 'bridge',
+        fields: {
           clientId,
           portKey,
           monitorSessionId: streamEntry.sessionId,
-        }
-      )
+        },
+      })
       return res.status(409).json({
         code: 'duplicate-attach',
         message: 'Client already attached to this monitor session',
@@ -1653,10 +1680,15 @@ export async function createServer(options = {}) {
         const current = runningMonitorsByKey.get(portKey)
         const currentBaudrate = current?.baudrate
         if (currentBaudrate && currentBaudrate === params.baudrate) {
-          traceWriter.emitLogLine('Monitor baudrate unchanged', 'debug', {
-            portKey,
-            monitorSessionId: current?.monitorSessionId,
-            baudrate: params.baudrate,
+          traceWriter.emitLogLine({
+            message: 'Monitor baudrate unchanged',
+            level: 'debug',
+            logger: 'bridge',
+            fields: {
+              portKey,
+              monitorSessionId: current?.monitorSessionId,
+              baudrate: params.baudrate,
+            },
           })
           return true
         }

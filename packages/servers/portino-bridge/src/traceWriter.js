@@ -162,13 +162,14 @@ class TraceWriter {
     this.write(envelope)
   }
 
-  emitLogLine(message, level, context) {
+  emitLogLine({ message, level, logger, fields }) {
     this.emit(
       'logDidWrite',
       {
         message,
         level,
-        context,
+        logger,
+        fields,
       },
       { layer: this.layer }
     )
