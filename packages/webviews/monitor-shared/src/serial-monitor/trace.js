@@ -6,7 +6,12 @@ function getWebviewMeta() {
     return {}
   }
   const { __BOARDLAB_WEBVIEW_ID__, __BOARDLAB_WEBVIEW_TYPE__ } =
-    /** @type {Window & { __BOARDLAB_WEBVIEW_ID__?: string; __BOARDLAB_WEBVIEW_TYPE__?: string }} */
+    /**
+     * @type {Window & {
+     *   __BOARDLAB_WEBVIEW_ID__?: string
+     *   __BOARDLAB_WEBVIEW_TYPE__?: string
+     * }}
+     */
     (window)
   return {
     webviewId: __BOARDLAB_WEBVIEW_ID__,
@@ -27,6 +32,7 @@ export function emitWebviewTraceEvent(event, data = {}, overrides = {}) {
   const meta = getWebviewMeta()
   try {
     messenger.sendNotification(NotifyTraceEvent, {
+      type: 'webview',
       event,
       data,
       src: { layer: 'webview' },
