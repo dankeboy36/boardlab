@@ -1,30 +1,29 @@
 // @ts-check
 import { randomUUID } from 'node:crypto'
+import { createWriteStream } from 'node:fs'
 import http from 'node:http'
-import util from 'node:util'
-import os from 'node:os'
 import path from 'node:path'
-import { createWriteStream, mkdirSync } from 'node:fs'
+import util from 'node:util'
 
 import { Port } from 'ardunno-cli'
 import { createPortKey } from 'boards-list'
 import cors from 'cors'
 import express from 'express'
+import deepEqual from 'fast-deep-equal'
 import { FQBN } from 'fqbn'
 import { ClientError } from 'nice-grpc'
 import { createWebSocketConnection } from 'vscode-ws-jsonrpc'
 import { WebSocketServer } from 'ws'
-import deepEqual from 'fast-deep-equal'
 
 import {
   NotifyDidChangeBaudrate,
   NotifyDidChangeDetectedPorts,
   NotifyDidChangeMonitorSettings,
+  NotifyMonitorBridgeLog,
   NotifyMonitorDidPause,
   NotifyMonitorDidResume,
   NotifyMonitorDidStart,
   NotifyMonitorDidStop,
-  NotifyMonitorBridgeLog,
   NotifyTraceEvent,
   RequestClientConnect,
   RequestDetectedPorts,
@@ -35,8 +34,8 @@ import {
 } from '@boardlab/protocol'
 
 import { DaemonCliBridge } from './cliBridge.js'
-import { TraceWriter, hashToken } from './traceWriter.js'
 import { LOG_DIR, ensureLogDir } from './logPaths.js'
+import { TraceWriter, hashToken } from './traceWriter.js'
 
 const DEFAULT_HOST = '127.0.0.1'
 const MAX_PROPERTY_STRING_LENGTH = 256
