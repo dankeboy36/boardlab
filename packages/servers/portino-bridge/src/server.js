@@ -1669,65 +1669,68 @@ export async function createServer(options = {}) {
     )
     disposables.push(
       messageConnection.onRequest(RequestDetectedPorts, () => watcher.state),
-      messageConnection.onRequest(RequestUpdateBaudrate, async (params) => {
-        v(
-          `[serial] RequestUpdateBaudrate port=${createPortKey(
-            params.port
-          )} baud=${params.baudrate}`
-        )
-        const portKey = createPortKey(params.port)
-        const current = runningMonitorsByKey.get(portKey)
-        const currentBaudrate = current?.baudrate
-        if (currentBaudrate && currentBaudrate === params.baudrate) {
-          traceWriter.emitLogLine({
-            message: 'Monitor baudrate unchanged',
-            level: 'debug',
-            logger: 'bridge',
-            fields: {
-              portKey,
-              monitorSessionId: current?.monitorSessionId,
-              baudrate: params.baudrate,
-            },
-          })
-          return true
-        }
-        try {
-          // Prefer updating via cliBridge (source of truth for monitors)
-          await cliBridge.updateBaudrate(
-            params.port,
-            params.baudrate,
-            onDidChangeBaudrate
+      messageConnection.onRequest(
+        RequestUpdateBaudrate.method,
+        async (params) => {
+          v(
+            `[serial] RequestUpdateBaudrate port=${createPortKey(
+              params.port
+            )} baud=${params.baudrate}`
           )
-          v('[serial] baudrate updated via cliBridge')
-          updateMonitorBaudrate(
-            createPortKey(params.port),
-            params.port,
-            params.baudrate
-          )
-        } catch {
-          // Fallback: if cliBridge lost the monitor reference but we still have
-          // an active stream entry (e.g., during rapid reselect), update it
-          // directly to avoid surfacing an error to the client.
           const portKey = createPortKey(params.port)
-          const entry = activeSerialStreams.get(portKey)
-          if (entry && !entry.closed && entry.monitor) {
-            await entry.monitor.updateBaudrate(params.baudrate)
-            // Notify other clients about the change to keep UI in sync
-            onDidChangeBaudrate({
-              port: params.port,
-              baudrate: params.baudrate,
+          const current = runningMonitorsByKey.get(portKey)
+          const currentBaudrate = current?.baudrate
+          if (currentBaudrate && currentBaudrate === params.baudrate) {
+            traceWriter.emitLogLine({
+              message: 'Monitor baudrate unchanged',
+              level: 'debug',
+              logger: 'bridge',
+              fields: {
+                portKey,
+                monitorSessionId: current?.monitorSessionId,
+                baudrate: params.baudrate,
+              },
             })
-            v('[serial] baudrate updated via active stream entry')
-            updateMonitorBaudrate(portKey, entry.port, params.baudrate)
+            return true
           }
-          // No active stream/monitor for this port: ignore as a no-op.
-          // The next monitor acquisition will use the provided baudrate via
-          // `/serial-data?baudrate=...` and broadcast as needed.
-          if (!entry || entry.closed) {
-            v('[serial] baudrate update ignored (no active monitor)')
+          try {
+            // Prefer updating via cliBridge (source of truth for monitors)
+            await cliBridge.updateBaudrate(
+              params.port,
+              params.baudrate,
+              onDidChangeBaudrate
+            )
+            v('[serial] baudrate updated via cliBridge')
+            updateMonitorBaudrate(
+              createPortKey(params.port),
+              params.port,
+              params.baudrate
+            )
+          } catch {
+            // Fallback: if cliBridge lost the monitor reference but we still have
+            // an active stream entry (e.g., during rapid reselect), update it
+            // directly to avoid surfacing an error to the client.
+            const portKey = createPortKey(params.port)
+            const entry = activeSerialStreams.get(portKey)
+            if (entry && !entry.closed && entry.monitor) {
+              await entry.monitor.updateBaudrate(params.baudrate)
+              // Notify other clients about the change to keep UI in sync
+              onDidChangeBaudrate({
+                port: params.port,
+                baudrate: params.baudrate,
+              })
+              v('[serial] baudrate updated via active stream entry')
+              updateMonitorBaudrate(portKey, entry.port, params.baudrate)
+            }
+            // No active stream/monitor for this port: ignore as a no-op.
+            // The next monitor acquisition will use the provided baudrate via
+            // `/serial-data?baudrate=...` and broadcast as needed.
+            if (!entry || entry.closed) {
+              v('[serial] baudrate update ignored (no active monitor)')
+            }
           }
         }
-      }),
+      ),
       messageConnection.onRequest(RequestSendMonitorMessage, (params) => {
         const { port, message } = params
         const portKey = createPortKey(port)
