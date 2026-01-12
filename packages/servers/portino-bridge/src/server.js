@@ -39,18 +39,99 @@ import { TraceWriter, hashToken } from './traceWriter.js'
 
 const DEFAULT_HOST = '127.0.0.1'
 const MAX_PROPERTY_STRING_LENGTH = 256
-const SENSITIVE_PROPERTY_TOKENS = [
-  'password',
-  'passwd',
-  'token',
-  'secret',
+// https://docs.datadoghq.com/tracing/error_tracking/exception_replay/#identifier-based-redaction
+// https://github.com/DataDog/dd-trace-py/blob/main/ddtrace/debugging/_redaction.py
+const DDT_DATADOG_REDACTION_IDENTIFIERS = [
+  '2fa',
+  'accesstoken',
+  'aiohttpsession',
   'apikey',
+  'apisecret',
+  'apisignature',
+  'appkey',
+  'applicationkey',
+  'auth',
   'authorization',
+  'authtoken',
+  'ccnumber',
+  'certificatepin',
+  'cipher',
+  'clientid',
+  'clientsecret',
+  'connectionstring',
+  'connectsid',
   'cookie',
-  'session',
+  'credentials',
+  'creditcard',
+  'csrf',
+  'csrftoken',
+  'cvv',
+  'databaseurl',
+  'dburl',
+  'encryptionkey',
+  'encryptionkeyid',
+  'geolocation',
+  'gpgkey',
+  'ipaddress',
+  'jti',
   'jwt',
+  'licensekey',
+  'masterkey',
+  'mysqlpwd',
+  'nonce',
+  'oauth',
+  'oauthtoken',
+  'otp',
+  'passhash',
+  'passwd',
+  'password',
+  'passwordb',
+  'pemfile',
+  'pgpkey',
+  'phpsessid',
+  'pin',
+  'pincode',
+  'pkcs8',
   'privatekey',
+  'publickey',
+  'pwd',
+  'recaptchakey',
+  'refreshtoken',
+  'routingnumber',
+  'salt',
+  'secret',
+  'secretkey',
+  'secrettoken',
+  'securityanswer',
+  'securitycode',
+  'securityquestion',
+  'serviceaccountcredentials',
+  'session',
+  'sessionid',
+  'sessionkey',
+  'setcookie',
+  'signature',
+  'signaturekey',
+  'sshkey',
+  'ssn',
+  'symfony',
+  'token',
+  'transactionid',
+  'twiliotoken',
+  'usersession',
+  'voterid',
+  'xapikey',
+  'xauthtoken',
+  'xcsrftoken',
+  'xforwardedfor',
+  'xrealip',
+  'xsrf',
+  'xsrftoken',
+  'apikey',
 ]
+const redactedIdentifierSet = new Set(
+  DDT_DATADOG_REDACTION_IDENTIFIERS.map((id) => normalizeIdentifier(id))
+)
 
 class AttachmentRegistry {
   constructor() {
@@ -367,6 +448,7 @@ function createMonitorBridgeLogStream() {
  * @property {() =>
  *   | import('./cliBridge.js').CliBridge
  *   | Promise<import('./cliBridge.js').CliBridge>} [cliBridgeFactory]
+ * @property {string | string[]} [redactedIdentifiers]
  */
 
 /**
@@ -381,6 +463,20 @@ function createMonitorBridgeLogStream() {
  */
 export async function createServer(options = {}) {
   const DEBUG = true // options.debug ?? process.env.PORTINO_DEBUG === '1'
+  const extraIdentifiers =
+    typeof options.redactedIdentifiers === 'string'
+      ? options.redactedIdentifiers
+          .split(',')
+          .map((v) => normalizeIdentifier(v))
+          .filter(Boolean)
+      : Array.isArray(options.redactedIdentifiers)
+        ? options.redactedIdentifiers
+            .map((v) => normalizeIdentifier(String(v)))
+            .filter(Boolean)
+        : []
+  extraIdentifiers.forEach((identifier) =>
+    redactedIdentifierSet.add(identifier)
+  )
   const bridgeIdentity = buildBridgeIdentity(options.identity)
   /** @type {Set<PortinoConnection>} */
   const portinoConnections = new Set()
@@ -852,6 +948,7 @@ export async function createServer(options = {}) {
    * >}
    */
   const runningMonitorsByKey = new Map()
+  const attachedClientsBySession = new Map()
   const monitorSessionBaudrates = new Map()
 
   function toPortIdentifier(port) {
@@ -922,6 +1019,7 @@ export async function createServer(options = {}) {
       broadcastMonitorDidStop(toPortIdentifier(port), monitorSessionId)
       if (monitorSessionId) {
         monitorSessionBaudrates.delete(monitorSessionId)
+        attachedClientsBySession.delete(monitorSessionId)
       }
     }
   }
@@ -1025,6 +1123,13 @@ export async function createServer(options = {}) {
         console.log(
           `[serial] -client ${clientId} on ${prevPortKey}; remaining=${remaining}`
         )
+      }
+      if (prevEntry.sessionId) {
+        const sessionClients = attachedClientsBySession.get(prevEntry.sessionId)
+        sessionClients?.delete(clientId)
+        if (sessionClients?.size === 0) {
+          attachedClientsBySession.delete(prevEntry.sessionId)
+        }
       }
       if (remaining === 0 && !prevEntry.closed) {
         if (DEBUG) {
@@ -1433,26 +1538,16 @@ export async function createServer(options = {}) {
       return res.status(500).send('No active stream entry')
     }
 
-    // Deduplicate attaches for the same monitor session/client
-    if (
-      streamEntry.sessionId &&
-      streamEntry.sessionId === monitorSessionId &&
-      streamEntry.clientIndex.has(clientId)
-    ) {
+    const sessionId = streamEntry.sessionId
+    if (sessionId && attachedClientsBySession.get(sessionId)?.has(clientId)) {
       traceWriter.emitLogLine({
         message: 'Duplicate monitor stream attach ignored',
         level: 'debug',
         logger: 'bridge',
-        fields: {
-          clientId,
-          portKey,
-          monitorSessionId: streamEntry.sessionId,
-        },
+        fields: { clientId, portKey, monitorSessionId: sessionId },
       })
-      return res.status(409).json({
-        code: 'duplicate-attach',
-        message: 'Client already attached to this monitor session',
-      })
+      res.status(200).send('already attached')
+      return
     }
 
     // Setup HTTP response for this client
@@ -1490,6 +1585,15 @@ export async function createServer(options = {}) {
       `[serial] +client ${clientId} on ${portKey}; total=${streamEntry.clients.size}`
     )
 
+    if (sessionId) {
+      let sessionClients = attachedClientsBySession.get(sessionId)
+      if (!sessionClients) {
+        sessionClients = new Set()
+        attachedClientsBySession.set(sessionId, sessionClients)
+      }
+      sessionClients.add(clientId)
+    }
+
     if (streamEntry.clients.size === 1) {
       bridgeLog('info', 'Monitor stream opened', {
         clientId,
@@ -1522,6 +1626,13 @@ export async function createServer(options = {}) {
       }
 
       const remaining = streamEntry.clients.size
+      if (sessionId) {
+        const sessionClients = attachedClientsBySession.get(sessionId)
+        sessionClients?.delete(clientId)
+        if (sessionClients?.size === 0) {
+          attachedClientsBySession.delete(sessionId)
+        }
+      }
       bridgeLog('info', 'Monitor stream client detached', {
         clientId,
         portKey,
@@ -2028,8 +2139,8 @@ function sanitizePortPropertyValue(key, value) {
   if (value === undefined || value === null) {
     return value
   }
-  if (isSensitivePortKey(key)) {
-    return '***'
+  if (shouldRedactIdentifier(key)) {
+    return '{redacted}'
   }
   return sanitizePortPropertyRecursively(value)
 }
@@ -2062,9 +2173,18 @@ function sanitizePortPropertyRecursively(value) {
   return value
 }
 
-function isSensitivePortKey(key) {
-  const lower = key.toLowerCase()
-  return SENSITIVE_PROPERTY_TOKENS.some((token) => lower.includes(token))
+/** @param {string} value */
+function normalizeIdentifier(value) {
+  if (!value || typeof value !== 'string') {
+    return ''
+  }
+  return value.toLowerCase().replace(/[^0-9a-z]+/g, '')
+}
+
+/** @param {string} key */
+function shouldRedactIdentifier(key) {
+  const normalized = normalizeIdentifier(key)
+  return Boolean(normalized && redactedIdentifierSet.has(normalized))
 }
 
 function emitPortsTraceEvent(writer, detectedPortKeys, sanitizedPorts) {
