@@ -272,8 +272,18 @@
         "category": "BoardLab"
       },
       {
+        "command": "boardlab.monitorBridge.listTraceLogs",
+        "title": "List Monitor Bridge Trace Logs",
+        "category": "BoardLab"
+      },
+      {
         "command": "boardlab.monitorBridge.tailLatestLog",
         "title": "Tail Latest Monitor Bridge Log",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.monitorBridge.tailLatestTraceLog",
+        "title": "Tail Latest Monitor Bridge Trace Log",
         "category": "BoardLab"
       },
       {

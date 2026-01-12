@@ -24,6 +24,7 @@ import {
   NotifyMonitorDidStart,
   NotifyMonitorDidStop,
   NotifyMonitorBridgeLog,
+  NotifyTraceEvent,
   RequestClientConnect,
   RequestDetectedPorts,
   RequestPauseMonitor,
@@ -33,6 +34,8 @@ import {
 } from '@boardlab/protocol'
 
 import { DaemonCliBridge } from './cliBridge.js'
+import { TraceWriter, hashToken } from './traceWriter.js'
+import { LOG_DIR, ensureLogDir } from './logPaths.js'
 
 const DEFAULT_HOST = '127.0.0.1'
 
@@ -51,6 +54,7 @@ class AttachmentRegistry {
     this.heartbeatTimeoutMs = 0
     this.heartbeatSweepMs = 0
     this.heartbeatTimer = undefined
+    this.onPruneCallback = undefined
   }
 
   /**
@@ -59,11 +63,17 @@ class AttachmentRegistry {
    *   onIdle?: () => void | Promise<void>
    *   heartbeatTimeoutMs?: number
    *   heartbeatSweepMs?: number
+   *   onPrune?: (count: number) => void
    * }} [options]
    */
   configure(options = {}) {
-    const { idleTimeoutMs, onIdle, heartbeatTimeoutMs, heartbeatSweepMs } =
-      options
+    const {
+      idleTimeoutMs,
+      onIdle,
+      heartbeatTimeoutMs,
+      heartbeatSweepMs,
+      onPrune,
+    } = options
     this.idleTimeoutMs =
       typeof idleTimeoutMs === 'number' && idleTimeoutMs > 0 ? idleTimeoutMs : 0
     this.onIdle = typeof onIdle === 'function' ? onIdle : undefined
@@ -84,6 +94,7 @@ class AttachmentRegistry {
       this.clearTimer()
       this.scheduleIdleShutdown()
     }
+    this.onPruneCallback = typeof onPrune === 'function' ? onPrune : undefined
   }
 
   get size() {
@@ -111,10 +122,16 @@ class AttachmentRegistry {
   touch(token) {
     const entry = this.attachments.get(token)
     if (!entry) {
-      return false
+      return undefined
     }
-    entry.lastSeen = Date.now()
-    return true
+    const now = Date.now()
+    const previous = entry.lastSeen ?? entry.attachedAt
+    entry.lastSeen = now
+    return {
+      token,
+      ageMs: now - previous,
+      attachments: this.attachments.size,
+    }
   }
 
   dispose() {
@@ -128,13 +145,16 @@ class AttachmentRegistry {
       return
     }
     const now = Date.now()
-    let removed = false
+    let removed = 0
     for (const [token, entry] of this.attachments.entries()) {
       const lastSeen = entry.lastSeen ?? entry.attachedAt
       if (now - lastSeen > this.heartbeatTimeoutMs) {
         this.attachments.delete(token)
-        removed = true
+        removed += 1
       }
+    }
+    if (removed > 0) {
+      this.onPruneCallback?.(removed)
     }
     if (removed && this.attachments.size === 0) {
       this.clearHeartbeatTimer()
@@ -287,15 +307,9 @@ function formatBridgeLogMessage(args) {
     .join(' ')
 }
 
-const MONITOR_BRIDGE_LOG_DIR = path.join(
-  os.tmpdir(),
-  '.boardlab',
-  'monitor-bridge'
-)
-
 function createMonitorBridgeLogStream() {
   try {
-    mkdirSync(MONITOR_BRIDGE_LOG_DIR, { recursive: true })
+    ensureLogDir()
   } catch (error) {
     baseConsoleFunctions.error(
       '[monitor bridge] failed to create log directory',
@@ -304,7 +318,7 @@ function createMonitorBridgeLogStream() {
   }
   const timestamp = new Date().toISOString().replace(/:/g, '-')
   const fileName = `log-${timestamp}.txt`
-  const filePath = path.join(MONITOR_BRIDGE_LOG_DIR, fileName)
+  const filePath = path.join(LOG_DIR, fileName)
   const stream = createWriteStream(filePath, { flags: 'a' })
   stream.on('error', (error) => {
     baseConsoleFunctions.error(
@@ -333,6 +347,7 @@ function createMonitorBridgeLogStream() {
  *   onIdle?: () => void | Promise<void>
  *   heartbeatTimeoutMs?: number
  *   heartbeatSweepMs?: number
+ *   onPrune?: (count: number) => void
  * }} [control]
  * @property {{ heartbeat?: boolean }} [logging]
  * @property {Partial<MonitorBridgeIdentity>} [identity]
@@ -363,12 +378,29 @@ export async function createServer(options = {}) {
         ? options.logging.heartbeat
         : envHeartbeat,
   }
+  const controlOptions = options.control ?? {}
+  const heartbeatInfo = {
+    intervalMs:
+      typeof controlOptions.heartbeatSweepMs === 'number'
+        ? controlOptions.heartbeatSweepMs
+        : (controlOptions.heartbeatTimeoutMs ?? 0),
+    timeoutMs: controlOptions.heartbeatTimeoutMs ?? 0,
+  }
   const { stream: logFileStream } = createMonitorBridgeLogStream()
   const writeLogFile = (line) => {
     if (logFileStream && !logFileStream.destroyed) {
       logFileStream.write(`${line}\n`)
     }
   }
+  const traceWriter = new TraceWriter({
+    identity: {
+      version: bridgeIdentity.version,
+      mode: bridgeIdentity.mode,
+      extensionPath: bridgeIdentity.extensionPath,
+      commit: bridgeIdentity.commit,
+    },
+    heartbeat: heartbeatInfo,
+  })
   let lastHeartbeatLogAt = 0
   const broadcastBridgeLog = (entry) => {
     portinoConnections.forEach((connection) => {
@@ -406,6 +438,7 @@ export async function createServer(options = {}) {
         : ''
     const line = `${entry.timestamp} [${entry.level}] ${entry.message}${contextString}`
     writeLogFile(line)
+    traceWriter.emitLogLine(entry.message, entry.level, entry.context)
     try {
       broadcastBridgeLog(entry)
     } catch (error) {
@@ -481,10 +514,24 @@ export async function createServer(options = {}) {
   const server = http.createServer(app)
   const wss = new WebSocketServer({ server, path: '/serial' })
   const attachmentRegistry = new AttachmentRegistry()
-  attachmentRegistry.configure(options.control ?? {})
+  attachmentRegistry.configure({
+    ...controlOptions,
+    onPrune: (count) => {
+      traceWriter.emit(
+        'attachmentDidPrune',
+        {
+          prunedCount: count,
+          timeoutMs: attachmentRegistry.heartbeatTimeoutMs,
+          maxAgeMs: attachmentRegistry.heartbeatTimeoutMs,
+        },
+        { layer: 'bridge' }
+      )
+    },
+  })
 
   /** @type {import('./boardListWatch.js').BoardListStateWatcher | undefined} */
   const watcher = await cliBridge.createBoardListWatch()
+  let previousDetectedPortKeys = new Set()
 
   /** Tracks RequestClientConnect count */
   let clientConnectCount = 0
@@ -501,6 +548,14 @@ export async function createServer(options = {}) {
         pid: process.pid,
         attachments: attachmentRegistry.size,
       })
+      traceWriter.emit(
+        'attachmentDidAttach',
+        {
+          tokenHash: hashToken(attachment.token),
+          attachments: attachmentRegistry.size,
+        },
+        { layer: 'bridge' }
+      )
     } catch (error) {
       console.error('[PortinoServer] attach failed', error)
       res.status(500).json({ error: 'attach_failed' })
@@ -514,8 +569,8 @@ export async function createServer(options = {}) {
         res.status(400).json({ error: 'missing_token' })
         return
       }
-      const ok = attachmentRegistry.touch(token)
-      if (!ok) {
+      const touch = attachmentRegistry.touch(token)
+      if (!touch) {
         res.status(404).json({ error: 'unknown_token' })
         return
       }
@@ -529,6 +584,15 @@ export async function createServer(options = {}) {
           })
         }
       }
+      traceWriter.emit(
+        'heartbeatDidReceive',
+        {
+          tokenHash: hashToken(token),
+          ageMs: touch.ageMs,
+          attachments: touch.attachments,
+        },
+        { layer: 'bridge' }
+      )
       res.json({ ok: true })
     } catch (error) {
       console.error('[PortinoServer] heartbeat failed', error)
@@ -766,6 +830,17 @@ export async function createServer(options = {}) {
         baudrate: finalBaudrate,
         monitorSessionId,
       })
+      traceWriter.emit(
+        'monitorDidStart',
+        {
+          baudrate: finalBaudrate,
+        },
+        {
+          layer: 'bridge',
+          monitorSessionId,
+          portKey,
+        }
+      )
       broadcastMonitorDidStart(portJson, finalBaudrate, monitorSessionId)
       bridgeLog('info', 'Monitor started', {
         port: portJson,
@@ -783,6 +858,17 @@ export async function createServer(options = {}) {
 
   function notifyMonitorStopped(portKey, port, monitorSessionId) {
     if (runningMonitorsByKey.delete(portKey)) {
+      traceWriter.emit(
+        'monitorDidStop',
+        {
+          reason: 'last-client',
+        },
+        {
+          layer: 'bridge',
+          monitorSessionId,
+          portKey,
+        }
+      )
       bridgeLog('info', 'Monitor stopped', {
         port: toPortIdentifier(port),
         monitorSessionId,
@@ -1376,6 +1462,23 @@ export async function createServer(options = {}) {
       await cliBridge.fetchMonitorSettingsForProtocol(...protocols)
       const snapshot = await buildMonitorSettingsSnapshot()
       const detectedPortKeys = Object.keys(watcher.state)
+      const currentKeySet = new Set(detectedPortKeys)
+      const added = detectedPortKeys.filter(
+        (key) => !previousDetectedPortKeys.has(key)
+      )
+      const removed = Array.from(previousDetectedPortKeys).filter(
+        (key) => !currentKeySet.has(key)
+      )
+      previousDetectedPortKeys = currentKeySet
+      traceWriter.emit(
+        'portsDidUpdate',
+        {
+          count: detectedPortKeys.length,
+          added: added.length,
+          removed: removed.length,
+        },
+        { layer: 'bridge' }
+      )
       bridgeLog('info', 'Detected ports updated', {
         detectedPortKeys,
         protocols: Array.from(protocols),
@@ -1508,6 +1611,20 @@ export async function createServer(options = {}) {
                 activeSerialStreams.get(portKey)?.sessionId ??
                 runningMonitorsByKey.get(portKey)?.monitorSessionId,
             })
+            traceWriter.emit(
+              'monitorDidSuspend',
+              {
+                reason: 'task',
+                released: true,
+              },
+              {
+                layer: 'bridge',
+                portKey,
+                monitorSessionId:
+                  activeSerialStreams.get(portKey)?.sessionId ??
+                  runningMonitorsByKey.get(portKey)?.monitorSessionId,
+              }
+            )
             v(`[serial] monitor paused via RPC ${portKey}`)
           }
           return paused
@@ -1533,6 +1650,21 @@ export async function createServer(options = {}) {
                 entry?.sessionId ??
                 runningMonitorsByKey.get(portKey)?.monitorSessionId,
             })
+            const resumedSessionId =
+              entry?.sessionId ??
+              runningMonitorsByKey.get(portKey)?.monitorSessionId
+            traceWriter.emit(
+              'monitorDidResume',
+              {
+                portChanged: false,
+                newPortKey: portKey,
+              },
+              {
+                layer: 'bridge',
+                portKey,
+                monitorSessionId: resumedSessionId,
+              }
+            )
             const entryBaudrate = entry
               ? /** @type {any} */ (entry).baudrate
               : undefined
@@ -1576,6 +1708,17 @@ export async function createServer(options = {}) {
           selectedPort,
           selectedBaudrate,
         })
+        traceWriter.emit(
+          'clientDidConnect',
+          {
+            selectedBaudrate,
+          },
+          {
+            layer: 'bridge',
+            clientId,
+            portKey: selectedPort ? createPortKey(selectedPort) : undefined,
+          }
+        )
 
         // Update the selected baudrate for this port if given
         if (selectedPort && selectedBaudrate) {
@@ -1601,6 +1744,16 @@ export async function createServer(options = {}) {
           runningMonitors,
         }
         return result
+      }),
+      messageConnection.onNotification(NotifyTraceEvent, (evt) => {
+        traceWriter.emit(evt.event, evt.data ?? {}, {
+          layer: evt.src?.layer ?? 'ext',
+          monitorSessionId: evt.monitorSessionId,
+          clientId: evt.clientId,
+          portKey: evt.portKey,
+          webviewId: evt.webviewId,
+          webviewType: evt.webviewType,
+        })
       })
     )
 
@@ -1614,6 +1767,14 @@ export async function createServer(options = {}) {
         bridgeLog('info', 'Client disconnected', {
           clientId: portinoConnection.clientId,
         })
+        traceWriter.emit(
+          'clientDidDisconnect',
+          { reason: 'ws-close' },
+          {
+            layer: 'bridge',
+            clientId: portinoConnection.clientId,
+          }
+        )
       }
 
       messageConnection.dispose()
@@ -1652,6 +1813,8 @@ export async function createServer(options = {}) {
       try {
         logFileStream.end()
       } catch {}
+      traceWriter.emit('bridgeDidStop', { reason: 'exit' }, { layer: 'bridge' })
+      traceWriter.close()
       attachmentRegistry.dispose()
     },
   }

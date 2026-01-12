@@ -35,6 +35,7 @@ import {
   updateDetectedPorts,
 } from './serialMonitorSlice.js'
 import { useSerialMonitorConnection } from './useSerialMonitorConnection.js'
+import { emitWebviewTraceEvent } from './trace.js'
 
 /** @typedef {import('@boardlab/protocol').ExtensionClient} ExtensionClient */
 
@@ -93,6 +94,11 @@ export function MonitorProvider({ client, children, extensionClient }) {
     /** @type {Set<MonitorStreamListener>} */ (new Set())
   )
 
+  const getSelectedPortKey = useCallback(() => {
+    const port = selectedPortRef.current
+    return port ? createPortKey(port) : undefined
+  }, [])
+
   const notify = useCallback(
     (/** @type {string} */ type, /** @type {string} */ payload = '') => {
       for (const listener of listenersRef.current) {
@@ -104,8 +110,18 @@ export function MonitorProvider({ client, children, extensionClient }) {
           console.error('Monitor listener error:', err)
         }
       }
+      const eventMap = {
+        start: 'webviewMonitorDidStart',
+        stop: 'webviewMonitorDidStop',
+      }
+      if (type === 'start' || type === 'stop') {
+        emitWebviewTraceEvent(eventMap[type], {
+          portKey: getSelectedPortKey(),
+          autoPlay: autoPlayRef.current,
+        })
+      }
     },
-    []
+    [getSelectedPortKey]
   )
 
   const registerListener = useCallback(
@@ -310,6 +326,13 @@ export function MonitorProvider({ client, children, extensionClient }) {
           stopRef.current()
         }
       }
+
+      emitWebviewTraceEvent('webviewDidUpdateSelection', {
+        portKey: incomingKey,
+        baudrate,
+        selectionChanged,
+        autoPlay: wantsAutoPlay,
+      })
     },
     [dispatch, readyToControl]
   )

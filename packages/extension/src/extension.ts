@@ -114,14 +114,18 @@ interface MonitorBridgeLogFile {
   readonly mtime: number
 }
 
-async function readMonitorBridgeLogFiles(): Promise<MonitorBridgeLogFile[]> {
+type FileFilter = (fileName: string) => boolean
+
+async function readMonitorBridgeFiles(
+  filter: FileFilter
+): Promise<MonitorBridgeLogFile[]> {
   try {
     const entries = await fs.readdir(MONITOR_BRIDGE_LOG_DIR, {
       withFileTypes: true,
     })
     const details = await Promise.all(
       entries
-        .filter((entry) => entry.isFile())
+        .filter((entry) => entry.isFile() && filter(entry.name))
         .map(async (entry) => {
           const name = entry.name
           const filePath = path.join(MONITOR_BRIDGE_LOG_DIR, name)
@@ -146,6 +150,22 @@ async function readMonitorBridgeLogFiles(): Promise<MonitorBridgeLogFile[]> {
     }
     throw error
   }
+}
+
+function isLogFile(name: string): boolean {
+  return name.startsWith('log-')
+}
+
+function isTraceFile(name: string): boolean {
+  return name === 'events.jsonl' || name.startsWith('events-')
+}
+
+async function readMonitorBridgeLogFiles(): Promise<MonitorBridgeLogFile[]> {
+  return readMonitorBridgeFiles(isLogFile)
+}
+
+async function readMonitorBridgeTraceFiles(): Promise<MonitorBridgeLogFile[]> {
+  return readMonitorBridgeFiles(isTraceFile)
 }
 
 async function openMonitorBridgeLogFile(
@@ -194,6 +214,39 @@ async function showMonitorBridgeLogPicker() {
   }))
   const selection = await vscode.window.showQuickPick(picks, {
     placeHolder: 'Select a monitor bridge log file',
+  })
+  if (selection) {
+    await openMonitorBridgeLogFile(selection.file, { ensureTail: true })
+  }
+}
+
+async function tailLatestMonitorBridgeTraceLog() {
+  const files = await readMonitorBridgeTraceFiles()
+  if (!files.length) {
+    vscode.window.showInformationMessage(
+      'No monitor bridge trace files are available yet.'
+    )
+    return
+  }
+  await openMonitorBridgeLogFile(files[0], { ensureTail: true })
+}
+
+async function showMonitorBridgeTracePicker() {
+  const files = await readMonitorBridgeTraceFiles()
+  if (!files.length) {
+    vscode.window.showInformationMessage(
+      'No monitor bridge trace files are available yet.'
+    )
+    return
+  }
+  const picks = files.map((file) => ({
+    label: file.name,
+    description: new Date(file.mtime).toLocaleString(),
+    detail: file.path,
+    file,
+  }))
+  const selection = await vscode.window.showQuickPick(picks, {
+    placeHolder: 'Select a monitor bridge trace file',
   })
   if (selection) {
     await openMonitorBridgeLogFile(selection.file, { ensureTail: true })
@@ -1767,6 +1820,38 @@ export function activate(context: vscode.ExtensionContext) {
               : String(error ?? 'Unknown error')
           vscode.window.showErrorMessage(
             `Failed to open monitor bridge log: ${message}`
+          )
+        }
+      }
+    ),
+    vscode.commands.registerCommand(
+      'boardlab.monitorBridge.listTraceLogs',
+      async () => {
+        try {
+          await showMonitorBridgeTracePicker()
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : String(error ?? 'Unknown error')
+          vscode.window.showErrorMessage(
+            `Failed to list monitor bridge trace files: ${message}`
+          )
+        }
+      }
+    ),
+    vscode.commands.registerCommand(
+      'boardlab.monitorBridge.tailLatestTraceLog',
+      async () => {
+        try {
+          await tailLatestMonitorBridgeTraceLog()
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : String(error ?? 'Unknown error')
+          vscode.window.showErrorMessage(
+            `Failed to open monitor bridge trace: ${message}`
           )
         }
       }
