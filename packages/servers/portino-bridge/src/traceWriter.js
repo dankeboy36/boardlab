@@ -105,6 +105,9 @@ class TraceWriter {
       flags: 'a',
       encoding: 'utf8',
     })
+    this.writeQueue = []
+    this.isWriting = false
+    this.flushResolvers = []
     this.stream.on('error', (error) => {
       console.error('[monitor bridge trace] failed to write event', error)
     })
@@ -176,28 +179,72 @@ class TraceWriter {
   }
 
   write(value) {
-    try {
-      this.stream.write(`${JSON.stringify(value)}\n`)
-    } catch (error) {
-      console.error('[monitor bridge trace] failed to append event', error)
+    this.writeQueue.push(`${JSON.stringify(value)}\n`)
+    this.processQueue()
+  }
+
+  processQueue() {
+    if (this.isWriting || this.writeQueue.length === 0) {
+      this._resolveFlushers()
+      return
+    }
+    this.isWriting = true
+    const chunk = this.writeQueue.shift()
+    if (!chunk) {
+      this.isWriting = false
+      this._resolveFlushers()
+      return
+    }
+    this.stream.write(chunk, (error) => {
+      if (error) {
+        console.error('[monitor bridge trace] failed to append event', error)
+      }
+      this.isWriting = false
+      this._resolveFlushers()
+      this.processQueue()
+    })
+  }
+
+  /** @returns {Promise<void>} */
+  flush() {
+    if (!this.stream || (this.writeQueue.length === 0 && !this.isWriting)) {
+      return Promise.resolve()
+    }
+    return new Promise((resolve) => {
+      this.flushResolvers.push(resolve)
+    })
+  }
+
+  _resolveFlushers() {
+    if (this.isWriting || this.writeQueue.length > 0) {
+      return
+    }
+    while (this.flushResolvers.length > 0) {
+      const resolve = this.flushResolvers.shift()
+      resolve?.()
     }
   }
 
-  close() {
+  async close() {
     if (!this.stream) {
       return
     }
+
     const finalRunId = this.runId
-    this.stream.end(() => {
-      try {
-        const dest = rotationPathFor(finalRunId)
-        renameSync(this.filePath, dest)
-      } catch (error) {
-        console.error(
-          '[monitor bridge trace] failed to rotate final events file',
-          error
-        )
-      }
+    await this.flush()
+    return new Promise((resolve) => {
+      this.stream.end(() => {
+        try {
+          const dest = rotationPathFor(finalRunId)
+          renameSync(this.filePath, dest)
+        } catch (error) {
+          console.error(
+            '[monitor bridge trace] failed to rotate final events file',
+            error
+          )
+        }
+        resolve()
+      })
     })
   }
 }

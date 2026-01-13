@@ -132,6 +132,8 @@ const DDT_DATADOG_REDACTION_IDENTIFIERS = [
 const redactedIdentifierSet = new Set(
   DDT_DATADOG_REDACTION_IDENTIFIERS.map((id) => normalizeIdentifier(id))
 )
+const RX_SUMMARY_INTERVAL_MS = 5_000
+const RX_SUMMARY_CHUNK_THRESHOLD = 64
 
 class AttachmentRegistry {
   constructor() {
@@ -313,6 +315,19 @@ const baseConsoleFunctions = {
   error: console.error.bind(console),
 }
 
+// Swallow EPIPE from stdout/stderr so a disconnected parent/pipe
+// doesn't crash the bridge during shutdown or client disconnects.
+const swallowEpipe = (error) => {
+  if (error && typeof error === 'object' && error.code === 'EPIPE') {
+    return
+  }
+  throw error
+}
+try {
+  process.stdout.on('error', swallowEpipe)
+  process.stderr.on('error', swallowEpipe)
+} catch {}
+
 class BridgeWebSocketLogger {
   constructor(baseConsole) {
     this.baseConsole = baseConsole
@@ -480,6 +495,28 @@ export async function createServer(options = {}) {
   const bridgeIdentity = buildBridgeIdentity(options.identity)
   /** @type {Set<PortinoConnection>} */
   const portinoConnections = new Set()
+  const safeNotify = (connection, method, payload) => {
+    if (!connection || connection.closed) return
+    try {
+      connection.messageConnection.sendNotification(method, payload)
+    } catch (error) {
+      connection.closed = true
+      portinoConnections.delete(connection)
+      const message =
+        error instanceof Error ? error.message : String(error ?? '')
+      if (
+        !/disposed|closed|EPIPE/i.test(message) &&
+        !(error && typeof error === 'object' && error.code === 'EPIPE')
+      ) {
+        baseConsoleFunctions.error(
+          '[monitor bridge] failed to send notification',
+          error instanceof Error
+            ? (error.stack ?? error.message)
+            : String(error)
+        )
+      }
+    }
+  }
   const envHeartbeat = process.env.PORTINO_LOG_HEARTBEAT === 'true'
   const loggingConfig = {
     heartbeat:
@@ -518,26 +555,9 @@ export async function createServer(options = {}) {
   const heartbeatTraceTimestamps = new Map()
   const heartbeatEmissionState = new Map()
   const broadcastBridgeLog = (entry) => {
-    portinoConnections.forEach((connection) => {
-      try {
-        connection.messageConnection.sendNotification(
-          NotifyMonitorBridgeLog,
-          entry
-        )
-      } catch (error) {
-        portinoConnections.delete(connection)
-        const message =
-          error instanceof Error ? error.message : String(error ?? '')
-        if (!/disposed|closed/i.test(message)) {
-          baseConsoleFunctions.error(
-            '[monitor bridge] failed to send log notification',
-            error instanceof Error
-              ? (error.stack ?? error.message)
-              : String(error)
-          )
-        }
-      }
-    })
+    portinoConnections.forEach((connection) =>
+      safeNotify(connection, NotifyMonitorBridgeLog, entry)
+    )
   }
 
   const loggerId = 'bridge'
@@ -604,6 +624,31 @@ export async function createServer(options = {}) {
 
   /** @type {Set<string>} */
   const knownProtocols = new Set(['serial'])
+  const emitClientStreamEvent = (
+    event,
+    streamEntry,
+    clientId,
+    portKey,
+    extra
+  ) => {
+    traceWriter.emit(
+      event,
+      { ...(extra ?? {}) },
+      {
+        layer: 'bridge',
+        clientId,
+        monitorSessionId: streamEntry?.sessionId,
+        portKey,
+      }
+    )
+  }
+  /**
+   * @type {WeakMap<
+   *   import('express').Response,
+   *   { streamId: string; startedAt: number }
+   * >}
+   */
+  const streamMetaByResponse = new WeakMap()
 
   /**
    * Builds a snapshot of monitor settings for all known protocols.
@@ -716,13 +761,13 @@ export async function createServer(options = {}) {
       }
       const now = Date.now()
       const ageMs = touch.ageMs ?? 0
-      const state =
-        heartbeatEmissionState.get(token) ?? {
-          firstEmitted: false,
-          lastEmitted: 0,
-        }
+      const state = heartbeatEmissionState.get(token) ?? {
+        firstEmitted: false,
+        lastEmitted: 0,
+      }
       const intervalMs = heartbeatInfo.intervalMs ?? 0
-      const lateThreshold = intervalMs > 0 ? intervalMs * 1.5 : heartbeatTraceThrottleMs
+      const lateThreshold =
+        intervalMs > 0 ? intervalMs * 1.5 : heartbeatTraceThrottleMs
       const isLate = intervalMs > 0 ? ageMs >= lateThreshold : false
       const shouldEmit =
         !state.firstEmitted ||
@@ -956,6 +1001,9 @@ export async function createServer(options = {}) {
    *     baudrate?: string
    *     closed?: boolean
    *     lastCount?: number
+   *     rxBytesSinceSummary?: number
+   *     rxChunksSinceSummary?: number
+   *     rxSummaryAt?: number
    *   }
    * >}
    */
@@ -1117,6 +1165,8 @@ export async function createServer(options = {}) {
    * >}
    */
   const globalClientIndex = new Map()
+  /** @type {WeakMap<import('express').Response, string>} */
+  const detachReasons = new WeakMap()
 
   /**
    * Forcefully disconnects a client from its current stream, if any. Cleans
@@ -1124,7 +1174,7 @@ export async function createServer(options = {}) {
    *
    * @param {string} clientId
    */
-  async function forceDisconnectClient(clientId) {
+  async function forceDisconnectClient(clientId, reason = 'force-disconnect') {
     v(`[serial] forceDisconnectClient client=${clientId}`)
     const mapping = globalClientIndex.get(clientId)
     if (!mapping) return
@@ -1182,6 +1232,7 @@ export async function createServer(options = {}) {
 
     // End the response last so the client-side reader completes cleanly
     try {
+      detachReasons.set(prevRes, reason)
       prevRes.end()
     } catch {}
     globalClientIndex.delete(clientId)
@@ -1199,23 +1250,20 @@ export async function createServer(options = {}) {
       portinoConnections.forEach((portinoConnection) => {
         if (predicate && !predicate(portinoConnection)) return
 
-        portinoConnection.messageConnection.sendNotification(
-          NotifyDidChangeBaudrate,
-          event
-        )
+        safeNotify(portinoConnection, NotifyDidChangeBaudrate, event)
       })
     }
   }
 
   const broadcastMonitorDidPause = (port) => {
-    portinoConnections.forEach(({ messageConnection }) => {
-      messageConnection.sendNotification(NotifyMonitorDidPause, { port })
+    portinoConnections.forEach((connection) => {
+      safeNotify(connection, NotifyMonitorDidPause, { port })
     })
   }
 
   const broadcastMonitorDidResume = (port, resumedPort = port) => {
-    portinoConnections.forEach(({ messageConnection }) => {
-      messageConnection.sendNotification(NotifyMonitorDidResume, {
+    portinoConnections.forEach((connection) => {
+      safeNotify(connection, NotifyMonitorDidResume, {
         didPauseOnPort: port,
         didResumeOnPort: resumedPort,
       })
@@ -1223,8 +1271,8 @@ export async function createServer(options = {}) {
   }
 
   const broadcastMonitorDidStart = (port, baudrate, monitorSessionId) => {
-    portinoConnections.forEach(({ messageConnection }) => {
-      messageConnection.sendNotification(NotifyMonitorDidStart, {
+    portinoConnections.forEach((connection) => {
+      safeNotify(connection, NotifyMonitorDidStart, {
         port,
         baudrate,
         monitorSessionId,
@@ -1233,8 +1281,8 @@ export async function createServer(options = {}) {
   }
 
   const broadcastMonitorDidStop = (port, monitorSessionId) => {
-    portinoConnections.forEach(({ messageConnection }) => {
-      messageConnection.sendNotification(NotifyMonitorDidStop, {
+    portinoConnections.forEach((connection) => {
+      safeNotify(connection, NotifyMonitorDidStop, {
         port,
         monitorSessionId,
       })
@@ -1343,6 +1391,9 @@ export async function createServer(options = {}) {
         sessionId: monitorSessionId,
         baudrate: requestBaudrate,
         lastCount: undefined,
+        rxBytesSinceSummary: 0,
+        rxChunksSinceSummary: 0,
+        rxSummaryAt: Date.now(),
       }
       activeSerialStreams.set(portKey, entry)
       const onDidChangeBaudrate = createNotifyDidChangeBaudrateCallback(
@@ -1482,15 +1533,14 @@ export async function createServer(options = {}) {
           bufferedChunks.length = 0
 
           // Then continue with the same iterator to avoid double-opening
-          let rxSeq = 0
           while (true) {
             const { value: chunk, done } = await respIterator.next()
             if (done) break
             const buf = Buffer.from(chunk)
-            rxSeq++
-            v(
-              `[serial] rx#${rxSeq} ${buf.length} bytes -> clients=${clients.size} on ${portKey}`
-            )
+            recordSerialRxChunk(streamEntry, buf.length, clients.size, {
+              portKey,
+              monitorSessionId: streamEntry.sessionId,
+            })
             for (const clientRes of clients) {
               clientRes.write(buf)
             }
@@ -1515,6 +1565,10 @@ export async function createServer(options = {}) {
             }
           }
         } finally {
+          flushSerialRxSummary(streamEntry, {
+            portKey,
+            monitorSessionId: streamEntry.sessionId,
+          })
           v(`[serial] monitor ended for ${portKey} (stream finished)`)
           const keepEntry = monitor?.isPaused?.()
           if (keepEntry) {
@@ -1557,6 +1611,9 @@ export async function createServer(options = {}) {
      *   lastCount?: number
      *   baudrate?: string
      *   startedNotified?: boolean
+     *   rxBytesSinceSummary?: number
+     *   rxChunksSinceSummary?: number
+     *   rxSummaryAt?: number
      *   sessionId: string
      * }}
      */ (activeSerialStreams.get(portKey))
@@ -1577,16 +1634,28 @@ export async function createServer(options = {}) {
     }
 
     // Setup HTTP response for this client
+    const streamId = `${clientId}-${Date.now()}`
+    const streamStartedAt = Date.now()
     res.setHeader('Content-Type', 'application/octet-stream')
     res.setHeader('Transfer-Encoding', 'chunked')
     try {
       res.flushHeaders?.()
+      bridgeLog('debug', 'Monitor stream headers flushed', {
+        clientId,
+        portKey,
+        monitorSessionId,
+        streamId,
+      })
     } catch {}
     if (req.socket) {
       req.socket.setTimeout(0)
       req.socket.setNoDelay(true)
       req.socket.setKeepAlive(true)
     }
+    streamMetaByResponse.set(res, {
+      streamId,
+      startedAt: streamStartedAt,
+    })
 
     entry.sessionId = monitorSessionId
     if (requestBaudrate) {
@@ -1599,6 +1668,7 @@ export async function createServer(options = {}) {
     globalClientIndex.set(clientId, { portKey, res })
     if (previousRes && previousRes !== res) {
       try {
+        detachReasons.set(previousRes, 'replaced')
         previousRes.end()
       } catch {}
     }
@@ -1606,7 +1676,15 @@ export async function createServer(options = {}) {
       clientId,
       portKey,
       monitorSessionId: streamEntry.sessionId,
+      streamId,
     })
+    emitClientStreamEvent(
+      'clientStreamDidAttach',
+      streamEntry,
+      clientId,
+      portKey,
+      { clients: streamEntry.clients.size, streamId }
+    )
     v(
       `[serial] +client ${clientId} on ${portKey}; total=${streamEntry.clients.size}`
     )
@@ -1637,9 +1715,15 @@ export async function createServer(options = {}) {
     }
 
     let cleaned = false
-    const onReqGone = async () => {
+    const onReqGone = async (cause = 'close') => {
       if (cleaned) return
       cleaned = true
+      const reason = detachReasons.get(res) ?? cause
+      const meta = streamMetaByResponse.get(res)
+      const elapsedMs =
+        meta && typeof meta.startedAt === 'number'
+          ? Date.now() - meta.startedAt
+          : undefined
 
       try {
         streamEntry.clients.delete(res)
@@ -1664,7 +1748,17 @@ export async function createServer(options = {}) {
         portKey,
         monitorSessionId: streamEntry.sessionId,
         remaining,
+        reason,
+        streamId: meta?.streamId,
+        elapsedMs,
       })
+      emitClientStreamEvent(
+        'clientStreamDidDetach',
+        streamEntry,
+        clientId,
+        portKey,
+        { remaining, reason, streamId: meta?.streamId, elapsedMs }
+      )
       v(`[serial] -client ${clientId} on ${portKey}; remaining=${remaining}`)
       if (remaining === 0) {
         const isPaused = streamEntry.monitor?.isPaused?.()
@@ -1695,8 +1789,8 @@ export async function createServer(options = {}) {
         }
       }
     }
-    req.on('close', onReqGone)
-    req.on('aborted', onReqGone)
+    req.on('close', () => onReqGone('close'))
+    req.on('aborted', () => onReqGone('aborted'))
   })
 
   watcher.emitter.on('update', async () => {
@@ -1743,12 +1837,13 @@ export async function createServer(options = {}) {
         protocols: Array.from(protocols),
       })
       // Broadcast settings to all clients
-      portinoConnections.forEach(({ messageConnection }) => {
-        messageConnection.sendNotification(
+      portinoConnections.forEach((connection) =>
+        safeNotify(
+          connection,
           NotifyDidChangeMonitorSettings,
           monitorSettingsSnapshot
         )
-      })
+      )
     } catch (e) {
       console.error('Failed to refresh monitor settings:', e)
     }
@@ -1767,7 +1862,8 @@ export async function createServer(options = {}) {
     // Create and start the JSON-RPC connection
     const logger = new BridgeWebSocketLogger(baseConsoleFunctions)
     const messageConnection = createWebSocketConnection(socket, logger)
-    portinoConnections.add({ messageConnection })
+    const portinoConnection = { messageConnection, closed: false }
+    portinoConnections.add(portinoConnection)
 
     // Forward board list updates to client
     const updateHandler = () => {
@@ -1777,10 +1873,7 @@ export async function createServer(options = {}) {
       bridgeLog('info', 'Detected ports pushed to client', {
         detectedPortKeys,
       })
-      messageConnection.sendNotification(
-        NotifyDidChangeDetectedPorts,
-        detectedPorts
-      )
+      safeNotify(portinoConnection, NotifyDidChangeDetectedPorts, detectedPorts)
       emitPortsTraceEvent(traceWriter, detectedPortKeys, sanitizedPorts)
     }
     watcher.emitter.on('update', updateHandler)
@@ -1796,10 +1889,7 @@ export async function createServer(options = {}) {
     messageConnection.listen()
 
     // broadcast the initial detected ports
-    messageConnection.sendNotification(
-      NotifyDidChangeDetectedPorts,
-      watcher.state
-    )
+    safeNotify(portinoConnection, NotifyDidChangeDetectedPorts, watcher.state)
 
     const onDidChangeBaudrate = createNotifyDidChangeBaudrateCallback(
       (connection) => connection.messageConnection !== messageConnection // Exclude the current connection
@@ -1968,10 +2058,6 @@ export async function createServer(options = {}) {
       }),
       messageConnection.onRequest(RequestClientConnect, async (params) => {
         const { clientId, selectedPort, selectedBaudrate } = params
-        const portinoConnection = Array.from(portinoConnections).find(
-          (v) => v.messageConnection === messageConnection
-        )
-
         if (!portinoConnection) {
           throw new Error(`Connection not found for clientId: ${clientId}`)
         }
@@ -2040,10 +2126,8 @@ export async function createServer(options = {}) {
 
     // Clean up when client disconnects
     ws.on('close', () => {
-      const portinoConnection = Array.from(portinoConnections).find(
-        (v) => v.messageConnection === messageConnection
-      )
       if (portinoConnection) {
+        portinoConnection.closed = true
         portinoConnections.delete(portinoConnection)
         bridgeLog('info', 'Client disconnected', {
           clientId: portinoConnection.clientId,
@@ -2062,6 +2146,57 @@ export async function createServer(options = {}) {
       disposables.forEach((d) => d.dispose())
     })
   })
+  function recordSerialRxChunk(entry, bytes, clients, context) {
+    entry.rxBytesSinceSummary += bytes
+    entry.rxChunksSinceSummary += 1
+    const now = Date.now()
+    if (!entry.rxSummaryAt) {
+      entry.rxSummaryAt = now
+    }
+    const elapsed = now - (entry.rxSummaryAt ?? now)
+    if (
+      entry.rxChunksSinceSummary >= RX_SUMMARY_CHUNK_THRESHOLD ||
+      elapsed >= RX_SUMMARY_INTERVAL_MS
+    ) {
+      emitSerialRxSummary(entry, context, clients, now)
+    }
+  }
+
+  function flushSerialRxSummary(entry, context) {
+    if (!entry.rxChunksSinceSummary) {
+      return
+    }
+    emitSerialRxSummary(entry, context, 0, Date.now())
+  }
+
+  function emitSerialRxSummary(entry, context, clients, now) {
+    if (!entry.rxChunksSinceSummary) {
+      return
+    }
+    traceWriter.emit(
+      'serialRxDidSummary',
+      {
+        bytes: entry.rxBytesSinceSummary,
+        chunks: entry.rxChunksSinceSummary,
+        clients,
+      },
+      {
+        layer: 'bridge',
+        monitorSessionId: context.monitorSessionId,
+        portKey: context.portKey,
+      }
+    )
+    logEntry('debug', ['Serial RX summary'], {
+      bytes: entry.rxBytesSinceSummary,
+      chunks: entry.rxChunksSinceSummary,
+      clients,
+      portKey: context.portKey,
+      monitorSessionId: context.monitorSessionId,
+    })
+    entry.rxBytesSinceSummary = 0
+    entry.rxChunksSinceSummary = 0
+    entry.rxSummaryAt = now
+  }
   // Provide a close handle for tests/embedders
   return {
     port: boundPort,
@@ -2095,7 +2230,7 @@ export async function createServer(options = {}) {
         logFileStream.end()
       } catch {}
       traceWriter.emit('bridgeDidStop', { reason: 'exit' }, { layer: 'bridge' })
-      traceWriter.close()
+      await traceWriter.close()
       attachmentRegistry.dispose()
     },
   }

@@ -104,6 +104,7 @@ export function useSerialMonitorConnection({
   const hasDetectionSnapshotRef = useRef(false)
   const prevDetectedRef = useRef(false)
   const forcedAbsentRef = useRef(false)
+  const bridgeUnavailableRef = useRef(false)
 
   useEffect(() => {
     const ports = detectedPorts ?? {}
@@ -119,6 +120,14 @@ export function useSerialMonitorConnection({
 
     hasDetectionSnapshotRef.current = hasSnapshot
     selectedDetectedRef.current = isDetected
+    if (bridgeUnavailableRef.current && isDetected) {
+      // Bridge previously unavailable; allow retry when the device reappears.
+      bridgeUnavailableRef.current = false
+      userStoppedRef.current = false
+      autoplayRef.current = true
+      triggerReconnect()
+      return
+    }
     if (forcedAbsentRef.current && isDetected) {
       forcedAbsentRef.current = false
     }
@@ -360,9 +369,10 @@ export function useSerialMonitorConnection({
           abortRef.current = undefined
         }
         const message = err instanceof Error ? err?.message : String(err)
-        const errorCode = err && typeof err === 'object' ? err.code : undefined
+        const errorCode =
+          err instanceof Error && 'code' in err ? err.code : undefined
         const errorStatus =
-          err && typeof err === 'object' ? err.status : undefined
+          err instanceof Error && 'status' in err ? err.status : undefined
         if (errorCode === 'port-busy' || errorStatus === 423) {
           notifyError(`${selectedPort.address} port busy`)
           userStoppedRef.current = true
@@ -372,8 +382,7 @@ export function useSerialMonitorConnection({
         }
         const isMissingDevice =
           errorCode === 'port-not-detected' || errorStatus === 404
-        const shouldRefreshDetection =
-          errorCode === 'monitor-open-failed' || errorStatus === 502
+        const shouldRefreshDetection = errorCode === 'monitor-open-failed'
         const resolveDetectedNow = async () => {
           if (!client || !selectedPort || !client.detectedPorts) {
             return selectedDetectedRef.current
@@ -391,6 +400,18 @@ export function useSerialMonitorConnection({
         }
         if (isMissingDevice) {
           forcedAbsentRef.current = true
+          disconnectHoldRef.current = true
+          disconnectAtRef.current = Date.now()
+          sawAbsentRef.current = true
+          if (!userStoppedRef.current) {
+            notifyInfo('Device disconnected; waiting for reappear')
+          }
+          pendingStartRef.current = false
+          return
+        }
+        if (errorStatus === 502) {
+          // Bridge returned 502 (monitor unavailable). Treat as transient and wait for reappear.
+          bridgeUnavailableRef.current = true
           disconnectHoldRef.current = true
           disconnectAtRef.current = Date.now()
           sawAbsentRef.current = true
