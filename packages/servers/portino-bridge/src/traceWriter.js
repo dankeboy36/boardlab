@@ -114,6 +114,7 @@ class TraceWriter {
     })
     this.writeQueue = []
     this.closed = false
+    this.closing = false
     this.isWriting = false
     this.flushResolvers = []
     this.stream.on('error', (error) => {
@@ -153,7 +154,7 @@ class TraceWriter {
    * @param {TraceEmitOptions} [options]
    */
   emit(name, data = {}, options = {}) {
-    if (this.closed) return
+    if (this.closed || this.closing) return
     const envelope = {
       v: TRACE_VERSION,
       ts: new Date().toISOString(),
@@ -175,7 +176,7 @@ class TraceWriter {
   }
 
   emitLogLine({ message, level, logger, fields }) {
-    if (this.closed) return
+    if (this.closed || this.closing) return
     this.emit(
       'logDidWrite',
       {
@@ -245,17 +246,17 @@ class TraceWriter {
   }
 
   async close() {
-    if (this.closed) {
-      return
-    }
-    this.closed = true
+    if (this.closed || this.closing) return
+    this.closing = true
     if (!this.stream) {
+      this.closed = true
       return
     }
-
+    // Drain any queued events before ending the stream.
     await this.flush()
     return new Promise((resolve) => {
       this.stream.end(() => {
+        this.closed = true
         this.stream = undefined
         resolve()
       })

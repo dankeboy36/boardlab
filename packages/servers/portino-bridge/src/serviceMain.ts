@@ -184,12 +184,15 @@ async function shutdown(
     return
   }
   shuttingDown = true
+  console.log(`[PortinoService] shutdown starting (${reason})`)
   try {
     await close()
   } catch (error) {
     console.error('[PortinoService] error while closing server', error)
   }
-  process.exit(exitCode)
+  console.log('[PortinoService] shutdown complete, exiting soon')
+  // Defer process exit to allow async teardown (e.g., trace flush) to complete.
+  setTimeout(() => process.exit(exitCode), 50)
 }
 
 main().catch((error) => {

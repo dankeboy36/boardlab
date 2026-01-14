@@ -2217,21 +2217,84 @@ export async function createServer(options = {}) {
         }
         globalClientIndex.clear()
       } catch {}
+      traceWriter.emit(
+        'logDidWrite',
+        {
+          message: 'Trace shutdown: emitting bridgeDidStop',
+          level: 'debug',
+          logger: 'bridge',
+        },
+        { layer: 'bridge' }
+      )
+      traceWriter.emit('bridgeDidStop', { reason: 'exit' }, { layer: 'bridge' })
+      traceWriter.emit(
+        'logDidWrite',
+        {
+          message: 'Trace shutdown: closing websocket server',
+          level: 'debug',
+          logger: 'bridge',
+        },
+        { layer: 'bridge' }
+      )
       try {
         wss.close()
       } catch {}
+      traceWriter.emit(
+        'logDidWrite',
+        {
+          message: 'Trace shutdown: closing HTTP server',
+          level: 'debug',
+          logger: 'bridge',
+        },
+        { layer: 'bridge' }
+      )
       await new Promise((resolve) => server.close(() => resolve(undefined)))
+      traceWriter.emit(
+        'logDidWrite',
+        {
+          message: 'Trace shutdown: closing trace writer',
+          level: 'debug',
+          logger: 'bridge',
+        },
+        { layer: 'bridge' }
+      )
+      await traceWriter.close()
       process.off('exit', onExit)
       if (ownBridge) {
+        traceWriter.emit(
+          'logDidWrite',
+          {
+            message: 'Trace shutdown: disposing cli bridge',
+            level: 'debug',
+            logger: 'bridge',
+          },
+          { layer: 'bridge' }
+        )
         try {
           await cliBridge.dispose()
         } catch {}
       }
       try {
+        traceWriter.emit(
+          'logDidWrite',
+          {
+            message: 'Trace shutdown: closing log file stream',
+            level: 'debug',
+            logger: 'bridge',
+          },
+          { layer: 'bridge' }
+        )
         logFileStream.end()
       } catch {}
-      traceWriter.emit('bridgeDidStop', { reason: 'exit' }, { layer: 'bridge' })
-      await traceWriter.close()
+      traceWriter.emit(
+        'logDidWrite',
+        {
+          message: 'Trace shutdown: disposing attachment registry',
+          level: 'debug',
+          logger: 'bridge',
+        },
+        { layer: 'bridge' }
+      )
       attachmentRegistry.dispose()
     },
   }
