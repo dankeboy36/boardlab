@@ -54,7 +54,7 @@ import { LOG_DIR, ensureLogDir } from './logPaths.js'
  * @property {string | undefined} portKey
  * @property {Record<string, unknown> | undefined} data
  */
-const TRACE_FILE_NAME = 'events.jsonl'
+const TRACE_BASE_NAME = 'events.jsonl'
 const TRACE_VERSION = 1
 
 function readRunIdFromFile(filePath) {
@@ -99,13 +99,18 @@ class TraceWriter {
     this.layer = layer
     this.runId = `run-${Date.now()}-${randomUUID().slice(0, 8)}`
     this.seq = 0
-    this.filePath = path.join(LOG_DIR, TRACE_FILE_NAME)
-    this.rotateExisting()
+    const traceIncludeRunId =
+      process.env.PORTINO_BRIDGE_TRACE_INCLUDE_RUN_ID === 'true'
+    const withRunId = traceIncludeRunId
+      ? TRACE_BASE_NAME.replace(/\.jsonl$/i, `-${this.runId}.jsonl`)
+      : TRACE_BASE_NAME
+    this.filePath = path.join(LOG_DIR, withRunId)
     this.stream = createWriteStream(this.filePath, {
       flags: 'a',
       encoding: 'utf8',
     })
     this.writeQueue = []
+    this.closed = false
     this.isWriting = false
     this.flushResolvers = []
     this.stream.on('error', (error) => {
@@ -145,6 +150,7 @@ class TraceWriter {
    * @param {TraceEmitOptions} [options]
    */
   emit(name, data = {}, options = {}) {
+    if (this.closed) return
     const envelope = {
       v: TRACE_VERSION,
       ts: new Date().toISOString(),
@@ -166,6 +172,7 @@ class TraceWriter {
   }
 
   emitLogLine({ message, level, logger, fields }) {
+    if (this.closed) return
     this.emit(
       'logDidWrite',
       {
@@ -179,12 +186,13 @@ class TraceWriter {
   }
 
   write(value) {
+    if (this.closed) return
     this.writeQueue.push(`${JSON.stringify(value)}\n`)
     this.processQueue()
   }
 
   processQueue() {
-    if (this.isWriting || this.writeQueue.length === 0) {
+    if (this.closed || this.isWriting || this.writeQueue.length === 0) {
       this._resolveFlushers()
       return
     }
@@ -197,7 +205,11 @@ class TraceWriter {
     }
     this.stream.write(chunk, (error) => {
       if (error) {
-        console.error('[monitor bridge trace] failed to append event', error)
+        if (error.code !== 'ERR_STREAM_WRITE_AFTER_END') {
+          console.error('[monitor bridge trace] failed to append event', error)
+        }
+        // Prevent further writes after stream end
+        this.closed = true
       }
       this.isWriting = false
       this._resolveFlushers()
@@ -207,7 +219,11 @@ class TraceWriter {
 
   /** @returns {Promise<void>} */
   flush() {
-    if (!this.stream || (this.writeQueue.length === 0 && !this.isWriting)) {
+    if (
+      !this.stream ||
+      this.closed ||
+      (this.writeQueue.length === 0 && !this.isWriting)
+    ) {
       return Promise.resolve()
     }
     return new Promise((resolve) => {
@@ -226,23 +242,18 @@ class TraceWriter {
   }
 
   async close() {
+    if (this.closed) {
+      return
+    }
+    this.closed = true
     if (!this.stream) {
       return
     }
 
-    const finalRunId = this.runId
     await this.flush()
     return new Promise((resolve) => {
       this.stream.end(() => {
-        try {
-          const dest = rotationPathFor(finalRunId)
-          renameSync(this.filePath, dest)
-        } catch (error) {
-          console.error(
-            '[monitor bridge trace] failed to rotate final events file',
-            error
-          )
-        }
+        this.stream = undefined
         resolve()
       })
     })

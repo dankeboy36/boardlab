@@ -2,7 +2,17 @@ import os from 'node:os'
 import path from 'node:path'
 import { existsSync, mkdirSync } from 'node:fs'
 
-const LOG_DIR = path.join(os.tmpdir(), '.boardlab', 'monitor-bridge')
+const DEFAULT_LOG_DIR = path.join(os.tmpdir(), '.boardlab', 'monitor-bridge')
+
+function resolveLogDir() {
+  const override =
+    process.env.PORTINO_BRIDGE_LOG_DIR ||
+    process.env.BOARDLAB_MONITOR_LOG_DIR ||
+    undefined
+  return override ? path.resolve(override) : DEFAULT_LOG_DIR
+}
+
+const LOG_DIR = resolveLogDir()
 
 function ensureLogDir() {
   if (!existsSync(LOG_DIR)) {
@@ -10,4 +20,4 @@ function ensureLogDir() {
   }
 }
 
-export { LOG_DIR, ensureLogDir }
+export { LOG_DIR, ensureLogDir, resolveLogDir }
