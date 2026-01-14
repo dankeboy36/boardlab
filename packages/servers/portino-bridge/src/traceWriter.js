@@ -55,6 +55,8 @@ import { LOG_DIR, ensureLogDir } from './logPaths.js'
  * @property {Record<string, unknown> | undefined} data
  */
 const TRACE_BASE_NAME = 'events.jsonl'
+const TRACE_INCLUDE_RUN_ID =
+  process.env.PORTINO_BRIDGE_TRACE_INCLUDE_RUN_ID === 'true'
 const TRACE_VERSION = 1
 
 function readRunIdFromFile(filePath) {
@@ -99,12 +101,13 @@ class TraceWriter {
     this.layer = layer
     this.runId = `run-${Date.now()}-${randomUUID().slice(0, 8)}`
     this.seq = 0
-    const traceIncludeRunId =
-      process.env.PORTINO_BRIDGE_TRACE_INCLUDE_RUN_ID === 'true'
-    const withRunId = traceIncludeRunId
+    const withRunId = TRACE_INCLUDE_RUN_ID
       ? TRACE_BASE_NAME.replace(/\.jsonl$/i, `-${this.runId}.jsonl`)
       : TRACE_BASE_NAME
     this.filePath = path.join(LOG_DIR, withRunId)
+    if (!TRACE_INCLUDE_RUN_ID) {
+      this.rotateExisting()
+    }
     this.stream = createWriteStream(this.filePath, {
       flags: 'a',
       encoding: 'utf8',
