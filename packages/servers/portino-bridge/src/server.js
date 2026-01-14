@@ -839,6 +839,7 @@ export async function createServer(options = {}) {
     }
   })
 
+  // POST to avoid any caching
   app.post('/control/health', (_req, res) => {
     const heartbeatEnabled = attachmentRegistry.heartbeatTimeoutMs > 0
     const heartbeatStatus = heartbeatEnabled
