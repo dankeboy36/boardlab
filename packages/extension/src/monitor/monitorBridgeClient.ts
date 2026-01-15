@@ -17,6 +17,7 @@ import {
   NotifyDidChangeBaudrate,
   NotifyDidChangeDetectedPorts,
   NotifyDidChangeMonitorSettings,
+  NotifyTraceEvent,
   NotifyMonitorBridgeLog,
   NotifyMonitorDidPause,
   NotifyMonitorDidResume,
@@ -37,6 +38,7 @@ import {
   type MonitorBridgeInfo,
   type MonitorBridgeLogEntry,
   type MonitorSettingsByProtocol,
+  type TraceEventNotification,
 } from '@boardlab/protocol'
 
 import { createNodeSocketAdapter } from './wsAdapters'
@@ -145,6 +147,7 @@ export class MonitorBridgeClient implements vscode.Disposable {
   async connectClient(
     _params: ConnectClientParams
   ): Promise<HostConnectClientResult> {
+    this.log('connectClient invoked')
     await this.ensureConnection()
     if (!this.lastConnectResult) {
       throw new Error('BoardLab monitor bridge snapshot unavailable')
@@ -159,6 +162,7 @@ export class MonitorBridgeClient implements vscode.Disposable {
   }
 
   async requestDetectedPorts(): Promise<DetectedPorts> {
+    this.log('requestDetectedPorts invoked')
     const connection = await this.ensureConnection()
     const ports = await connection.sendRequest<DetectedPorts>(
       RequestDetectedPorts.method
@@ -168,6 +172,7 @@ export class MonitorBridgeClient implements vscode.Disposable {
   }
 
   async updateBaudrate(params: RequestUpdateBaudrateParams): Promise<void> {
+    this.log('updateBaudrate', params)
     const connection = await this.ensureConnection()
     await connection.sendRequest(RequestUpdateBaudrate.method, params)
     this.updateSelectedBaudrate(params.port, params.baudrate)
@@ -175,6 +180,11 @@ export class MonitorBridgeClient implements vscode.Disposable {
       port: params.port,
       baudrate: params.baudrate,
     })
+  }
+
+  async sendTraceEvent(event: TraceEventNotification): Promise<void> {
+    const connection = await this.ensureConnection()
+    connection.sendNotification(NotifyTraceEvent, event)
   }
 
   async sendMonitorMessage(
@@ -187,6 +197,7 @@ export class MonitorBridgeClient implements vscode.Disposable {
   async pauseMonitor(
     params: RequestPauseResumeMonitorParams
   ): Promise<boolean> {
+    this.log('pauseMonitor', params)
     const connection = await this.ensureConnection()
     return connection.sendRequest(RequestPauseMonitor.method, params)
   }
@@ -194,6 +205,7 @@ export class MonitorBridgeClient implements vscode.Disposable {
   async resumeMonitor(
     params: RequestPauseResumeMonitorParams
   ): Promise<boolean> {
+    this.log('resumeMonitor', params)
     const connection = await this.ensureConnection()
     return connection.sendRequest(RequestResumeMonitor.method, params)
   }
@@ -212,6 +224,14 @@ export class MonitorBridgeClient implements vscode.Disposable {
     this.onDidStartMonitorEmitter.dispose()
     this.onDidStopMonitorEmitter.dispose()
     this.onBridgeLogEmitter.dispose()
+  }
+
+  private log(message: string, data?: unknown): void {
+    try {
+      console.log('[MonitorBridgeClient]', message, data ?? '')
+    } catch {
+      // ignore
+    }
   }
 
   private async ensureConnection(): Promise<MessageConnection> {

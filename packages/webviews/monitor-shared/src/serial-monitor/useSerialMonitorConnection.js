@@ -4,6 +4,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { notifyError, notifyInfo } from '@boardlab/base'
 
+import { emitWebviewTraceEvent } from './trace.js'
+
+const buildPortKey = (port) =>
+  port ? `${port.protocol}:${port.address}` : undefined
+
 /**
  * @typedef {Object} UseSerialMonitorConnectionOptions
  * @property {boolean} [autoplay]
@@ -96,9 +101,37 @@ export function useSerialMonitorConnection({
   const seqRef = useRef(0)
   const [forceReconnect, setForceReconnect] = useState(0)
 
-  const triggerReconnect = useCallback(() => {
-    setForceReconnect((prev) => prev + 1)
-  }, [])
+  const triggerReconnect = useCallback(
+    (reason) => {
+      const portKey = buildPortKey(selectedPort)
+      const baudrate = selectedBaudrate
+      if (abortRef.current?.signal?.aborted) {
+        abortRef.current = undefined
+      }
+      if (abortRef.current || pendingStartRef.current) {
+        console.info('[monitor] reconnect skipped', {
+          reason,
+          aborting: !!abortRef.current,
+          pending: pendingStartRef.current,
+        })
+        emitWebviewTraceEvent('webviewMonitorReconnectSkipped', {
+          reason,
+          portKey,
+          baudrate,
+          aborting: !!abortRef.current,
+          pending: pendingStartRef.current,
+        })
+        return
+      }
+      emitWebviewTraceEvent('webviewMonitorReconnect', {
+        reason,
+        portKey,
+        baudrate,
+      })
+      setForceReconnect((prev) => prev + 1)
+    },
+    [selectedPort, selectedBaudrate]
+  )
 
   const selectedDetectedRef = useRef(false)
   const hasDetectionSnapshotRef = useRef(false)
@@ -118,18 +151,36 @@ export function useSerialMonitorConnection({
         )
       : false
 
+    const portKey = buildPortKey(selectedPort)
+    const prevSnapshot = hasDetectionSnapshotRef.current
+    const prevDetected = prevDetectedRef.current
+
     hasDetectionSnapshotRef.current = hasSnapshot
     selectedDetectedRef.current = isDetected
+    if (prevSnapshot !== hasSnapshot || prevDetected !== isDetected) {
+      emitWebviewTraceEvent('webviewMonitorDetectionState', {
+        portKey,
+        hasSnapshot,
+        detected: isDetected,
+        prevDetected,
+      })
+    }
     if (bridgeUnavailableRef.current && isDetected) {
       // Bridge previously unavailable; allow retry when the device reappears.
       bridgeUnavailableRef.current = false
       userStoppedRef.current = false
       autoplayRef.current = true
-      triggerReconnect()
+      emitWebviewTraceEvent('webviewMonitorBridgeReappear', {
+        portKey,
+      })
+      triggerReconnect('bridge-unavailable')
       return
     }
     if (forcedAbsentRef.current && isDetected) {
       forcedAbsentRef.current = false
+      emitWebviewTraceEvent('webviewMonitorForcedAbsentCleared', {
+        portKey,
+      })
     }
 
     if (!selectedPort) {
@@ -142,7 +193,7 @@ export function useSerialMonitorConnection({
     if (!wasDetected && isDetected) {
       prevDetectedRef.current = isDetected
       if (!userStoppedRef.current && autoplayRef.current) {
-        triggerReconnect()
+        triggerReconnect('device-detected')
       }
     } else if (wasDetected && !isDetected) {
       sawAbsentRef.current = true
@@ -155,6 +206,12 @@ export function useSerialMonitorConnection({
   // Expose play/stop by mutating refs (consumers can call via returned functions if needed later)
   /** Force immediate reconnect attempt, clearing holds */
   const playNow = () => {
+    emitWebviewTraceEvent('webviewMonitorPlay', {
+      portKey: buildPortKey(selectedPort),
+      baudrate: selectedBaudrate,
+      hasClient: !!client,
+      userStopped: userStoppedRef.current,
+    })
     console.info('[monitor] playNow', {
       hasClient: !!client,
       selectedPort,
@@ -167,20 +224,18 @@ export function useSerialMonitorConnection({
     sawAbsentRef.current = false
     // Temporarily enable autoplay for immediate connection
     autoplayRef.current = true
-    // Abort any in-flight stream before triggering a reconnect so callers
-    // don't immediately see an AbortError surfaced from a previous controller.
-    if (abortRef.current) {
-      try {
-        abortRef.current.abort()
-      } catch {}
-      abortRef.current = undefined
-    }
+    bridgeUnavailableRef.current = false
     // Force effect re-evaluation by updating state
-    triggerReconnect()
+    triggerReconnect('play')
   }
 
   /** User stop: abort stream and prevent auto-reconnect */
   const stopNow = () => {
+    emitWebviewTraceEvent('webviewMonitorStop', {
+      portKey: buildPortKey(selectedPort),
+      baudrate: selectedBaudrate,
+      hasClient: !!client,
+    })
     console.info('[monitor] stopNow', {
       hasClient: !!client,
       selectedPort,
@@ -203,6 +258,10 @@ export function useSerialMonitorConnection({
         abortRef.current = undefined
       }
       console.info('[monitor] effect skipped (disabled)')
+      emitWebviewTraceEvent('webviewMonitorEffectSkip', {
+        reason: 'disabled',
+        portKey: buildPortKey(selectedPort),
+      })
       return
     }
     if (!client || !selectedPort) {
@@ -210,21 +269,37 @@ export function useSerialMonitorConnection({
         hasClient: !!client,
         selectedPort,
       })
+      emitWebviewTraceEvent('webviewMonitorEffectSkip', {
+        reason: 'missing-client-or-port',
+        hasClient: !!client,
+        portKey: buildPortKey(selectedPort),
+      })
       return
     }
 
     // Ensure monitor settings for this protocol are resolved first
     if (!hasProtocolSettings) {
       // Not resolved yet: do not attempt to start
+      emitWebviewTraceEvent('webviewMonitorEffectSkip', {
+        reason: 'missing-protocol-settings',
+        portKey: buildPortKey(selectedPort),
+      })
       return
     }
     if (protocolError) {
       // Protocol not supported for monitor
+      emitWebviewTraceEvent('webviewMonitorEffectSkip', {
+        reason: 'protocol-error',
+        portKey: buildPortKey(selectedPort),
+      })
       return
     }
     if (requiresBaudrate && !selectedBaudrate) {
       console.info('[monitor] effect waiting for baudrate')
       awaitingBaudRef.current = true
+      emitWebviewTraceEvent('webviewMonitorAwaitBaudrate', {
+        portKey: buildPortKey(selectedPort),
+      })
       return
     }
     awaitingBaudRef.current = false
@@ -247,6 +322,16 @@ export function useSerialMonitorConnection({
       aborting: !!abortRef.current,
       shouldStart,
     })
+    emitWebviewTraceEvent('webviewMonitorEffectEvaluate', {
+      portKey: buildPortKey(selectedPort),
+      baudrate: selectedBaudrate,
+      autoPlay: autoplayRef.current,
+      detected,
+      hasDetectionSnapshot,
+      userStopped: userStoppedRef.current,
+      aborting: !!abortRef.current,
+      shouldStart,
+    })
 
     // Manage disconnect hold lifecycle
     if (disconnectHoldRef.current) {
@@ -255,6 +340,10 @@ export function useSerialMonitorConnection({
       const holdExpired = elapsed >= disconnectHoldMsRef.current
       const reappeared = sawAbsentRef.current && detected
       if (!holdExpired && !reappeared) {
+        emitWebviewTraceEvent('webviewMonitorHoldActive', {
+          portKey: buildPortKey(selectedPort),
+          elapsedMs: elapsed,
+        })
         return
       }
       // Clear hold when conditions satisfied
@@ -264,12 +353,19 @@ export function useSerialMonitorConnection({
 
     if (!autoplayRef.current) {
       console.info('[monitor] autoplay disabled; skipping start')
+      emitWebviewTraceEvent('webviewMonitorEffectSkip', {
+        reason: 'autoplay-disabled',
+        portKey: buildPortKey(selectedPort),
+      })
       return
     }
 
     if (!detected) {
       // Track that we saw the device absent at least once
       sawAbsentRef.current = true
+      emitWebviewTraceEvent('webviewMonitorNotDetected', {
+        portKey: buildPortKey(selectedPort),
+      })
       return
     }
 
@@ -278,11 +374,19 @@ export function useSerialMonitorConnection({
     // existing monitor without reconnecting.
     if (abortRef.current) {
       console.info('[monitor] abort controller already set, skipping start')
+      emitWebviewTraceEvent('webviewMonitorEffectSkip', {
+        reason: 'abort-controller-set',
+        portKey: buildPortKey(selectedPort),
+      })
       return
     }
     // Start a new open sequence
     if (pendingStartRef.current) {
       console.info('[monitor] start pending; skipping duplicate trigger')
+      emitWebviewTraceEvent('webviewMonitorEffectSkip', {
+        reason: 'start-pending',
+        portKey: buildPortKey(selectedPort),
+      })
       return
     }
 
@@ -298,6 +402,12 @@ export function useSerialMonitorConnection({
     openedAtRef.current = Date.now()
 
     const startStream = async () => {
+      emitWebviewTraceEvent('webviewMonitorOpenStart', {
+        seq: mySeq,
+        startToken,
+        portKey: buildPortKey(selectedPort),
+        baudrate: selectedBaudrate,
+      })
       console.info('[monitor] opening monitor', {
         seq: mySeq,
         port: selectedPort,
@@ -309,6 +419,12 @@ export function useSerialMonitorConnection({
           { port: selectedPort, baudrate: selectedBaudrate },
           { signal }
         )
+        emitWebviewTraceEvent('webviewMonitorOpenReady', {
+          seq: mySeq,
+          startToken,
+          portKey: buildPortKey(selectedPort),
+          baudrate: selectedBaudrate,
+        })
         if (
           mySeq !== seqRef.current ||
           controller.signal.aborted ||
@@ -317,6 +433,10 @@ export function useSerialMonitorConnection({
           pendingStartRef.current = false
           return
         }
+        emitWebviewTraceEvent('webviewMonitorStreamStarted', {
+          seq: mySeq,
+          portKey: buildPortKey(selectedPort),
+        })
         onStart()
         const decoder = new TextDecoder()
         while (true) {
@@ -328,10 +448,16 @@ export function useSerialMonitorConnection({
           }
         }
         if (mySeq !== seqRef.current) return
+        emitWebviewTraceEvent('webviewMonitorStreamEnded', {
+          seq: mySeq,
+          portKey: buildPortKey(selectedPort),
+          reason: 'done',
+        })
         onStop()
         if (abortRef.current === controller) {
           abortRef.current = undefined
         }
+        pendingStartRef.current = false
         if (!userStoppedRef.current) {
           const elapsed = Date.now() - openedAtRef.current
           const detectedNow =
@@ -339,24 +465,28 @@ export function useSerialMonitorConnection({
           if (!wasStreamingRef.current && elapsed < coldStartMsRef.current) {
             disconnectHoldRef.current = false
             sawAbsentRef.current = false
-            triggerReconnect()
+            triggerReconnect('cold-start-retry')
           } else if (detectedNow) {
             disconnectHoldRef.current = false
             sawAbsentRef.current = false
-            triggerReconnect()
+            triggerReconnect('detected-retry')
           } else {
             disconnectHoldRef.current = true
             disconnectAtRef.current = Date.now()
             notifyInfo('Device disconnected; waiting for reappear')
           }
         }
-        pendingStartRef.current = false
       } catch (err) {
         if (mySeq !== seqRef.current) return
         if (
           (err instanceof Error && err?.name === 'AbortError') ||
           controller.signal.aborted
         ) {
+          emitWebviewTraceEvent('webviewMonitorStreamEnded', {
+            seq: mySeq,
+            portKey: buildPortKey(selectedPort),
+            reason: 'aborted',
+          })
           onStop()
           if (abortRef.current === controller) {
             abortRef.current = undefined
@@ -364,16 +494,44 @@ export function useSerialMonitorConnection({
           pendingStartRef.current = false
           return
         }
-        onStop()
-        if (abortRef.current === controller) {
-          abortRef.current = undefined
-        }
         const message = err instanceof Error ? err?.message : String(err)
         const errorCode =
           err instanceof Error && 'code' in err ? err.code : undefined
         const errorStatus =
           err instanceof Error && 'status' in err ? err.status : undefined
+        emitWebviewTraceEvent('webviewMonitorOpenError', {
+          seq: mySeq,
+          portKey: buildPortKey(selectedPort),
+          message,
+          code: errorCode,
+          status: errorStatus,
+        })
+        onStop()
+        if (abortRef.current === controller) {
+          abortRef.current = undefined
+        }
+        if (errorCode === 'already-attached') {
+          emitWebviewTraceEvent('webviewMonitorErrorHandled', {
+            seq: mySeq,
+            portKey: buildPortKey(selectedPort),
+            resolution: 'already-attached',
+          })
+          // Another stream for this client is already active; avoid churn.
+          disconnectHoldRef.current = true
+          disconnectAtRef.current = Date.now()
+          sawAbsentRef.current = false
+          if (abortRef.current === controller) {
+            abortRef.current = undefined
+          }
+          pendingStartRef.current = false
+          return
+        }
         if (errorCode === 'port-busy' || errorStatus === 423) {
+          emitWebviewTraceEvent('webviewMonitorErrorHandled', {
+            seq: mySeq,
+            portKey: buildPortKey(selectedPort),
+            resolution: 'port-busy',
+          })
           notifyError(`${selectedPort.address} port busy`)
           userStoppedRef.current = true
           onBusy()
@@ -399,6 +557,11 @@ export function useSerialMonitorConnection({
           }
         }
         if (isMissingDevice) {
+          emitWebviewTraceEvent('webviewMonitorErrorHandled', {
+            seq: mySeq,
+            portKey: buildPortKey(selectedPort),
+            resolution: 'missing-device',
+          })
           forcedAbsentRef.current = true
           disconnectHoldRef.current = true
           disconnectAtRef.current = Date.now()
@@ -410,6 +573,11 @@ export function useSerialMonitorConnection({
           return
         }
         if (errorStatus === 502) {
+          emitWebviewTraceEvent('webviewMonitorErrorHandled', {
+            seq: mySeq,
+            portKey: buildPortKey(selectedPort),
+            resolution: 'bridge-unavailable',
+          })
           // Bridge returned 502 (monitor unavailable). Treat as transient and wait for reappear.
           bridgeUnavailableRef.current = true
           disconnectHoldRef.current = true
@@ -422,6 +590,11 @@ export function useSerialMonitorConnection({
           return
         }
         if (shouldRefreshDetection) {
+          emitWebviewTraceEvent('webviewMonitorErrorHandled', {
+            seq: mySeq,
+            portKey: buildPortKey(selectedPort),
+            resolution: 'refresh-detection',
+          })
           const detectedNow = await resolveDetectedNow()
           if (!detectedNow) {
             forcedAbsentRef.current = true
@@ -438,6 +611,11 @@ export function useSerialMonitorConnection({
         if (!userStoppedRef.current) {
           notifyError(message)
         }
+        emitWebviewTraceEvent('webviewMonitorErrorHandled', {
+          seq: mySeq,
+          portKey: buildPortKey(selectedPort),
+          resolution: 'stopped',
+        })
         userStoppedRef.current = true
         onBusy()
         disconnectHoldRef.current = true
@@ -469,6 +647,10 @@ export function useSerialMonitorConnection({
       if (abortRef.current === controller) {
         abortRef.current = undefined
       }
+      emitWebviewTraceEvent('webviewMonitorEffectCleanup', {
+        seq: mySeq,
+        portKey: buildPortKey(selectedPort),
+      })
     }
   }, [
     client,
@@ -494,7 +676,7 @@ export function useSerialMonitorConnection({
     if (requiresBaudrate && !selectedBaudrate) return
     awaitingBaudRef.current = false
     if (!abortRef.current && !userStoppedRef.current && autoplayRef.current) {
-      triggerReconnect()
+      triggerReconnect('baudrate-ready')
     }
   }, [
     client,

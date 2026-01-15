@@ -26,6 +26,7 @@ import {
   notifyMonitorViewDidChangeMonitorSettings,
   notifyMonitorViewDidPause,
   notifyMonitorViewDidResume,
+  notifyTraceEvent,
   requestMonitorDetectedPorts,
   requestMonitorPause,
   requestMonitorResume,
@@ -41,6 +42,7 @@ import {
   type RequestSendMonitorMessageParams,
   type RequestUpdateBaudrateParams,
   type MonitorBridgeLogEntry,
+  type TraceEventNotification,
 } from '@boardlab/protocol'
 
 import type { CliContext } from '../cli/context'
@@ -1018,6 +1020,11 @@ export class MonitorManager implements vscode.Disposable {
       })
     )
     this.disposables.push(
+      messenger.onNotification(notifyTraceEvent, (event, sender) =>
+        this.handleTraceEvent(event, sender)
+      )
+    )
+    this.disposables.push(
       messenger.onRequest(requestMonitorDetectedPorts, () =>
         this.bridgeClient.requestDetectedPorts()
       )
@@ -1532,6 +1539,33 @@ export class MonitorManager implements vscode.Disposable {
 
   private logError(message: string, error: unknown): void {
     this.outputChannel.appendLine(`${message} ${formatError(error)}`)
+  }
+
+  private async handleTraceEvent(
+    event: TraceEventNotification,
+    sender?: MessageParticipant
+  ): Promise<void> {
+    const src = {
+      ...(event.src ?? {}),
+      layer: event.src?.layer ?? 'webview',
+    }
+    const enriched: TraceEventNotification = {
+      ...event,
+      src,
+      ...(sender && isWebviewIdMessageParticipant(sender) && !event.webviewId
+        ? { webviewId: sender.webviewId }
+        : {}),
+      ...(sender &&
+      isWebviewTypeMessageParticipant(sender) &&
+      !event.webviewType
+        ? { webviewType: sender.webviewType }
+        : {}),
+    }
+    try {
+      await this.bridgeClient.sendTraceEvent(enriched)
+    } catch (error) {
+      this.logError('Failed to forward trace event', error)
+    }
   }
 
   private handleBridgeLog(entry: MonitorBridgeLogEntry): void {

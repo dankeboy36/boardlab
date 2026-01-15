@@ -1,5 +1,7 @@
+import { HOST_EXTENSION } from 'vscode-messenger-common'
+
 import { vscode } from '@boardlab/base'
-import { NotifyTraceEvent } from '@boardlab/protocol'
+import { notifyTraceEvent } from '@boardlab/protocol'
 
 function getWebviewMeta() {
   if (typeof window === 'undefined') {
@@ -31,8 +33,7 @@ export function emitWebviewTraceEvent(event, data = {}, overrides = {}) {
   }
   const meta = getWebviewMeta()
   try {
-    messenger.sendNotification(NotifyTraceEvent, {
-      type: 'webview',
+    messenger.sendNotification(notifyTraceEvent, HOST_EXTENSION, {
       event,
       data,
       src: { layer: 'webview' },

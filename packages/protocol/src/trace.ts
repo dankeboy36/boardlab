@@ -1,4 +1,5 @@
 import { NotificationType as JsonRpcNotificationType } from 'vscode-jsonrpc'
+import type { NotificationType as MessengerNotificationType } from 'vscode-messenger-common'
 
 export type TraceLayer = 'bridge' | 'ext' | 'webview'
 
@@ -21,3 +22,8 @@ export const NotifyTraceEvent =
   new JsonRpcNotificationType<TraceEventNotification>(
     'boardlab/monitor/trace-event'
   )
+
+export const notifyTraceEvent: MessengerNotificationType<TraceEventNotification> =
+  {
+    method: 'boardlab/monitor/trace-event',
+  }

@@ -2409,6 +2409,10 @@ export function activate(context: vscode.ExtensionContext) {
   }
 
   return boardlabContext
+  // return messenger.diagnosticApi({
+  //   withParameterData: true,
+  //   withResponseData: true,
+  // })
 }
 
 async function resolveSketchTaskParams(

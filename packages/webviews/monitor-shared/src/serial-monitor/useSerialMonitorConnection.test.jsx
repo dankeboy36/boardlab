@@ -36,6 +36,44 @@ const monitorSettingsByProtocol = {
 }
 
 describe('useSerialMonitorConnection', () => {
+  it('ignores duplicate attach responses', async () => {
+    const openMonitor = vi.fn().mockRejectedValue(
+      Object.assign(new Error('already attached'), {
+        code: 'already-attached',
+      })
+    )
+    const client = makeClient({ openMonitorImpl: openMonitor })
+
+    const { result } = renderHook(
+      (props) => useSerialMonitorConnection(props),
+      {
+        wrapper: ({ children }) => <>{children}</>,
+        initialProps: {
+          client,
+          selectedPort: serialPort,
+          detectedPorts,
+          monitorSettingsByProtocol,
+          onText: noop,
+          onStart: noop,
+          onStop: noop,
+          onBusy: noop,
+          options: { autoplay: true },
+          enabled: true,
+          autoPlay: true,
+          selectedBaudrate: '9600',
+        },
+      }
+    )
+
+    act(() => {
+      result.current.play()
+    })
+
+    await waitFor(() => {
+      expect(openMonitor).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it('retries after a 502 once the device is detected again', async () => {
     const never = new Promise(() => {})
     const openMonitor = vi

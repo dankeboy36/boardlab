@@ -113,6 +113,7 @@ class MessengerControlTransport {
    * @param {{ signal?: AbortSignal }} [options]
    */
   async connect(clientId, options = {}) {
+    console.info('[monitor client] connect', { clientId })
     const token = new CancellationTokenImpl()
     const { signal } = options
     if (signal) {
@@ -375,6 +376,11 @@ export class MonitorClient {
    * >}
    */
   async openMonitor({ port: { address, protocol }, baudrate }, options = {}) {
+    console.info('[monitor client] openMonitor', {
+      address,
+      protocol,
+      baudrate,
+    })
     const dataUrl = this._createHttpUrl('/monitor')
     dataUrl.searchParams.set('protocol', protocol)
     dataUrl.searchParams.set('address', address)
@@ -396,6 +402,19 @@ export class MonitorClient {
         `Failed to open monitor on ${address}: ${message}`
       )
       throw Object.assign(error, { code: payload?.code, status })
+    }
+
+    const contentType = res.headers.get('content-type')?.toLowerCase() ?? ''
+    if (!contentType.includes('application/octet-stream')) {
+      const bodyText = (await res.text().catch(() => '')) || ''
+      const normalized = bodyText.trim().toLowerCase()
+      const error = new Error(
+        normalized || 'Unexpected response while opening monitor'
+      )
+      const code = normalized.includes('already attached')
+        ? 'already-attached'
+        : 'no-stream'
+      throw Object.assign(error, { code, status: res.status })
     }
 
     const reader = res.body?.getReader()
