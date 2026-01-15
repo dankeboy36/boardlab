@@ -21,7 +21,7 @@ test.describe('Plotter layout', () => {
 
   test('page loads and metrics are reachable', async ({ page }) => {
     await page.goto(`/?bridgeport=${server.port}`)
-    await page.waitForSelector('#root')
+    await page.waitForSelector('#root', { state: 'attached' })
 
     const metrics = await fetch(`http://localhost:${server.port}/metrics`).then(
       (res) => res.json()

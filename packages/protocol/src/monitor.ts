@@ -57,6 +57,7 @@ export interface HostConnectClientResult extends ConnectClientResult {
     readonly baudrate?: string
     readonly monitorSessionId?: string
   }>
+  readonly physicalStates?: ReadonlyArray<MonitorPhysicalState>
 }
 
 export const RequestClientConnect = new JsonRpcRequestType<
@@ -173,6 +174,25 @@ export interface MonitorSelectionNotification {
   readonly baudrate?: string
 }
 
+export type PhysicalSessionState =
+  | 'CREATED'
+  | 'STARTING'
+  | 'STARTED'
+  | 'STOPPING'
+  | 'STOPPED'
+  | 'FAILED'
+
+export interface MonitorPhysicalState {
+  readonly port: PortIdentifier
+  readonly state: PhysicalSessionState
+  readonly monitorSessionId?: string
+  readonly baudrate?: string
+  readonly attemptId?: number
+  readonly reason?: string
+  readonly error?: string
+  readonly updatedAt?: string
+}
+
 export type MonitorEditorStatus =
   | 'idle'
   | 'running'
@@ -215,6 +235,18 @@ export const notifyMonitorBridgeError: MessengerNotificationType<{
   readonly message: string
 }> = {
   method: 'boardlab/monitor/bridge-error',
+}
+
+export const notifyMonitorPhysicalStateChanged: MessengerNotificationType<MonitorPhysicalState> =
+  {
+    method: 'boardlab/monitor/physical-state-changed',
+  }
+
+export const requestMonitorPhysicalStateSnapshot: MessengerRequestType<
+  void,
+  ReadonlyArray<MonitorPhysicalState>
+> = {
+  method: 'boardlab/monitor/get-physical-state',
 }
 
 export type MonitorBridgeLogLevel =

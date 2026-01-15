@@ -26,9 +26,11 @@ import {
   notifyMonitorViewDidChangeMonitorSettings,
   notifyMonitorViewDidPause,
   notifyMonitorViewDidResume,
+  notifyMonitorPhysicalStateChanged,
   notifyTraceEvent,
   requestMonitorDetectedPorts,
   requestMonitorPause,
+  requestMonitorPhysicalStateSnapshot,
   requestMonitorResume,
   requestMonitorSendMessage,
   requestMonitorUpdateBaudrate,
@@ -50,6 +52,7 @@ import {
   MonitorBridgeClient,
   type MonitorBridgeClientOptions,
 } from './monitorBridgeClient'
+import { MonitorPhysicalStateRegistry } from './monitorPhysicalStateRegistry'
 
 const DEFAULT_BRIDGE_HOST = '127.0.0.1'
 const DEFAULT_BRIDGE_PORT = 55888
@@ -842,6 +845,7 @@ export class MonitorManager implements vscode.Disposable {
     { port: PortIdentifier; baudrate?: string }
   >()
 
+  private readonly physicalStates = new MonitorPhysicalStateRegistry()
   private readonly monitorStates = new Map<string, MonitorRuntimeState>()
   private readonly selectedBaudrateCache = new Map<string, string>()
   private readonly onDidChangeMonitorStateEmitter =
@@ -1002,6 +1006,7 @@ export class MonitorManager implements vscode.Disposable {
     this.disposables.push(
       this.bridgeClient.onBridgeLog((entry) => this.handleBridgeLog(entry))
     )
+    this.disposables.push(this.physicalStates)
     this.disposables.push(this.onDidChangeMonitorStateEmitter)
     this.disposables.push(this.onDidChangeRunningMonitorsEmitter)
     this.disposables.push(
@@ -1048,6 +1053,24 @@ export class MonitorManager implements vscode.Disposable {
       messenger.onRequest(requestMonitorResume, (params) =>
         this.bridgeClient.resumeMonitor(params)
       )
+    )
+    this.disposables.push(
+      messenger.onRequest(requestMonitorPhysicalStateSnapshot, () =>
+        this.physicalStates.snapshot()
+      )
+    )
+
+    this.disposables.push(
+      this.physicalStates.onDidChange((state) => {
+        this.forEachClient((clientId, participant) => {
+          this.sendNotificationSafe(
+            clientId,
+            participant,
+            notifyMonitorPhysicalStateChanged,
+            state
+          )
+        })
+      })
     )
   }
 
@@ -1262,6 +1285,7 @@ export class MonitorManager implements vscode.Disposable {
       return {
         port: entry.port,
         baudrate: cached ?? entry.baudrate,
+        monitorSessionId: entry.monitorSessionId,
       }
     })
     this.syncRunningMonitors(runningMonitors)
@@ -1272,6 +1296,7 @@ export class MonitorManager implements vscode.Disposable {
       selectedBaudrate,
       selectedBaudrates: finalSelectedBaudrates,
       runningMonitors,
+      physicalStates: this.physicalStates.snapshot(),
     }
   }
 
@@ -1392,6 +1417,13 @@ export class MonitorManager implements vscode.Disposable {
         })
         const resumedPort = payload.didResumeOnPort ?? payload.didPauseOnPort
         if (resumedPort) {
+          const monitorSessionId =
+            this.monitorSessionIds.get(createPortKey(resumedPort)) ??
+            this.monitorSessionIds.get(createPortKey(payload.didPauseOnPort))
+          this.physicalStates.markStart(resumedPort, {
+            monitorSessionId,
+            reason: 'resume',
+          })
           this.setMonitorState(resumedPort, 'running')
           this.setRunningMonitor(resumedPort, undefined)
         }
@@ -1406,6 +1438,11 @@ export class MonitorManager implements vscode.Disposable {
             event.monitorSessionId
           )
         }
+        this.physicalStates.markStart(event.port, {
+          monitorSessionId: event.monitorSessionId,
+          baudrate: event.baudrate,
+          reason: 'start',
+        })
         this.updateSelectedBaudrateCache(event.port, event.baudrate)
         this.setRunningMonitor(event.port, event.baudrate)
       })
@@ -1413,6 +1450,10 @@ export class MonitorManager implements vscode.Disposable {
 
     this.disposables.push(
       this.bridgeClient.onDidStopMonitor((event) => {
+        this.physicalStates.markStop(event.port, {
+          monitorSessionId: event.monitorSessionId,
+          reason: 'stop',
+        })
         this.removeRunningMonitor(event.port)
         this.monitorSessionIds.delete(createPortKey(event.port))
       })
@@ -1465,6 +1506,11 @@ export class MonitorManager implements vscode.Disposable {
       if (entry.monitorSessionId) {
         this.monitorSessionIds.set(key, entry.monitorSessionId)
       }
+      this.physicalStates.markStart(entry.port, {
+        monitorSessionId: entry.monitorSessionId,
+        baudrate: entry.baudrate,
+        reason: 'snapshot',
+      })
       this.setMonitorState(entry.port, 'running')
     })
     this.emitRunningMonitorsChanged()

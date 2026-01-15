@@ -16,7 +16,11 @@ import {
   requestMonitorDetectedPorts,
   requestMonitorSendMessage,
   requestMonitorUpdateBaudrate,
+  notifyMonitorPhysicalStateChanged,
+  requestMonitorPhysicalStateSnapshot,
 } from '@boardlab/protocol'
+
+/** @typedef {import('@boardlab/protocol').MonitorPhysicalState} MonitorPhysicalState */
 
 class MessengerControlTransport {
   /** @param {import('vscode-messenger-webview').Messenger} messenger */
@@ -27,6 +31,7 @@ class MessengerControlTransport {
     this._didChangeBaudrate = new EventEmitter()
     this._didPauseMonitor = new EventEmitter()
     this._didResumeMonitor = new EventEmitter()
+    this._didChangePhysicalState = new EventEmitter()
 
     const messengerRef = this._messenger
     const messengerDisposables = [
@@ -55,6 +60,11 @@ class MessengerControlTransport {
         notifyMonitorViewDidResume,
         (payload) => this._didResumeMonitor.fire(payload)
       ),
+      messengerx.onNotification(
+        messengerRef,
+        notifyMonitorPhysicalStateChanged,
+        (payload) => this._didChangePhysicalState.fire(payload)
+      ),
     ]
 
     this._disposables = [
@@ -63,6 +73,7 @@ class MessengerControlTransport {
       this._didChangeBaudrate,
       this._didPauseMonitor,
       this._didResumeMonitor,
+      this._didChangePhysicalState,
       ...messengerDisposables,
     ]
   }
@@ -79,6 +90,13 @@ class MessengerControlTransport {
    */
   get onDidChangeMonitorSettings() {
     return this._didChangeMonitorSettings.event
+  }
+
+  /**
+   * @returns {import('@c4312/evt').Event<MonitorPhysicalState>}
+   */
+  get onDidChangePhysicalState() {
+    return this._didChangePhysicalState.event
   }
 
   /**
@@ -148,6 +166,26 @@ class MessengerControlTransport {
 
     return this._messenger.sendRequest(
       requestMonitorDetectedPorts,
+      HOST_EXTENSION,
+      /** @type {unknown} */ (undefined),
+      token
+    )
+  }
+
+  /** @param {{ signal?: AbortSignal }} [options] */
+  async physicalStates(options = {}) {
+    const token = new CancellationTokenImpl()
+    const { signal } = options
+    if (signal) {
+      const abortHandler = () => {
+        token.cancel()
+        signal.removeEventListener('abort', abortHandler)
+      }
+      signal.addEventListener('abort', abortHandler)
+    }
+
+    return this._messenger.sendRequest(
+      requestMonitorPhysicalStateSnapshot,
       HOST_EXTENSION,
       /** @type {unknown} */ (undefined),
       token
@@ -231,6 +269,7 @@ export class MonitorClient {
     this._didChangeBaudrate = new EventEmitter()
     this._didPauseMonitor = new EventEmitter()
     this._didResumeMonitor = new EventEmitter()
+    this._didChangePhysicalState = new EventEmitter()
 
     this._transportDisposables = [
       this._didChangeDetectedPorts,
@@ -252,6 +291,10 @@ export class MonitorClient {
       this._didResumeMonitor,
       this._transport.onDidResumeMonitor((payload) =>
         this._fireDidResumeMonitor(payload)
+      ),
+      this._didChangePhysicalState,
+      this._transport.onDidChangePhysicalState((payload) =>
+        this._fireDidChangePhysicalState(payload)
       ),
     ]
 
@@ -300,6 +343,13 @@ export class MonitorClient {
   }
 
   /**
+   * @returns {import('@c4312/evt').Event<MonitorPhysicalState>}
+   */
+  get onDidChangePhysicalState() {
+    return this._didChangePhysicalState.event
+  }
+
+  /**
    * @returns {import('@c4312/evt').Event<
    *   import('@boardlab/protocol').MonitorSettingsByProtocol
    * >}
@@ -311,6 +361,11 @@ export class MonitorClient {
   /** @param {{ signal?: AbortSignal }} [options] */
   async detectedPorts(options = {}) {
     return this._transport.detectedPorts(options)
+  }
+
+  /** @param {{ signal?: AbortSignal }} [options] */
+  async physicalStates(options = {}) {
+    return this._transport.physicalStates(options)
   }
 
   /**
@@ -517,5 +572,10 @@ export class MonitorClient {
   /** @param {import('@boardlab/protocol').DidResumeMonitorNotification} payload */
   _fireDidResumeMonitor(payload) {
     this._didResumeMonitor.fire(payload)
+  }
+
+  /** @param {MonitorPhysicalState} payload */
+  _fireDidChangePhysicalState(payload) {
+    this._didChangePhysicalState.fire(payload)
   }
 }

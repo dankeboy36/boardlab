@@ -7,6 +7,11 @@ import { useSerialMonitorConnection } from './useSerialMonitorConnection.js'
 vi.mock('@boardlab/base', () => ({
   notifyError: vi.fn(),
   notifyInfo: vi.fn(),
+  vscode: {
+    messenger: {
+      sendNotification: vi.fn(),
+    },
+  },
 }))
 
 const noop = () => {}

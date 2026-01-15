@@ -2,6 +2,10 @@
 
 import { createSlice } from '@reduxjs/toolkit'
 import { createBoardsList, createPortKey } from 'boards-list'
+import {
+  initialMonitorContext,
+  reduceMonitorContext,
+} from './monitorFsm.js'
 
 /** @typedef {'idle' | 'pending' | 'connected' | 'suspended' | 'error'} MonitorStatus */
 
@@ -13,6 +17,8 @@ import { createBoardsList, createPortKey } from 'boards-list'
  * @property {MonitorStatus} status
  * @property {string} [error]
  * @property {string[]} suspendedPortKeys
+ * @property {import('./monitorFsm.js').MonitorContext} machine
+ * @property {import('@boardlab/protocol').MonitorPhysicalState[]} physicalStates
  */
 
 /**
@@ -78,6 +84,24 @@ import { createBoardsList, createPortKey } from 'boards-list'
  */
 
 /**
+ * @typedef {Object} ApplyMonitorEventAction
+ * @property {'APPLY_MONITOR_EVENT'} type
+ * @property {import('./monitorFsm.js').MonitorEvent} payload
+ */
+
+/**
+ * @typedef {Object} SetPhysicalStatesAction
+ * @property {'SET_PHYSICAL_STATES'} type
+ * @property {import('@boardlab/protocol').MonitorPhysicalState[]} payload
+ */
+
+/**
+ * @typedef {Object} UpsertPhysicalStateAction
+ * @property {'UPSERT_PHYSICAL_STATE'} type
+ * @property {import('@boardlab/protocol').MonitorPhysicalState} payload
+ */
+
+/**
  * @typedef {ConnectAction
  *   | SetSelectedPortAction
  *   | SetSelectedBaudrateAction
@@ -85,7 +109,10 @@ import { createBoardsList, createPortKey } from 'boards-list'
  *   | UpdateDetectedPortsAction
  *   | DisconnectAction
  *   | StartMonitorAction
- *   | StopMonitorAction} SerialMonitorAction
+ *   | StopMonitorAction
+ *   | ApplyMonitorEventAction
+ *   | SetPhysicalStatesAction
+ *   | UpsertPhysicalStateAction} SerialMonitorAction
  */
 
 /**
@@ -107,6 +134,8 @@ const initialState = {
   boardsListPorts: [],
   suspendedPortKeys: [],
   autoPlay: true,
+  machine: initialMonitorContext(),
+  physicalStates: [],
 }
 
 const serialMonitorSlice = createSlice({
@@ -120,6 +149,7 @@ const serialMonitorSlice = createSlice({
         selectedBaudrates,
         suspendedPortKeys,
         runningMonitors,
+        physicalStates,
       } = action.payload
       const runningEntries = Array.isArray(runningMonitors)
         ? runningMonitors
@@ -131,6 +161,10 @@ const serialMonitorSlice = createSlice({
       state.monitorSettingsByProtocol = monitorSettingsByProtocol
       state.selectedBaudrates = selectedBaudrates
       state.started = false
+      state.physicalStates = Array.isArray(physicalStates)
+        ? physicalStates
+        : []
+      state.machine = initialMonitorContext()
       const filteredSuspended = Array.isArray(suspendedPortKeys)
         ? suspendedPortKeys.filter((key) => runningKeys.has(key))
         : []
@@ -289,6 +323,25 @@ const serialMonitorSlice = createSlice({
     setAutoPlay(state, action) {
       state.autoPlay = !!action.payload
     },
+    applyMonitorEvent(state, action) {
+      state.machine = reduceMonitorContext(state.machine, action.payload)
+    },
+    setPhysicalStates(state, action) {
+      state.physicalStates = Array.isArray(action.payload)
+        ? action.payload
+        : []
+    },
+    upsertPhysicalState(state, action) {
+      const incoming = action.payload
+      if (!incoming?.port) return
+      const key = createPortKey(incoming.port)
+      state.physicalStates = [
+        ...state.physicalStates.filter(
+          (entry) => createPortKey(entry.port) !== key
+        ),
+        incoming,
+      ]
+    },
     /**
      * @param {SerialMonitorState} state
      * @param {{
@@ -420,6 +473,9 @@ export const {
   pauseMonitor,
   resumeMonitor,
   setAutoPlay,
+  applyMonitorEvent,
+  setPhysicalStates,
+  upsertPhysicalState,
 } = actions
 
 export default serialMonitorSlice.reducer

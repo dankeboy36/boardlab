@@ -34,8 +34,8 @@ test.describe('Monitor reconnect + count continuity', () => {
       page2.goto(`/?bridgeport=${server.port}`),
     ])
 
-    await page1.waitForSelector('#root')
-    await page2.waitForSelector('#root')
+    await page1.waitForSelector('#root', { state: 'attached' })
+    await page2.waitForSelector('#root', { state: 'attached' })
 
     const metrics = await fetch(`http://localhost:${server.port}/metrics`).then(
       (res) => res.json()

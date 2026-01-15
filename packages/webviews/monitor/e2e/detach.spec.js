@@ -29,7 +29,7 @@ test.describe('Device detach/attach', () => {
     })
 
     await page.goto(`/?bridgeport=${server.port}`)
-    await page.waitForSelector('#root')
+    await page.waitForSelector('#root', { state: 'attached' })
 
     const findEntry = (list) => list.find((entry) => entry.portKey === portKey)
 

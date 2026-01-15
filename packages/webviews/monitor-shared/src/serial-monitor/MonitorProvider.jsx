@@ -26,6 +26,8 @@ import {
   mergeSelectedBaudrate,
   pauseMonitor,
   resumeMonitor,
+  applyMonitorEvent,
+  upsertPhysicalState,
   setAutoPlay,
   setMonitorSettingsByProtocol,
   setSelectedBaudrate,
@@ -62,6 +64,18 @@ const MonitorContext = createContext(
     stop: () => {},
   })
 )
+
+/**
+ * @param {import('boards-list').DetectedPorts | undefined} ports
+ * @param {import('boards-list').PortIdentifier | undefined} port
+ */
+function isPortDetected(ports, port) {
+  if (!ports || !port) return false
+  const key = createPortKey(port)
+  return Object.values(ports).some(
+    (entry) => createPortKey(entry.port) === key
+  )
+}
 
 /**
  * Provides the monitor connection lifecycle and shared stream events.
@@ -136,11 +150,23 @@ export function MonitorProvider({ client, children, extensionClient }) {
 
   const onStreamStart = useCallback(() => {
     dispatch(startMonitor())
+    dispatch(
+      applyMonitorEvent({
+        type: 'OPEN_OK',
+        port: selectedPortRef.current,
+      })
+    )
     notify('start')
   }, [dispatch, notify])
 
   const onStreamStop = useCallback(() => {
     dispatch(stopMonitor())
+    dispatch(
+      applyMonitorEvent({
+        type: 'STREAM_CLOSED',
+        port: selectedPortRef.current,
+      })
+    )
     notify('stop')
   }, [dispatch, notify])
 
@@ -154,7 +180,48 @@ export function MonitorProvider({ client, children, extensionClient }) {
   const onStreamBusy = useCallback(() => {
     dispatch(setAutoPlay(false))
     dispatch(stopMonitor())
+    dispatch(
+      applyMonitorEvent({
+        type: 'OPEN_FAIL',
+        port: selectedPortRef.current,
+        error: { kind: 'busy' },
+      })
+    )
   }, [dispatch])
+
+  const applyPhysicalState = useCallback(
+    (payload) => {
+      if (!payload || !payload.port) return
+      dispatch(upsertPhysicalState(payload))
+      if (payload.state === 'STARTED') {
+        dispatch(
+          applyMonitorEvent({
+            type: 'OPEN_OK',
+            port: payload.port,
+            attemptId: payload.attemptId,
+          })
+        )
+      } else if (payload.state === 'STOPPED') {
+        dispatch(
+          applyMonitorEvent({
+            type: 'STREAM_CLOSED',
+            port: payload.port,
+            attemptId: payload.attemptId,
+          })
+        )
+      } else if (payload.state === 'FAILED') {
+        dispatch(
+          applyMonitorEvent({
+            type: 'OPEN_FAIL',
+            port: payload.port,
+            attemptId: payload.attemptId,
+            error: { kind: 'internal', detail: payload.error },
+          })
+        )
+      }
+    },
+    [dispatch]
+  )
 
   const monitorOptions = useMemo(
     () => ({ disconnectHoldMs: 1500, coldStartMs: 1000 }),
@@ -183,6 +250,28 @@ export function MonitorProvider({ client, children, extensionClient }) {
   useEffect(() => {
     autoPlayRef.current = serialState.autoPlay
   }, [serialState.autoPlay])
+
+  useEffect(() => {
+    const detected = isPortDetected(
+      serialState.detectedPorts,
+      serialState.selectedPort
+    )
+    dispatch(
+      applyMonitorEvent({
+        type: 'PORT_SELECTED',
+        port: serialState.selectedPort,
+        detected,
+      })
+    )
+  }, [dispatch, serialState.detectedPorts, serialState.selectedPort])
+
+  useEffect(() => {
+    dispatch(
+      applyMonitorEvent({
+        type: serialState.autoPlay ? 'USER_START' : 'USER_STOP',
+      })
+    )
+  }, [dispatch, serialState.autoPlay])
 
   const startedRef = useRef(serialState.started)
   useEffect(() => {
@@ -395,6 +484,11 @@ export function MonitorProvider({ client, children, extensionClient }) {
         const result = await client.connect()
         if (!disposed) {
           dispatch(connectAction(result))
+          if (Array.isArray(result.physicalStates)) {
+            result.physicalStates.forEach((state) =>
+              applyPhysicalState(state)
+            )
+          }
           if (result.selectedPort) {
             dispatch(setSelectedPort(result.selectedPort))
             if (result.selectedBaudrate) {
@@ -428,6 +522,7 @@ export function MonitorProvider({ client, children, extensionClient }) {
       ),
       client.onDidPauseMonitor((event) => dispatch(pauseMonitor(event))),
       client.onDidResumeMonitor((event) => dispatch(resumeMonitor(event))),
+      client.onDidChangePhysicalState((state) => applyPhysicalState(state)),
     ]
 
     async function fetchDetectedPorts() {
@@ -451,7 +546,7 @@ export function MonitorProvider({ client, children, extensionClient }) {
         } catch {}
       }
     }
-  }, [client, dispatch])
+  }, [applyPhysicalState, client, dispatch])
 
   // When streaming and baudrate changes, update server-side monitor
   useEffect(() => {

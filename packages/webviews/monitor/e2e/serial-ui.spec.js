@@ -21,7 +21,7 @@ test.describe('Serial UI + Mock Bridge', () => {
 
   test('renders monitor placeholder controls', async ({ page }) => {
     await page.goto(`/?bridgeport=${server.port}`)
-    await page.waitForSelector('#root')
+    await page.waitForSelector('#root', { state: 'attached' })
 
     const metricsStatus = await page.evaluate(
       (port) =>
