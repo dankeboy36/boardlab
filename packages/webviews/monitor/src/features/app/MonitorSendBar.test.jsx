@@ -1,10 +1,10 @@
 // @ts-check
 import '@testing-library/jest-dom'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { Provider } from 'react-redux'
 import { configureStore } from '@reduxjs/toolkit'
 import { createPortKey } from 'boards-list'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import MonitorSendBar from '@boardlab/monitor-shared/serial-monitor/MonitorSendBar'
 import serialMonitorReducer from '@boardlab/monitor-shared/serial-monitor/serialMonitorSlice'
@@ -123,5 +123,40 @@ describe('MonitorSendBar', () => {
     })
     fireEvent.input(textarea)
     expect(pointerEventsOf(sendIcon)).not.toBe('none')
+  })
+
+  it('shows suspended UI while started and waiting for device', () => {
+    vi.useFakeTimers()
+    const detectedPorts = {
+      [createPortKey(PORT)]: { port: PORT },
+    }
+    withSerialMonitorState({
+      detectedPorts,
+      selectedPort: PORT,
+      selectedBaudrates: [[PORT, '9600']],
+      machine: {
+        logical: {
+          kind: 'waitingForPort',
+          reason: 'port-temporarily-missing',
+          port: PORT,
+        },
+        desired: 'running',
+        currentAttemptId: null,
+        lastCompletedAttemptId: 1,
+        selectedPort: PORT,
+        selectedDetected: true,
+      },
+      suspendedPortKeys: [createPortKey(PORT)],
+    })
+
+    const textarea = screen.getByPlaceholderText(/waiting for device/)
+    const sendIcon = screen.getByTitle(/Select a port first|Send/)
+    expect(pointerEventsOf(sendIcon)).toBe('none')
+
+    act(() => {
+      vi.advanceTimersByTime(400)
+    })
+    const spinner = screen.getByTitle('Port suspended')
+    expect(spinner).toBeInTheDocument()
   })
 })

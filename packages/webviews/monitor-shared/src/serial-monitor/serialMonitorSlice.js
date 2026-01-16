@@ -369,6 +369,15 @@ const serialMonitorSlice = createSlice({
         const selKey = createPortKey(state.selectedPort)
         if (selKey === evtKey) {
           state.status = 'suspended'
+          state.machine = {
+            ...state.machine,
+            logical: {
+              kind: 'paused',
+              port: state.selectedPort,
+              reason: 'suspend',
+            },
+            desired: 'running',
+          }
         }
       }
     },
@@ -407,6 +416,12 @@ const serialMonitorSlice = createSlice({
       // Only react if this resume corresponds to our current selection
       if (pausedKey !== selectedKey) {
         return
+      }
+
+      state.machine = {
+        ...state.machine,
+        logical: { kind: 'connecting', port: state.selectedPort },
+        desired: 'running',
       }
 
       // If upload made the board reappear on a different address, switch selection.
