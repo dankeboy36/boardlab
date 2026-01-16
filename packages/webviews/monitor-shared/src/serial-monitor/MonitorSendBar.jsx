@@ -30,7 +30,7 @@ function MonitorSendBar({ client, lineEnding }) {
   const selectedKey = selectedPort ? createPortKey(selectedPort) : undefined
   const hasDetectionSnapshot = monitorView.hasDetectionSnapshot
   const selectedDetected = monitorView.selectedDetected
-  const hasDetection = hasDetectionSnapshot && selectedDetected
+  // const hasDetection = hasDetectionSnapshot && selectedDetected
   // Allow manual start whenever a port is selected; do not over-block on
   // detection snapshots to keep play enabled after manual stops.
   const canControl = Boolean(selectedPort)

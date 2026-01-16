@@ -92,9 +92,7 @@ class MessengerControlTransport {
     return this._didChangeMonitorSettings.event
   }
 
-  /**
-   * @returns {import('@c4312/evt').Event<MonitorPhysicalState>}
-   */
+  /** @returns {import('@c4312/evt').Event<MonitorPhysicalState>} */
   get onDidChangePhysicalState() {
     return this._didChangePhysicalState.event
   }
@@ -342,9 +340,7 @@ export class MonitorClient {
     return this._didResumeMonitor.event
   }
 
-  /**
-   * @returns {import('@c4312/evt').Event<MonitorPhysicalState>}
-   */
+  /** @returns {import('@c4312/evt').Event<MonitorPhysicalState>} */
   get onDidChangePhysicalState() {
     return this._didChangePhysicalState.event
   }

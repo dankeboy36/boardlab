@@ -418,7 +418,7 @@ export class MonitorLogicalTracker {
     const detectedKeys = new Set(
       Object.values(detectedPorts ?? {}).map(({ port }) => createPortKey(port))
     )
-    for (const [portKey, context] of this.contexts.entries()) {
+    for (const [, context] of this.contexts.entries()) {
       const selected = context.selectedPort
       if (!selected) continue
       const key = createPortKey(selected)

@@ -149,7 +149,7 @@ describe('MonitorSendBar', () => {
       suspendedPortKeys: [createPortKey(PORT)],
     })
 
-    const textarea = screen.getByPlaceholderText(/waiting for device/)
+    // const textarea = screen.getByPlaceholderText(/waiting for device/)
     const sendIcon = screen.getByTitle(/Select a port first|Send/)
     expect(pointerEventsOf(sendIcon)).toBe('none')
 

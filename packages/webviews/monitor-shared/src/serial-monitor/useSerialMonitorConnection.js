@@ -74,6 +74,7 @@ export function useSerialMonitorConnection({
   const autoplayRef = useRef(options?.autoplay ?? true)
   const disconnectHoldMsRef = useRef(options?.disconnectHoldMs ?? 1500)
   const coldStartMsRef = useRef(options?.coldStartMs ?? 1000)
+  const selectedBaudrateRef = useRef(selectedBaudrate)
 
   // Keep options in sync
   useEffect(() => {
@@ -81,6 +82,10 @@ export function useSerialMonitorConnection({
     disconnectHoldMsRef.current = options?.disconnectHoldMs ?? 1500
     coldStartMsRef.current = options?.coldStartMs ?? 1000
   }, [options?.autoplay, options?.disconnectHoldMs, options?.coldStartMs])
+
+  useEffect(() => {
+    selectedBaudrateRef.current = selectedBaudrate
+  }, [selectedBaudrate])
 
   useEffect(() => {
     autoplayRef.current = autoPlay
@@ -111,7 +116,7 @@ export function useSerialMonitorConnection({
   const triggerReconnect = useCallback(
     (reason) => {
       const portKey = buildPortKey(selectedPort)
-      const baudrate = selectedBaudrate
+      const baudrate = selectedBaudrateRef.current
       if (abortRef.current?.signal?.aborted) {
         abortRef.current = undefined
       }
@@ -137,7 +142,7 @@ export function useSerialMonitorConnection({
       })
       setForceReconnect((prev) => prev + 1)
     },
-    [selectedPort, selectedBaudrate]
+    [selectedPort]
   )
 
   const selectedDetectedRef = useRef(false)
@@ -146,9 +151,31 @@ export function useSerialMonitorConnection({
   const forcedAbsentRef = useRef(false)
   const bridgeUnavailableRef = useRef(false)
   const machineRef = useRef(machine)
+  const prevLogicalRef = useRef(machine?.logical)
   useEffect(() => {
     machineRef.current = machine
   }, [machine])
+
+  useEffect(() => {
+    const prev = prevLogicalRef.current
+    const next = machine?.logical
+    const wasSuspended =
+      prev &&
+      prev.kind === 'paused' &&
+      (prev.reason === 'suspend' ||
+        prev.reason === 'resource-busy' ||
+        prev.reason === 'resource-missing')
+    const nowSuspended =
+      next &&
+      next.kind === 'paused' &&
+      (next.reason === 'suspend' ||
+        next.reason === 'resource-busy' ||
+        next.reason === 'resource-missing')
+    if (wasSuspended && !nowSuspended) {
+      triggerReconnect('suspend-cleared')
+    }
+    prevLogicalRef.current = next
+  }, [machine, triggerReconnect])
 
   useEffect(() => {
     const ports = detectedPorts ?? {}
@@ -226,7 +253,7 @@ export function useSerialMonitorConnection({
   const playNow = () => {
     emitWebviewTraceEvent('webviewMonitorPlay', {
       portKey: buildPortKey(selectedPort),
-      baudrate: selectedBaudrate,
+      baudrate: selectedBaudrateRef.current,
       hasClient: !!client,
       userStopped: userStoppedRef.current,
     })
@@ -252,7 +279,7 @@ export function useSerialMonitorConnection({
   const stopNow = () => {
     emitWebviewTraceEvent('webviewMonitorStop', {
       portKey: buildPortKey(selectedPort),
-      baudrate: selectedBaudrate,
+      baudrate: selectedBaudrateRef.current,
       hasClient: !!client,
     })
     dispatchEvent({ type: 'USER_STOP' })
@@ -271,6 +298,7 @@ export function useSerialMonitorConnection({
 
   // Core effect: manages stream lifecycle and reconnect policy
   useEffect(() => {
+    const currentBaudrate = selectedBaudrateRef.current
     // If disabled, abort any current stream and skip
     if (!enabled) {
       if (abortRef.current) {
@@ -314,7 +342,7 @@ export function useSerialMonitorConnection({
       })
       return
     }
-    if (requiresBaudrate && !selectedBaudrate) {
+    if (requiresBaudrate && !currentBaudrate) {
       console.info('[monitor] effect waiting for baudrate')
       awaitingBaudRef.current = true
       emitWebviewTraceEvent('webviewMonitorAwaitBaudrate', {
@@ -328,11 +356,19 @@ export function useSerialMonitorConnection({
     const selectedDetected = selectedDetectedRef.current
     const detected =
       hasDetectionSnapshot && selectedDetected && !forcedAbsentRef.current
+    const logical = machineRef.current?.logical
+    const isSuspended =
+      logical &&
+      logical.kind === 'paused' &&
+      (logical.reason === 'suspend' ||
+        logical.reason === 'resource-busy' ||
+        logical.reason === 'resource-missing')
     const shouldStart =
       !userStoppedRef.current &&
       autoplayRef.current &&
       detected &&
-      !abortRef.current
+      !abortRef.current &&
+      !isSuspended
 
     console.info('[monitor] effect evaluate', {
       autoPlay: autoplayRef.current,
@@ -340,11 +376,12 @@ export function useSerialMonitorConnection({
       hasDetectionSnapshot,
       userStopped: userStoppedRef.current,
       aborting: !!abortRef.current,
+      suspended: !!isSuspended,
       shouldStart,
     })
     emitWebviewTraceEvent('webviewMonitorEffectEvaluate', {
       portKey: buildPortKey(selectedPort),
-      baudrate: selectedBaudrate,
+      baudrate: currentBaudrate,
       autoPlay: autoplayRef.current,
       detected,
       hasDetectionSnapshot,
@@ -352,6 +389,14 @@ export function useSerialMonitorConnection({
       aborting: !!abortRef.current,
       shouldStart,
     })
+
+    if (isSuspended) {
+      emitWebviewTraceEvent('webviewMonitorEffectSkip', {
+        reason: 'suspended',
+        portKey: buildPortKey(selectedPort),
+      })
+      return
+    }
 
     // Manage disconnect hold lifecycle
     if (disconnectHoldRef.current) {
@@ -427,28 +472,29 @@ export function useSerialMonitorConnection({
     openedAtRef.current = Date.now()
 
     const startStream = async () => {
+      const startBaudrate = selectedBaudrateRef.current
       emitWebviewTraceEvent('webviewMonitorOpenStart', {
         seq: mySeq,
         startToken,
         portKey: buildPortKey(selectedPort),
-        baudrate: selectedBaudrate,
+        baudrate: startBaudrate,
       })
       console.info('[monitor] opening monitor', {
         seq: mySeq,
         port: selectedPort,
-        baudrate: selectedBaudrate,
+        baudrate: startBaudrate,
       })
       let reader
       try {
         reader = await client.openMonitor(
-          { port: selectedPort, baudrate: selectedBaudrate },
+          { port: selectedPort, baudrate: startBaudrate },
           { signal }
         )
         emitWebviewTraceEvent('webviewMonitorOpenReady', {
           seq: mySeq,
           startToken,
           portKey: buildPortKey(selectedPort),
-          baudrate: selectedBaudrate,
+          baudrate: startBaudrate,
         })
         if (
           mySeq !== seqRef.current ||

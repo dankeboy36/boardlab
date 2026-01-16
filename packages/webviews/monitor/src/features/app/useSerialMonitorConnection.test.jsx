@@ -20,6 +20,8 @@ const SERIAL_PORT = {
   address: '/dev/mock0',
 }
 
+const noop = () => {}
+
 const MONITOR_SETTINGS = {
   protocols: {
     serial: {
@@ -86,10 +88,10 @@ function TestHarness({ client, detectedPorts, autoPlay }) {
     detectedPorts,
     selectedBaudrate: '9600',
     monitorSettingsByProtocol: MONITOR_SETTINGS,
-    onText: () => {},
-    onStart: () => {},
-    onStop: () => {},
-    onBusy: () => {},
+    onText: noop,
+    onStart: noop,
+    onStop: noop,
+    onBusy: noop,
     options: { coldStartMs: 0, disconnectHoldMs: 0 },
     enabled: true,
     autoPlay,
@@ -108,10 +110,10 @@ const StatefulHarness = forwardRef(
       detectedPorts,
       selectedBaudrate: '9600',
       monitorSettingsByProtocol: MONITOR_SETTINGS,
-      onText: () => {},
-      onStart: () => {},
-      onStop: () => {},
-      onBusy: () => {},
+      onText: noop,
+      onStart: noop,
+      onStop: noop,
+      onBusy: noop,
       options: { coldStartMs: 0, disconnectHoldMs: 0 },
       enabled: true,
       autoPlay,
@@ -138,6 +140,7 @@ StatefulHarness.displayName = 'StatefulHarness'
 const SingleHarness = forwardRef(({ client, initialAutoPlay = true }, ref) => {
   const [detectedPorts, setDetectedPorts] = useState({})
   const [autoPlay, setAutoPlay] = useState(initialAutoPlay)
+  const [machine, setMachine] = useState()
 
   const controls = useSerialMonitorConnection({
     client,
@@ -145,18 +148,20 @@ const SingleHarness = forwardRef(({ client, initialAutoPlay = true }, ref) => {
     detectedPorts,
     selectedBaudrate: '9600',
     monitorSettingsByProtocol: MONITOR_SETTINGS,
-    onText: () => {},
-    onStart: () => {},
-    onStop: () => {},
-    onBusy: () => {},
+    onText: noop,
+    onStart: noop,
+    onStop: noop,
+    onBusy: noop,
     options: { coldStartMs: 0, disconnectHoldMs: 0 },
     enabled: true,
     autoPlay,
+    machine,
   })
 
   useImperativeHandle(ref, () => ({
     setDetectedPorts,
     setAutoPlay,
+    setMachine,
     play: controls.play,
     stop: controls.stop,
   }))
@@ -164,6 +169,34 @@ const SingleHarness = forwardRef(({ client, initialAutoPlay = true }, ref) => {
   return null
 })
 SingleHarness.displayName = 'SingleHarness'
+
+const BaudrateHarness = forwardRef(({ client }, ref) => {
+  const [detectedPorts, setDetectedPorts] = useState({})
+  const [selectedBaudrate, setSelectedBaudrate] = useState('9600')
+
+  useSerialMonitorConnection({
+    client,
+    selectedPort: SERIAL_PORT,
+    detectedPorts,
+    selectedBaudrate,
+    monitorSettingsByProtocol: MONITOR_SETTINGS,
+    onText: noop,
+    onStart: noop,
+    onStop: noop,
+    onBusy: noop,
+    options: { coldStartMs: 0, disconnectHoldMs: 0 },
+    enabled: true,
+    autoPlay: true,
+  })
+
+  useImperativeHandle(ref, () => ({
+    setDetectedPorts,
+    setSelectedBaudrate,
+  }))
+
+  return null
+})
+BaudrateHarness.displayName = 'BaudrateHarness'
 
 describe('useSerialMonitorConnection', () => {
   beforeEach(() => {
@@ -295,5 +328,106 @@ describe('useSerialMonitorConnection', () => {
     await waitFor(() =>
       expect(openMonitor.mock.calls.length).toBeGreaterThan(initialCalls)
     )
+  })
+
+  it('keeps the stream alive when baudrate changes while connected', async () => {
+    const openMonitor = vi.fn((_, { signal }) =>
+      Promise.resolve(createBlockingReader(signal))
+    )
+    const client = { openMonitor }
+
+    const controls = {
+      current: /**
+       * @type {null | {
+       *   setDetectedPorts: (ports: any) => void
+       *   setSelectedBaudrate: (baud: string) => void
+       * }}
+       */ (null),
+    }
+
+    render(
+      <BaudrateHarness
+        client={client}
+        ref={(value) => {
+          controls.current = value
+        }}
+      />
+    )
+
+    act(() => {
+      controls.current?.setDetectedPorts({
+        '/dev/mock0': { port: { ...SERIAL_PORT } },
+      })
+    })
+
+    await waitFor(() => expect(openMonitor).toHaveBeenCalledTimes(1))
+    const initialCalls = openMonitor.mock.calls.length
+
+    act(() => {
+      controls.current?.setSelectedBaudrate('115200')
+    })
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
+
+    expect(openMonitor.mock.calls.length).toBe(initialCalls)
+  })
+
+  it('does not start while suspended (paused: suspend)', async () => {
+    const openMonitor = vi.fn()
+    const client = { openMonitor }
+    const detectedPortsWithDevice = {
+      '/dev/mock0': { port: { ...SERIAL_PORT } },
+    }
+
+    const controls = {
+      current: /**
+       * @type {null | {
+       *   setDetectedPorts: (ports: any) => void
+       *   setMachine: (m: any) => void
+       * }}
+       */ (null),
+    }
+
+    render(
+      <SingleHarness
+        client={client}
+        ref={(value) => {
+          controls.current = value
+        }}
+      />
+    )
+
+    act(() => {
+      controls.current?.setMachine({
+        logical: { kind: 'paused', port: SERIAL_PORT, reason: 'suspend' },
+        desired: 'running',
+        currentAttemptId: null,
+        lastCompletedAttemptId: 1,
+        selectedPort: SERIAL_PORT,
+        selectedDetected: true,
+      })
+      controls.current?.setDetectedPorts(detectedPortsWithDevice)
+    })
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    })
+
+    expect(openMonitor).not.toHaveBeenCalled()
+
+    act(() => {
+      controls.current?.setMachine({
+        logical: { kind: 'connecting', port: SERIAL_PORT },
+        desired: 'running',
+        currentAttemptId: null,
+        lastCompletedAttemptId: 1,
+        selectedPort: SERIAL_PORT,
+        selectedDetected: true,
+      })
+    })
+
+    await waitFor(() => expect(openMonitor).toHaveBeenCalledTimes(1))
   })
 })
