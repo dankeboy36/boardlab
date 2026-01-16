@@ -19,14 +19,6 @@ export const selectBoardsList = createSelector(
 /**
  * @type {(state: {
  *   serialMonitor: import('./serialMonitorSlice.js').SerialMonitorState
- * }) => string[]}
- */
-export const selectSuspendedPortKeys = (state) =>
-  state.serialMonitor.suspendedPortKeys
-
-/**
- * @type {(state: {
- *   serialMonitor: import('./serialMonitorSlice.js').SerialMonitorState
  * }) => import('./monitorFsm.js').MonitorContext}
  */
 export const selectMonitorMachine = (state) => state.serialMonitor.machine

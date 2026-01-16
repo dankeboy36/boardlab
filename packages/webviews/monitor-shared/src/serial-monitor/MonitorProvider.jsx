@@ -35,8 +35,6 @@ import {
   setMonitorSettingsByProtocol,
   setSelectedBaudrate,
   setSelectedPort,
-  startMonitor,
-  stopMonitor,
   updateDetectedPorts,
 } from './serialMonitorSlice.js'
 import { useSerialMonitorConnection } from './useSerialMonitorConnection.js'
@@ -155,12 +153,10 @@ export function MonitorProvider({ client, children, extensionClient }) {
   )
 
   const onStreamStart = useCallback(() => {
-    dispatch(startMonitor())
     notify('start')
   }, [dispatch, notify])
 
   const onStreamStop = useCallback(() => {
-    dispatch(stopMonitor())
     notify('stop')
   }, [dispatch, notify])
 

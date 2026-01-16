@@ -5,16 +5,10 @@ import { createBoardsList, createPortKey } from 'boards-list'
 
 import { initialMonitorContext, reduceMonitorContext } from './monitorFsm.js'
 
-/** @typedef {'idle' | 'pending' | 'connected' | 'suspended' | 'error'} MonitorStatus */
-
 /**
  * @typedef {Object} LocalSerialMonitorState
  * @property {import('boards-list').PortIdentifier | undefined} selectedPort
- * @property {boolean} started
  * @property {boolean} autoPlay
- * @property {MonitorStatus} status
- * @property {string} [error]
- * @property {string[]} suspendedPortKeys
  * @property {import('./monitorFsm.js').MonitorContext} machine
  * @property {import('@boardlab/protocol').MonitorPhysicalState[]} physicalStates
  */
@@ -126,11 +120,8 @@ const initialState = {
   monitorSettingsByProtocol: { protocols: {} },
   selectedPort: undefined,
   selectedBaudrates: [],
-  started: false,
-  status: 'idle',
   boardsListItems: [],
   boardsListPorts: [],
-  suspendedPortKeys: [],
   autoPlay: true,
   machine: initialMonitorContext(),
   physicalStates: [],
@@ -145,27 +136,13 @@ const serialMonitorSlice = createSlice({
         detectedPorts,
         monitorSettingsByProtocol,
         selectedBaudrates,
-        suspendedPortKeys,
-        runningMonitors,
         physicalStates,
       } = action.payload
-      const runningEntries = Array.isArray(runningMonitors)
-        ? runningMonitors
-        : []
-      const runningKeys = new Set(
-        runningEntries.map(({ port }) => createPortKey(port))
-      )
       state.detectedPorts = detectedPorts
       state.monitorSettingsByProtocol = monitorSettingsByProtocol
       state.selectedBaudrates = selectedBaudrates
-      state.started = false
       state.physicalStates = Array.isArray(physicalStates) ? physicalStates : []
       state.machine = initialMonitorContext()
-      const filteredSuspended = Array.isArray(suspendedPortKeys)
-        ? suspendedPortKeys.filter((key) => runningKeys.has(key))
-        : []
-      state.suspendedPortKeys = filteredSuspended
-      state.status = 'idle'
       // Recompute supported baudrates for the current selection
       state.supportedBaudrates = computeSupportedBaudrates(state)
     },
@@ -200,18 +177,6 @@ const serialMonitorSlice = createSlice({
         state.selectedBaudrates = state.selectedBaudrates.filter(
           ([port]) => createPortKey(port) !== createPortKey(prevSelectedPort)
         )
-      }
-
-      // Reflect suspension in status for the selected port
-      if (state.selectedPort) {
-        const selKey = createPortKey(state.selectedPort)
-        if (state.suspendedPortKeys.includes(selKey)) {
-          state.status = 'suspended'
-        } else {
-          state.status = state.started ? 'connected' : 'idle'
-        }
-      } else {
-        state.status = 'idle'
       }
 
       // Update supported baudrates view
@@ -289,41 +254,11 @@ const serialMonitorSlice = createSlice({
     disconnect() {
       return initialState
     },
-    startMonitor(state) {
-      state.started = true
-      state.autoPlay = true
-      if (state.selectedPort) {
-        const selKey = createPortKey(state.selectedPort)
-        state.suspendedPortKeys = state.suspendedPortKeys.filter(
-          (key) => key !== selKey
-        )
-        state.status = state.suspendedPortKeys.includes(selKey)
-          ? 'suspended'
-          : 'connected'
-      } else {
-        state.status = 'connected'
-      }
-    },
-    stopMonitor(state) {
-      state.started = false
-      if (state.selectedPort) {
-        const selKey = createPortKey(state.selectedPort)
-        state.suspendedPortKeys = state.suspendedPortKeys.filter(
-          (key) => key !== selKey
-        )
-      } else {
-        state.suspendedPortKeys = []
-      }
-      state.status = 'idle'
-    },
     setAutoPlay(state, action) {
       state.autoPlay = !!action.payload
     },
     applyMonitorEvent(state, action) {
       state.machine = reduceMonitorContext(state.machine, action.payload)
-      const projection = projectMachineState(state.machine)
-      state.started = projection.started
-      state.status = projection.status
     },
     setPhysicalStates(state, action) {
       state.physicalStates = Array.isArray(action.payload) ? action.payload : []
@@ -347,28 +282,9 @@ const serialMonitorSlice = createSlice({
      */
     pauseMonitor(state, action) {
       const evt = action.payload
-      const evtKey = createPortKey(evt.port)
-
-      if (!state.started) {
-        state.suspendedPortKeys = state.suspendedPortKeys.filter(
-          (key) => key !== evtKey
-        )
-        if (
-          state.selectedPort &&
-          createPortKey(state.selectedPort) === evtKey
-        ) {
-          state.status = 'idle'
-        }
-        return
-      }
-
-      if (!state.suspendedPortKeys.includes(evtKey)) {
-        state.suspendedPortKeys.push(evtKey)
-      }
       if (state.selectedPort) {
         const selKey = createPortKey(state.selectedPort)
-        if (selKey === evtKey) {
-          state.status = 'suspended'
+        if (selKey === createPortKey(evt.port)) {
           state.machine = {
             ...state.machine,
             logical: {
@@ -391,30 +307,13 @@ const serialMonitorSlice = createSlice({
       const evt = action.payload
 
       if (!state.selectedPort) {
-        state.status = state.started ? 'connected' : 'idle'
         return
       }
 
-      const pausedKey = createPortKey(evt.didPauseOnPort)
-
-      // Clear suspension for the paused port
-      state.suspendedPortKeys = state.suspendedPortKeys.filter(
-        (k) => k !== pausedKey
-      )
-      // If the device reappeared on a new port, ensure that new port is not considered suspended
-      const resumedKeyMaybe = evt.didResumeOnPort
-        ? createPortKey(evt.didResumeOnPort)
-        : null
-      if (resumedKeyMaybe) {
-        state.suspendedPortKeys = state.suspendedPortKeys.filter(
-          (k) => k !== resumedKeyMaybe
-        )
-      }
-
-      const selectedKey = createPortKey(state.selectedPort)
-
       // Only react if this resume corresponds to our current selection
-      if (pausedKey !== selectedKey) {
+      if (
+        createPortKey(evt.didPauseOnPort) !== createPortKey(state.selectedPort)
+      ) {
         return
       }
 
@@ -450,17 +349,6 @@ const serialMonitorSlice = createSlice({
         }
       }
 
-      // Determine status for the (potentially) new selection
-      if (state.selectedPort) {
-        const selKeyNow = createPortKey(state.selectedPort)
-        state.status = state.suspendedPortKeys.includes(selKeyNow)
-          ? 'suspended'
-          : state.started
-            ? 'connected'
-            : 'idle'
-      } else {
-        state.status = state.started ? 'connected' : 'idle'
-      }
       // Refresh supported baudrates for the (potentially) new selection
       state.supportedBaudrates = computeSupportedBaudrates(state)
     },
@@ -479,8 +367,6 @@ export const {
   mergeSelectedBaudrate,
   updateDetectedPorts,
   disconnect,
-  startMonitor,
-  stopMonitor,
   setMonitorSettingsByProtocol,
   pauseMonitor,
   resumeMonitor,
@@ -521,58 +407,4 @@ function computeProtocolBaudrateOptions(monitorSettingsByProtocol, protocol) {
   return { values, default: def }
 }
 
-/**
- * @param {import('./serialMonitorSlice').SerialMonitorState} state
- * @param {import('boards-list').PortIdentifier} port
- */
-export function isPortSuspended(state, port) {
-  const key = createPortKey(port)
-  return state.suspendedPortKeys.includes(key)
-}
-
-/**
- * Map the FSM context into the legacy `started` + `status` shape that the
- * persisted state relies on.
- *
- * @param {import('./monitorFsm.js').MonitorContext} machine
- */
-function projectMachineState(machine) {
-  const started = machine.desired === 'running' && !!machine.selectedPort
-  /** @type {MonitorStatus} */
-  let status = 'idle'
-  switch (machine.logical.kind) {
-    case 'waitingForPort':
-      status =
-        machine.logical.reason === 'port-temporarily-missing'
-          ? 'suspended'
-          : 'pending'
-      break
-    case 'connecting':
-      status = 'pending'
-      break
-    case 'active':
-      status = 'connected'
-      break
-    case 'paused':
-      if (machine.logical.reason === 'suspend') {
-        status = 'suspended'
-      } else if (machine.logical.reason === 'resource-missing') {
-        status = 'suspended'
-      } else if (machine.logical.reason === 'resource-busy') {
-        status = started ? 'pending' : 'idle'
-      } else {
-        status = started ? 'pending' : 'idle'
-      }
-      break
-    case 'error':
-      status = 'error'
-      break
-    case 'closed':
-      status = 'idle'
-      break
-    default:
-      status = 'idle'
-      break
-  }
-  return { started, status }
-}
+// Legacy projection removed; monitor view derives status directly from FSM.

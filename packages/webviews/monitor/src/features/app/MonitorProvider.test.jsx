@@ -71,8 +71,6 @@ function createStubClient() {
       detectedPorts: {},
       monitorSettingsByProtocol: { protocols: {} },
       selectedBaudrates: [],
-      suspendedPortKeys: [],
-      runningMonitors: [],
       physicalStates: [],
     }),
     detectedPorts: vi.fn().mockResolvedValue({}),

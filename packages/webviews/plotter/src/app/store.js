@@ -57,10 +57,8 @@ store.subscribe(() => {
     serialMonitor: {
       selectedPort: state.serialMonitor.selectedPort,
       selectedBaudrates: state.serialMonitor.selectedBaudrates,
-      started: state.serialMonitor.started,
-      status: state.serialMonitor.status,
-      suspendedPortKeys: state.serialMonitor.suspendedPortKeys,
       autoPlay: state.serialMonitor.autoPlay,
+      machine: state.serialMonitor.machine,
     },
     plotter: {
       maxPoints: state.plotter.maxPoints,

@@ -12,8 +12,6 @@ describe('serialMonitorSlice suspension', () => {
     const base = reducer(undefined, { type: '@@INIT' })
     const pre = {
       ...base,
-      started: true,
-      status: 'connected',
       selectedPort: PORT,
       machine: {
         logical: { kind: 'active', port: PORT },
@@ -32,7 +30,6 @@ describe('serialMonitorSlice suspension', () => {
       })
     )
 
-    expect(next.status).toBe('suspended')
     expect(next.machine.logical).toEqual({
       kind: 'paused',
       port: PORT,

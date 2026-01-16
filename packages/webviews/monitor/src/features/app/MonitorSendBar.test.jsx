@@ -46,8 +46,6 @@ describe('MonitorSendBar', () => {
       selectedPort: PORT,
       selectedBaudrates: [[PORT, '9600']],
       detectedPorts: {},
-      started: false,
-      status: 'idle',
     })
 
     const startIcon = screen.getByTitle('Start (open monitor)')
@@ -73,8 +71,6 @@ describe('MonitorSendBar', () => {
       selectedPort: PORT,
       selectedBaudrates: [[PORT, '9600']],
       detectedPorts,
-      started: false,
-      status: 'idle',
     })
 
     const startIcon = screen.getByTitle('Start (open monitor)')
@@ -146,7 +142,6 @@ describe('MonitorSendBar', () => {
         selectedPort: PORT,
         selectedDetected: true,
       },
-      suspendedPortKeys: [createPortKey(PORT)],
     })
 
     // const textarea = screen.getByPlaceholderText(/waiting for device/)

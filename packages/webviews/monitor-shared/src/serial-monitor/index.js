@@ -27,8 +27,6 @@ export {
   setMonitorSettingsByProtocol,
   setSelectedBaudrate,
   setSelectedPort,
-  startMonitor,
-  stopMonitor,
   updateDetectedPorts,
 } from './serialMonitorSlice.js'
 export { useSerialMonitorConnection } from './useSerialMonitorConnection.js'

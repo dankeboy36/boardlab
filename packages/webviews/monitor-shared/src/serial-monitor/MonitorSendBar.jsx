@@ -56,11 +56,7 @@ function MonitorSendBar({ client, lineEnding }) {
   }, [monitorView.status])
 
   const isSuspended =
-    showSuspended &&
-    monitorView.started &&
-    monitorView.status === 'suspended' &&
-    selectedKey &&
-    (serialState.suspendedPortKeys ?? []).some((key) => key === selectedKey)
+    showSuspended && monitorView.started && monitorView.status === 'suspended'
 
   const lineEndingDescription = (() => {
     switch (lineEnding) {

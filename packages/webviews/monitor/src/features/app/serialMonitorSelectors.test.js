@@ -16,11 +16,8 @@ function baseState(overrides) {
       monitorSettingsByProtocol: { protocols: {} },
       selectedPort: PORT,
       selectedBaudrates: [[PORT, '9600']],
-      started: false,
-      status: 'idle',
       boardsListItems: [],
       boardsListPorts: [],
-      suspendedPortKeys: [],
       autoPlay: true,
       machine: {
         logical: { kind: 'idle' },
