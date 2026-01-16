@@ -7,7 +7,11 @@ import { VscodeIcon } from 'vscode-react-elements-x'
 import MonitorPlayStopButton from './MonitorPlayStopButton.jsx'
 import { useMonitorController } from './MonitorProvider.jsx'
 import SendPanel from './SendPanel.jsx'
-import { selectSerialMonitor } from './serialMonitorSelectors.js'
+import {
+  selectMonitorView,
+  selectSerialMonitor,
+} from './serialMonitorSelectors.js'
+import { emitWebviewTraceEvent } from './trace.js'
 
 /**
  * Combined play/stop and send row with connection summary.
@@ -19,21 +23,17 @@ import { selectSerialMonitor } from './serialMonitorSelectors.js'
  */
 function MonitorSendBar({ client, lineEnding }) {
   const serialState = useSelector(selectSerialMonitor)
+  const monitorView = useSelector(selectMonitorView)
   const { play, stop } = useMonitorController()
 
   const selectedPort = serialState.selectedPort
   const selectedKey = selectedPort ? createPortKey(selectedPort) : undefined
-  const hasDetectionSnapshot =
-    Object.keys(serialState.detectedPorts ?? {}).length > 0
-  const selectedDetected = selectedKey
-    ? Object.values(serialState.detectedPorts).some(
-        (p) => createPortKey(p.port) === selectedKey
-      )
-    : false
-  const canControl = Boolean(
-    selectedPort &&
-      (!hasDetectionSnapshot || selectedDetected || serialState.started)
-  )
+  const hasDetectionSnapshot = monitorView.hasDetectionSnapshot
+  const selectedDetected = monitorView.selectedDetected
+  const hasDetection = hasDetectionSnapshot && selectedDetected
+  // Allow manual start whenever a port is selected; do not over-block on
+  // detection snapshots to keep play enabled after manual stops.
+  const canControl = Boolean(selectedPort)
 
   const selectedBaudrate = (() => {
     if (!selectedKey) return undefined
@@ -45,7 +45,7 @@ function MonitorSendBar({ client, lineEnding }) {
 
   const [showSuspended, setShowSuspended] = useState(false)
   useEffect(() => {
-    if (serialState.status === 'suspended') {
+    if (monitorView.status === 'suspended') {
       const handle = setTimeout(() => setShowSuspended(true), 350)
       return () => {
         clearTimeout(handle)
@@ -53,12 +53,12 @@ function MonitorSendBar({ client, lineEnding }) {
     }
     setShowSuspended(false)
     return undefined
-  }, [serialState.status])
+  }, [monitorView.status])
 
   const isSuspended =
     showSuspended &&
-    serialState.started &&
-    serialState.status === 'suspended' &&
+    monitorView.started &&
+    monitorView.status === 'suspended' &&
     selectedKey &&
     (serialState.suspendedPortKeys ?? []).some((key) => key === selectedKey)
 
@@ -82,7 +82,7 @@ function MonitorSendBar({ client, lineEnding }) {
   let sendDisabled = !selectedPort
   let playDisabled = !canControl
 
-  const status = serialState.status
+  const status = monitorView.status
   const detected = selectedKey
     ? Object.values(serialState.detectedPorts ?? {}).some(
         (p) => createPortKey(p.port) === selectedKey
@@ -103,8 +103,40 @@ function MonitorSendBar({ client, lineEnding }) {
     sendDisabled = true
   } else if (status !== 'connected') {
     sendPlaceholder = `Start the monitor on ${selectedPort.address} to send messages`
+    // Leave play enabled; only block sending until a connection is active.
     sendDisabled = true
   }
+
+  // Emit a lightweight trace when control state changes to help diagnose
+  // disabled start/play issues.
+  const lastTraceRef = useState(() => ({ current: '' }))[0]
+  useEffect(() => {
+    const payload = {
+      portKey: selectedKey,
+      status,
+      started: monitorView.started,
+      hasDetectionSnapshot,
+      selectedDetected,
+      canControl,
+      playDisabled,
+      sendDisabled,
+    }
+    const signature = JSON.stringify(payload)
+    if (signature !== lastTraceRef.current) {
+      lastTraceRef.current = signature
+      emitWebviewTraceEvent('webviewMonitorControls', payload)
+    }
+  }, [
+    selectedKey,
+    status,
+    monitorView.started,
+    hasDetectionSnapshot,
+    selectedDetected,
+    canControl,
+    playDisabled,
+    sendDisabled,
+    lastTraceRef,
+  ])
 
   return (
     <div
@@ -122,7 +154,7 @@ function MonitorSendBar({ client, lineEnding }) {
         }}
       >
         <MonitorPlayStopButton
-          started={serialState.started}
+          started={monitorView.started}
           canControl={!playDisabled}
           onPlay={() => play()}
           onStop={() => stop()}

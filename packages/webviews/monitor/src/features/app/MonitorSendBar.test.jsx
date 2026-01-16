@@ -100,8 +100,14 @@ describe('MonitorSendBar', () => {
       selectedPort: PORT,
       selectedBaudrates: [[PORT, '9600']],
       detectedPorts,
-      started: true,
-      status: 'connected',
+      machine: {
+        logical: { kind: 'active', port: PORT },
+        desired: 'running',
+        currentAttemptId: null,
+        lastCompletedAttemptId: 1,
+        selectedPort: PORT,
+        selectedDetected: true,
+      },
     })
 
     const textarea = screen.getByPlaceholderText(

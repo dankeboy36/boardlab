@@ -281,7 +281,7 @@ export function reduceMonitorContext(state, event) {
       return {
         ...ctx,
         logical: ctx.selectedPort
-          ? { kind: 'paused', port: ctx.selectedPort, reason: 'suspend' }
+          ? { kind: 'paused', port: ctx.selectedPort, reason: 'user' }
           : { kind: 'idle' },
         currentAttemptId: null,
       }

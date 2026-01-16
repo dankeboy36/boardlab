@@ -47,6 +47,10 @@ import {
   type TraceEventNotification,
 } from '@boardlab/protocol'
 
+import {
+  MonitorLogicalTracker,
+  type MonitorPhysicalState,
+} from './monitorLogicalTracker'
 import type { CliContext } from '../cli/context'
 import {
   MonitorBridgeClient,
@@ -846,6 +850,7 @@ export class MonitorManager implements vscode.Disposable {
   >()
 
   private readonly physicalStates = new MonitorPhysicalStateRegistry()
+  private readonly logicalTracker = new MonitorLogicalTracker()
   private readonly monitorStates = new Map<string, MonitorRuntimeState>()
   private readonly selectedBaudrateCache = new Map<string, string>()
   private readonly onDidChangeMonitorStateEmitter =
@@ -1070,8 +1075,24 @@ export class MonitorManager implements vscode.Disposable {
             state
           )
         })
+        this.logicalTracker.applyPhysicalState(state as MonitorPhysicalState)
       })
     )
+
+    const unlistenLogical = this.logicalTracker.onDidChange(
+      ({ portKey, context }) => {
+        this.emitHostTrace('extMonitorState', {
+          portKey,
+          logical: context.logical,
+          desired: context.desired,
+          currentAttemptId: context.currentAttemptId,
+          lastCompletedAttemptId: context.lastCompletedAttemptId,
+          selectedDetected: context.selectedDetected,
+          lastError: context.lastError,
+        })
+      }
+    )
+    this.disposables.push({ dispose: () => unlistenLogical() })
   }
 
   dispose(): void {
@@ -1289,6 +1310,7 @@ export class MonitorManager implements vscode.Disposable {
       }
     })
     this.syncRunningMonitors(runningMonitors)
+    this.logicalTracker.applyDetectionSnapshot(this.detectedPorts)
 
     return {
       ...result,
@@ -1349,6 +1371,7 @@ export class MonitorManager implements vscode.Disposable {
     this.disposables.push(
       this.bridgeClient.onDidChangeDetectedPorts((ports) => {
         this.detectedPorts = ports
+        this.logicalTracker.applyDetectionSnapshot(ports)
         this.forEachClient((clientId, participant) => {
           this.sendNotificationSafe(
             clientId,
@@ -1450,6 +1473,10 @@ export class MonitorManager implements vscode.Disposable {
 
     this.disposables.push(
       this.bridgeClient.onDidStopMonitor((event) => {
+        // Make sure the host logical tracker records the user stop immediately
+        // even if the bridge stop notification arrives before any physical
+        // state change listeners run.
+        this.logicalTracker.applyEvent({ type: 'USER_STOP', port: event.port })
         this.physicalStates.markStop(event.port, {
           monitorSessionId: event.monitorSessionId,
           reason: 'stop',
@@ -1482,6 +1509,22 @@ export class MonitorManager implements vscode.Disposable {
         error
       )
       this.clientSessions.delete(clientId)
+    }
+  }
+
+  private emitHostTrace(
+    event: string,
+    data: Record<string, unknown> & { portKey?: string }
+  ) {
+    try {
+      this.bridgeClient.sendTraceEvent({
+        event,
+        data,
+        portKey: data.portKey as string | undefined,
+        src: { layer: 'ext', pid: process.pid },
+      })
+    } catch (error) {
+      this.logError('Failed to emit host trace', error)
     }
   }
 

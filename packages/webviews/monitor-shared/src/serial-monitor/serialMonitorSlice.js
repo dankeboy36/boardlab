@@ -2,10 +2,8 @@
 
 import { createSlice } from '@reduxjs/toolkit'
 import { createBoardsList, createPortKey } from 'boards-list'
-import {
-  initialMonitorContext,
-  reduceMonitorContext,
-} from './monitorFsm.js'
+
+import { initialMonitorContext, reduceMonitorContext } from './monitorFsm.js'
 
 /** @typedef {'idle' | 'pending' | 'connected' | 'suspended' | 'error'} MonitorStatus */
 
@@ -161,9 +159,7 @@ const serialMonitorSlice = createSlice({
       state.monitorSettingsByProtocol = monitorSettingsByProtocol
       state.selectedBaudrates = selectedBaudrates
       state.started = false
-      state.physicalStates = Array.isArray(physicalStates)
-        ? physicalStates
-        : []
+      state.physicalStates = Array.isArray(physicalStates) ? physicalStates : []
       state.machine = initialMonitorContext()
       const filteredSuspended = Array.isArray(suspendedPortKeys)
         ? suspendedPortKeys.filter((key) => runningKeys.has(key))
@@ -325,11 +321,12 @@ const serialMonitorSlice = createSlice({
     },
     applyMonitorEvent(state, action) {
       state.machine = reduceMonitorContext(state.machine, action.payload)
+      const projection = projectMachineState(state.machine)
+      state.started = projection.started
+      state.status = projection.status
     },
     setPhysicalStates(state, action) {
-      state.physicalStates = Array.isArray(action.payload)
-        ? action.payload
-        : []
+      state.physicalStates = Array.isArray(action.payload) ? action.payload : []
     },
     upsertPhysicalState(state, action) {
       const incoming = action.payload
@@ -516,4 +513,51 @@ function computeProtocolBaudrateOptions(monitorSettingsByProtocol, protocol) {
 export function isPortSuspended(state, port) {
   const key = createPortKey(port)
   return state.suspendedPortKeys.includes(key)
+}
+
+/**
+ * Map the FSM context into the legacy `started` + `status` shape that the
+ * persisted state relies on.
+ *
+ * @param {import('./monitorFsm.js').MonitorContext} machine
+ */
+function projectMachineState(machine) {
+  const started = machine.desired === 'running' && !!machine.selectedPort
+  /** @type {MonitorStatus} */
+  let status = 'idle'
+  switch (machine.logical.kind) {
+    case 'waitingForPort':
+      status =
+        machine.logical.reason === 'port-temporarily-missing'
+          ? 'suspended'
+          : 'pending'
+      break
+    case 'connecting':
+      status = 'pending'
+      break
+    case 'active':
+      status = 'connected'
+      break
+    case 'paused':
+      if (machine.logical.reason === 'suspend') {
+        status = 'suspended'
+      } else if (machine.logical.reason === 'resource-missing') {
+        status = 'suspended'
+      } else if (machine.logical.reason === 'resource-busy') {
+        status = started ? 'pending' : 'idle'
+      } else {
+        status = started ? 'pending' : 'idle'
+      }
+      break
+    case 'error':
+      status = 'error'
+      break
+    case 'closed':
+      status = 'idle'
+      break
+    default:
+      status = 'idle'
+      break
+  }
+  return { started, status }
 }

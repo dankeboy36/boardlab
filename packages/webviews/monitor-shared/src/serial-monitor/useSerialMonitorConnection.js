@@ -35,6 +35,8 @@ const buildPortKey = (port) =>
  * @property {() => void} onBusy // called when server indicates HTTP 423
  * @property {boolean} [enabled=true] Default is `true`
  * @property {boolean} [autoPlay=true] Default is `true`
+ * @property {import('./monitorFsm.js').MonitorContext} [machine]
+ * @property {(event: import('./monitorFsm.js').MonitorEvent) => void} [dispatchEvent]
  * @property {UseSerialMonitorConnectionOptions} [options]
  * @returns {UseSerialMonitorConnectionResult}
  */
@@ -56,6 +58,8 @@ export function useSerialMonitorConnection({
   options,
   enabled = true,
   autoPlay = true,
+  machine,
+  dispatchEvent = () => {},
 }) {
   const selectedProtocol = selectedPort?.protocol
   const protocolEntry = selectedProtocol
@@ -83,6 +87,9 @@ export function useSerialMonitorConnection({
     if (!autoPlay) {
       userStoppedRef.current = true
     }
+    dispatchEvent({
+      type: autoPlay ? 'USER_START' : 'USER_STOP',
+    })
   }, [autoPlay])
 
   const userStoppedRef = useRef(false)
@@ -138,6 +145,10 @@ export function useSerialMonitorConnection({
   const prevDetectedRef = useRef(false)
   const forcedAbsentRef = useRef(false)
   const bridgeUnavailableRef = useRef(false)
+  const machineRef = useRef(machine)
+  useEffect(() => {
+    machineRef.current = machine
+  }, [machine])
 
   useEffect(() => {
     const ports = detectedPorts ?? {}
@@ -164,6 +175,13 @@ export function useSerialMonitorConnection({
         detected: isDetected,
         prevDetected,
       })
+      const evt = isDetected
+        ? { type: 'PORT_DETECTED', port: selectedPort }
+        : {
+            type: 'PORT_LOST',
+            port: selectedPort,
+          }
+      dispatchEvent(evt)
     }
     if (bridgeUnavailableRef.current && isDetected) {
       // Bridge previously unavailable; allow retry when the device reappears.
@@ -212,6 +230,7 @@ export function useSerialMonitorConnection({
       hasClient: !!client,
       userStopped: userStoppedRef.current,
     })
+    dispatchEvent({ type: 'USER_START' })
     console.info('[monitor] playNow', {
       hasClient: !!client,
       selectedPort,
@@ -236,6 +255,7 @@ export function useSerialMonitorConnection({
       baudrate: selectedBaudrate,
       hasClient: !!client,
     })
+    dispatchEvent({ type: 'USER_STOP' })
     console.info('[monitor] stopNow', {
       hasClient: !!client,
       selectedPort,
@@ -396,6 +416,11 @@ export function useSerialMonitorConnection({
     const signal = controller.signal
     pendingStartRef.current = true
     const startToken = ++startTokenRef.current
+    dispatchEvent({
+      type: 'OPEN_REQUESTED',
+      port: selectedPort,
+      attemptId: startToken,
+    })
 
     // Reset stream flags
     wasStreamingRef.current = false
@@ -437,6 +462,11 @@ export function useSerialMonitorConnection({
           seq: mySeq,
           portKey: buildPortKey(selectedPort),
         })
+        dispatchEvent({
+          type: 'OPEN_OK',
+          port: selectedPort,
+          attemptId: startToken,
+        })
         onStart()
         const decoder = new TextDecoder()
         while (true) {
@@ -452,6 +482,11 @@ export function useSerialMonitorConnection({
           seq: mySeq,
           portKey: buildPortKey(selectedPort),
           reason: 'done',
+        })
+        dispatchEvent({
+          type: 'STREAM_CLOSED',
+          port: selectedPort,
+          attemptId: startToken,
         })
         onStop()
         if (abortRef.current === controller) {
@@ -487,6 +522,11 @@ export function useSerialMonitorConnection({
             portKey: buildPortKey(selectedPort),
             reason: 'aborted',
           })
+          dispatchEvent({
+            type: 'STREAM_CLOSED',
+            port: selectedPort,
+            attemptId: startToken,
+          })
           onStop()
           if (abortRef.current === controller) {
             abortRef.current = undefined
@@ -505,6 +545,12 @@ export function useSerialMonitorConnection({
           message,
           code: errorCode,
           status: errorStatus,
+        })
+        dispatchEvent({
+          type: 'OPEN_FAIL',
+          port: selectedPort,
+          attemptId: startToken,
+          error: mapError(errorCode, errorStatus, message),
         })
         onStop()
         if (abortRef.current === controller) {
@@ -693,4 +739,23 @@ export function useSerialMonitorConnection({
     play: () => playNow(),
     stop: () => stopNow(),
   }
+}
+
+/**
+ * @param {string | undefined} code
+ * @param {number | undefined} status
+ * @param {string | undefined} message
+ * @returns {import('./monitorFsm.js').MonitorError}
+ */
+function mapError(code, status, message) {
+  if (code === 'port-busy' || status === 423) {
+    return { kind: 'busy', detail: message }
+  }
+  if (code === 'port-not-detected' || status === 404) {
+    return { kind: 'gone', detail: message }
+  }
+  if (status === 502) {
+    return { kind: 'bridgeDisconnected', detail: message }
+  }
+  return { kind: 'internal', detail: message }
 }
