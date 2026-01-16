@@ -340,6 +340,69 @@ function isSamePort(a: PortIdentifier, b: PortIdentifier): boolean {
   return createPortKey(a) === createPortKey(b)
 }
 
+function isSamePortOrUndefined(
+  a: PortIdentifier | undefined,
+  b: PortIdentifier | undefined
+): boolean {
+  if (!a && !b) return true
+  if (!a || !b) return false
+  return isSamePort(a, b)
+}
+
+function errorsEqual(a?: MonitorError, b?: MonitorError): boolean {
+  if (!a && !b) return true
+  if (!a || !b) return false
+  return a.kind === b.kind && (a as any).detail === (b as any).detail
+}
+
+function logicalEqual(
+  a: LogicalMonitorState,
+  b: LogicalMonitorState
+): boolean {
+  if (a.kind !== b.kind) return false
+  switch (a.kind) {
+    case 'idle':
+    case 'closed':
+      return true
+    case 'waitingForPort':
+      return (
+        b.kind === 'waitingForPort' &&
+        a.reason === b.reason &&
+        isSamePortOrUndefined(a.port, b.port)
+      )
+    case 'connecting':
+    case 'active':
+      return b.kind === a.kind && isSamePort(a.port, (b as any).port)
+    case 'paused':
+      return (
+        b.kind === 'paused' &&
+        a.reason === b.reason &&
+        isSamePort(a.port, b.port)
+      )
+    case 'error':
+      return (
+        b.kind === 'error' &&
+        isSamePortOrUndefined(a.port, b.port) &&
+        errorsEqual(a.error, b.error) &&
+        a.resumable === b.resumable
+      )
+    default:
+      return false
+  }
+}
+
+function contextsEqual(a: MonitorContext, b: MonitorContext): boolean {
+  return (
+    a.desired === b.desired &&
+    a.currentAttemptId === b.currentAttemptId &&
+    a.lastCompletedAttemptId === b.lastCompletedAttemptId &&
+    a.selectedDetected === b.selectedDetected &&
+    isSamePortOrUndefined(a.selectedPort, b.selectedPort) &&
+    logicalEqual(a.logical, b.logical) &&
+    errorsEqual(a.lastError, b.lastError)
+  )
+}
+
 type Listener = (args: { portKey: string; context: MonitorContext }) => void
 
 /**
@@ -392,11 +455,11 @@ export class MonitorLogicalTracker {
       previous ?? initialMonitorContext(),
       event
     )
-    if (!previous || previous !== next) {
+    if (!previous || !contextsEqual(previous, next)) {
       this.contexts.set(resolvedKey, next)
       this.emit({ portKey: resolvedKey, context: next })
     }
-    return next
+    return previous && contextsEqual(previous, next) ? previous : next
   }
 
   applyPhysicalState(state: MonitorPhysicalState): MonitorContext | undefined {

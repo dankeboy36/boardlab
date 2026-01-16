@@ -45,7 +45,7 @@ describe('monitorLogicalTracker', () => {
     expect(snapshot[0]?.context.logical.kind).toBe('paused')
     expect(snapshot[0]?.context.lastCompletedAttemptId).toBe(1)
     expect(changes.every((id) => id === 1)).toBe(true)
-    expect(changes.length).toBeGreaterThanOrEqual(9)
+    expect(changes.length).toBeGreaterThanOrEqual(4)
   })
 
   it('can start again after stop when detection stays true', () => {
@@ -150,5 +150,20 @@ describe('reduceMonitorContext', () => {
     })
     expect(failed.logical.kind).toBe('error')
     expect(failed.lastError).toEqual({ kind: 'internal', detail: 'boom' })
+  })
+})
+
+describe('deduplication', () => {
+  it('does not emit duplicate contexts for identical events', () => {
+    const tracker = new MonitorLogicalTracker()
+    const changes: string[] = []
+    tracker.onDidChange(({ context }) => {
+      changes.push(context.logical.kind)
+    })
+
+    tracker.applyEvent({ type: 'PORT_SELECTED', port: PORT, detected: true })
+    tracker.applyEvent({ type: 'PORT_SELECTED', port: PORT, detected: true })
+
+    expect(changes).toHaveLength(1)
   })
 })
