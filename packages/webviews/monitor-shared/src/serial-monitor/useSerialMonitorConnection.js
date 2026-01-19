@@ -95,7 +95,7 @@ export function useSerialMonitorConnection({
     dispatchEvent({
       type: autoPlay ? 'USER_START' : 'USER_STOP',
     })
-  }, [autoPlay])
+  }, [autoPlay, dispatchEvent])
 
   const userStoppedRef = useRef(false)
   const disconnectHoldRef = useRef(false)
@@ -246,7 +246,7 @@ export function useSerialMonitorConnection({
     } else {
       prevDetectedRef.current = isDetected
     }
-  }, [detectedPorts, selectedPort, triggerReconnect])
+  }, [detectedPorts, selectedPort, triggerReconnect, dispatchEvent])
 
   // Expose play/stop by mutating refs (consumers can call via returned functions if needed later)
   /** Force immediate reconnect attempt, clearing holds */
@@ -757,6 +757,7 @@ export function useSerialMonitorConnection({
     onText,
     enabled,
     triggerReconnect,
+    dispatchEvent,
   ])
 
   // If baudrate becomes available after being undefined (and required by protocol),

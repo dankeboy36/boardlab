@@ -355,10 +355,7 @@ function errorsEqual(a?: MonitorError, b?: MonitorError): boolean {
   return a.kind === b.kind && (a as any).detail === (b as any).detail
 }
 
-function logicalEqual(
-  a: LogicalMonitorState,
-  b: LogicalMonitorState
-): boolean {
+function logicalEqual(a: LogicalMonitorState, b: LogicalMonitorState): boolean {
   if (a.kind !== b.kind) return false
   switch (a.kind) {
     case 'idle':

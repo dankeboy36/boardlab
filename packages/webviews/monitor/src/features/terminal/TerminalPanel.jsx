@@ -100,6 +100,12 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
     /** @type {ReturnType<typeof setTimeout> | null} */ (null)
   )
 
+  const refreshScrollbar = useCallback(() => {
+    try {
+      psRef.current?.update()
+    } catch {}
+  }, [])
+
   useEffect(() => {
     const refreshFontFamily = () => {
       setCssFontFamily(readEditorFontFamily())
@@ -196,12 +202,6 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
       persistNow()
     }, 500)
   }, [persistNow])
-
-  const refreshScrollbar = useCallback(() => {
-    try {
-      psRef.current?.update()
-    } catch {}
-  }, [])
 
   useEffect(() => {
     try {
@@ -412,7 +412,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
         rafIdRef.current = null
       }
     }
-  }, [])
+  }, [refreshScrollbar])
 
   useImperativeHandle(
     ref,
@@ -473,7 +473,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [refreshScrollbar])
 
   useEffect(() => {
     return () => {

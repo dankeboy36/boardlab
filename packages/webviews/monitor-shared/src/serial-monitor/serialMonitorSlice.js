@@ -310,6 +310,8 @@ const serialMonitorSlice = createSlice({
         return
       }
 
+      const selectedKey = createPortKey(state.selectedPort)
+
       // Only react if this resume corresponds to our current selection
       if (
         createPortKey(evt.didPauseOnPort) !== createPortKey(state.selectedPort)

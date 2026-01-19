@@ -422,7 +422,7 @@ export function App(): JSX.Element {
     return () => {
       disposable.dispose()
     }
-  }, [documentUri])
+  }, [documentUri, selectedProfileKey])
 
   // Subscribe to active profile updates for this document and fetch initial value
   useEffect(() => {
@@ -795,7 +795,7 @@ export function App(): JSX.Element {
     return () => {
       disposed = true
     }
-  }, [selectedProfile?.name, selectedProfile?.fqbn, documentUri])
+  }, [selectedProfile, boardDetails, documentUri])
 
   const buildMasterTreeItems = useCallback((): ReadonlyArray<TreeNode> => {
     const items: TreeNode[] = []

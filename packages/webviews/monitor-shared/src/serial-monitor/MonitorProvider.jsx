@@ -154,11 +154,11 @@ export function MonitorProvider({ client, children, extensionClient }) {
 
   const onStreamStart = useCallback(() => {
     notify('start')
-  }, [dispatch, notify])
+  }, [notify])
 
   const onStreamStop = useCallback(() => {
     notify('stop')
-  }, [dispatch, notify])
+  }, [notify])
 
   const onStreamText = useCallback(
     (/** @type {string} */ text) => {
@@ -169,7 +169,6 @@ export function MonitorProvider({ client, children, extensionClient }) {
 
   const onStreamBusy = useCallback(() => {
     dispatch(setAutoPlay(false))
-    dispatch(stopMonitor())
   }, [dispatch])
 
   const applyPhysicalState = useCallback(
