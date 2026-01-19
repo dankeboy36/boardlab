@@ -554,6 +554,11 @@ export async function createServer(options = {}) {
       : 15_000
   const heartbeatTraceTimestamps = new Map()
   const heartbeatEmissionState = new Map()
+  const heartbeatSummaryIntervalMs = 10 * 60_000
+  const heartbeatStats = new Map()
+  const heartbeatSummaryTimer = setInterval(() => {
+    emitHeartbeatSummaries('interval')
+  }, heartbeatSummaryIntervalMs)
   const broadcastBridgeLog = (entry) => {
     portinoConnections.forEach((connection) =>
       safeNotify(connection, NotifyMonitorBridgeLog, entry)
@@ -561,6 +566,51 @@ export async function createServer(options = {}) {
   }
 
   const loggerId = 'bridge'
+
+  const emitHeartbeatSummary = (tokenHash, reason) => {
+    const stats = heartbeatStats.get(tokenHash)
+    if (!stats || stats.count === 0) return
+    const windowMs = Date.now() - stats.since
+    traceWriter.emit(
+      'heartbeatSummary',
+      {
+        tokenHash,
+        count: stats.count,
+        lastAgeMs: stats.lastAgeMs,
+        minAgeMs: stats.minAgeMs,
+        maxAgeMs: stats.maxAgeMs,
+        avgAgeMs: stats.sumAgeMs / stats.count,
+        windowMs,
+        reason,
+      },
+      { layer: 'bridge' }
+    )
+    heartbeatStats.delete(tokenHash)
+  }
+
+  const emitHeartbeatSummaries = (reason) => {
+    for (const tokenHash of heartbeatStats.keys()) {
+      emitHeartbeatSummary(tokenHash, reason)
+    }
+  }
+
+  const recordHeartbeatStat = (tokenHash, ageMs) => {
+    const now = Date.now()
+    const stats = heartbeatStats.get(tokenHash) ?? {
+      count: 0,
+      sumAgeMs: 0,
+      minAgeMs: Number.POSITIVE_INFINITY,
+      maxAgeMs: Number.NEGATIVE_INFINITY,
+      lastAgeMs: 0,
+      since: now,
+    }
+    stats.count += 1
+    stats.sumAgeMs += ageMs
+    stats.minAgeMs = Math.min(stats.minAgeMs, ageMs)
+    stats.maxAgeMs = Math.max(stats.maxAgeMs, ageMs)
+    stats.lastAgeMs = ageMs
+    heartbeatStats.set(tokenHash, stats)
+  }
   const logEntry = (level, args, context) => {
     const entry = {
       level,
@@ -749,6 +799,10 @@ export async function createServer(options = {}) {
         res.status(404).json({ error: 'unknown_token' })
         return
       }
+      const now = Date.now()
+      const ageMs = touch.ageMs ?? 0
+      const tokenHash = hashToken(token)
+      recordHeartbeatStat(tokenHash, ageMs)
       if (loggingConfig.heartbeat) {
         const logNow = Date.now()
         if (logNow - lastHeartbeatLogAt > 10_000) {
@@ -759,8 +813,6 @@ export async function createServer(options = {}) {
           })
         }
       }
-      const now = Date.now()
-      const ageMs = touch.ageMs ?? 0
       const state = heartbeatEmissionState.get(token) ?? {
         firstEmitted: false,
         lastEmitted: 0,
@@ -769,10 +821,11 @@ export async function createServer(options = {}) {
       const lateThreshold =
         intervalMs > 0 ? intervalMs * 1.5 : heartbeatTraceThrottleMs
       const isLate = intervalMs > 0 ? ageMs >= lateThreshold : false
-      const shouldEmit =
-        !state.firstEmitted ||
-        isLate ||
-        now - state.lastEmitted >= heartbeatTraceThrottleMs
+      const allowPerHeartbeat =
+        loggingConfig.heartbeat &&
+        (!state.firstEmitted ||
+          now - state.lastEmitted >= heartbeatTraceThrottleMs)
+      const shouldEmit = allowPerHeartbeat || isLate
       if (shouldEmit) {
         state.firstEmitted = true
         state.lastEmitted = now
@@ -781,23 +834,25 @@ export async function createServer(options = {}) {
         traceWriter.emit(
           'heartbeatDidReceive',
           {
-            tokenHash: hashToken(token),
+            tokenHash,
             ageMs,
             attachments: touch.attachments,
           },
           { layer: 'bridge' }
         )
       } else {
-        traceWriter.emitLogLine({
-          message: 'Heartbeat suppressed',
-          level: 'debug',
-          logger: 'bridge',
-          fields: {
-            tokenHash: hashToken(token),
-            ageMs,
-            attachments: touch.attachments,
-          },
-        })
+        if (loggingConfig.heartbeat) {
+          traceWriter.emitLogLine({
+            message: 'Heartbeat suppressed',
+            level: 'debug',
+            logger: 'bridge',
+            fields: {
+              tokenHash,
+              ageMs,
+              attachments: touch.attachments,
+            },
+          })
+        }
       }
       res.json({ ok: true })
     } catch (error) {
@@ -815,6 +870,7 @@ export async function createServer(options = {}) {
         return
       }
       const remaining = attachmentRegistry.detach(token)
+      emitHeartbeatSummary(hashToken(token), 'detach')
       heartbeatTraceTimestamps.delete(token)
       res.json({ remaining })
     } catch (error) {
@@ -2217,6 +2273,10 @@ export async function createServer(options = {}) {
         }
         globalClientIndex.clear()
       } catch {}
+      try {
+        clearInterval(heartbeatSummaryTimer)
+      } catch {}
+      emitHeartbeatSummaries('shutdown')
       traceWriter.emit(
         'logDidWrite',
         {
