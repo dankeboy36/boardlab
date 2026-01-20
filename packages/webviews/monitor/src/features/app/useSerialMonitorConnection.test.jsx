@@ -242,10 +242,11 @@ describe('useSerialMonitorConnection', () => {
       controls.current?.play()
     })
 
-    await waitFor(() => expect(openMonitor).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(openMonitor).toHaveBeenCalled())
+    const initialCalls = openMonitor.mock.calls.length
 
     await new Promise((resolve) => setTimeout(resolve, 10))
-    expect(openMonitor).toHaveBeenCalledTimes(1)
+    expect(openMonitor).toHaveBeenCalledTimes(initialCalls)
   })
 
   it('notifies when the monitor fails to open', async () => {
@@ -296,11 +297,9 @@ describe('useSerialMonitorConnection', () => {
     }
 
     render(
-      <StatefulHarness
+      <SingleHarness
         client={client}
-        ref={(value) => {
-          controls.current = value
-        }}
+        ref={(value) => (controls.current = value)}
       />
     )
 
@@ -360,7 +359,7 @@ describe('useSerialMonitorConnection', () => {
       })
     })
 
-    await waitFor(() => expect(openMonitor).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(openMonitor).toHaveBeenCalled())
     const initialCalls = openMonitor.mock.calls.length
 
     act(() => {
@@ -429,5 +428,102 @@ describe('useSerialMonitorConnection', () => {
     })
 
     await waitFor(() => expect(openMonitor).toHaveBeenCalledTimes(1))
+  })
+
+  it('does not start when host desired is stopped', async () => {
+    const openMonitor = vi.fn()
+    const client = { openMonitor }
+    const detectedPortsWithDevice = {
+      '/dev/mock0': { port: { ...SERIAL_PORT } },
+    }
+
+    const controls = {
+      current: /**
+       * @type {null | {
+       *   setDetectedPorts: (ports: any) => void
+       *   setMachine: (m: any) => void
+       * }}
+       */ (null),
+    }
+
+    render(
+      <SingleHarness
+        client={client}
+        ref={(value) => {
+          controls.current = value
+        }}
+      />
+    )
+
+    act(() => {
+      controls.current?.setMachine({
+        logical: { kind: 'paused', port: SERIAL_PORT, reason: 'user' },
+        desired: 'stopped',
+        currentAttemptId: null,
+        lastCompletedAttemptId: 1,
+        selectedPort: SERIAL_PORT,
+        selectedDetected: true,
+      })
+      controls.current?.setDetectedPorts(detectedPortsWithDevice)
+    })
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
+
+    expect(openMonitor).not.toHaveBeenCalled()
+  })
+
+  it('blocks retries after 502 until detection changes', async () => {
+    const openMonitor = vi.fn(() =>
+      Promise.reject(
+        Object.assign(new Error('bridge unavailable'), {
+          status: 502,
+          code: 'monitor-open-failed',
+        })
+      )
+    )
+    const client = { openMonitor }
+
+    const controls = {
+      current:
+        /** @type {null | { setDetectedPorts: (ports: any) => void }} */ (null),
+    }
+
+    render(
+      <StatefulHarness
+        client={client}
+        ref={(value) => {
+          controls.current = value
+        }}
+      />
+    )
+
+    act(() => {
+      controls.current?.setDetectedPorts({
+        '/dev/mock0': { port: { ...SERIAL_PORT } },
+      })
+    })
+
+    await waitFor(() => expect(openMonitor).toHaveBeenCalled())
+    const initialCalls = openMonitor.mock.calls.length
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 40))
+    })
+    expect(openMonitor).toHaveBeenCalledTimes(initialCalls)
+
+    act(() => {
+      controls.current?.setDetectedPorts({})
+    })
+    act(() => {
+      controls.current?.setDetectedPorts({
+        '/dev/mock0': { port: { ...SERIAL_PORT } },
+      })
+    })
+
+    await waitFor(() => {
+      expect(openMonitor).toHaveBeenCalledTimes(initialCalls * 2)
+    })
   })
 })

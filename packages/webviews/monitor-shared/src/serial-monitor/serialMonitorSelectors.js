@@ -70,6 +70,20 @@ export function projectMonitorView(state) {
 
   /** @type {MonitorViewStatus} */
   let status = 'idle'
+
+  // If the device is not detected (but a snapshot exists), prefer a
+  // "disconnected" style state regardless of logical pause reason.
+  if (selectedPort && hasDetectionSnapshot && !selectedDetected) {
+    return {
+      machine,
+      started,
+      status: 'pending',
+      selectedPort,
+      selectedDetected,
+      hasDetectionSnapshot,
+    }
+  }
+
   switch (logical.kind) {
     case 'waitingForPort':
       status =
