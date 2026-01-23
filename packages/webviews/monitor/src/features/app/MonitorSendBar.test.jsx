@@ -14,6 +14,22 @@ const PORT = {
   address: '/dev/tty.usbmock-1',
 }
 
+function makeSessionState(overrides = {}) {
+  return {
+    portKey: createPortKey(PORT),
+    port: PORT,
+    status: 'idle',
+    desired: 'stopped',
+    detected: true,
+    clients: [],
+    openPending: false,
+    closePending: false,
+    currentAttemptId: null,
+    lastCompletedAttemptId: null,
+    ...overrides,
+  }
+}
+
 function withSerialMonitorState(stateOverrides = {}) {
   const baseState = serialMonitorReducer(undefined, { type: '@@INIT' })
   const store = configureStore({
@@ -96,13 +112,12 @@ describe('MonitorSendBar', () => {
       selectedPort: PORT,
       selectedBaudrates: [[PORT, '9600']],
       detectedPorts,
-      machine: {
-        logical: { kind: 'active', port: PORT },
-        desired: 'running',
-        currentAttemptId: null,
-        lastCompletedAttemptId: 1,
-        selectedPort: PORT,
-        selectedDetected: true,
+      sessionStates: {
+        [createPortKey(PORT)]: makeSessionState({
+          status: 'active',
+          desired: 'running',
+          lastCompletedAttemptId: 1,
+        }),
       },
     })
 
@@ -123,28 +138,20 @@ describe('MonitorSendBar', () => {
 
   it('shows suspended UI while started and waiting for device', () => {
     vi.useFakeTimers()
-    const detectedPorts = {
-      [createPortKey(PORT)]: { port: PORT },
-    }
     withSerialMonitorState({
-      detectedPorts,
       selectedPort: PORT,
       selectedBaudrates: [[PORT, '9600']],
-      machine: {
-        logical: {
-          kind: 'waitingForPort',
-          reason: 'port-temporarily-missing',
-          port: PORT,
-        },
-        desired: 'running',
-        currentAttemptId: null,
-        lastCompletedAttemptId: 1,
-        selectedPort: PORT,
-        selectedDetected: true,
+      sessionStates: {
+        [createPortKey(PORT)]: makeSessionState({
+          status: 'paused',
+          desired: 'running',
+          pauseReason: 'suspend',
+        }),
       },
     })
 
-    // const textarea = screen.getByPlaceholderText(/waiting for device/)
+    const textarea = screen.getByPlaceholderText(/waiting for device/i)
+    expect(textarea).toBeDisabled()
     const sendIcon = screen.getByTitle(/Select a port first|Send/)
     expect(pointerEventsOf(sendIcon)).toBe('none')
 
@@ -153,5 +160,6 @@ describe('MonitorSendBar', () => {
     })
     const spinner = screen.getByTitle('Port suspended')
     expect(spinner).toBeInTheDocument()
+    vi.useRealTimers()
   })
 })

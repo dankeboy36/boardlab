@@ -17,18 +17,11 @@ export const selectBoardsList = createSelector(
 )
 
 /**
- * @type {(state: {
- *   serialMonitor: import('./serialMonitorSlice.js').SerialMonitorState
- * }) => import('./monitorFsm.js').MonitorContext}
- */
-export const selectMonitorMachine = (state) => state.serialMonitor.machine
-
-/**
  * @typedef {'idle' | 'pending' | 'connected' | 'suspended' | 'error'} MonitorViewStatus
  *
  *
  * @typedef {{
- *   machine: import('./monitorFsm.js').MonitorContext
+ *   session?: import('@boardlab/protocol').MonitorSessionState
  *   started: boolean
  *   status: MonitorViewStatus
  *   selectedPort?: import('boards-list').PortIdentifier
@@ -53,10 +46,7 @@ export const selectMonitorView = createSelector(selectSerialMonitor, (state) =>
  * @returns {MonitorViewState}
  */
 export function projectMonitorView(state) {
-  const machine = state.machine
-  const logical = machine?.logical ?? { kind: 'idle' }
-  const desired = machine?.desired ?? 'stopped'
-  const selectedPort = machine?.selectedPort ?? state.selectedPort
+  const selectedPort = state.selectedPort
   const detectedPorts = state.detectedPorts ?? {}
   const hasDetectionSnapshot = Object.keys(detectedPorts).length > 0
   const selectedKey = selectedPort ? createPortKey(selectedPort) : undefined
@@ -65,60 +55,48 @@ export function projectMonitorView(state) {
         ({ port }) => createPortKey(port) === selectedKey
       )
     : false
-
-  const started = desired === 'running' && !!selectedPort
+  const session = selectedKey ? state.sessionStates?.[selectedKey] : undefined
+  const desired = session?.desired ?? 'stopped'
+  const viewDesired = state.autoPlay ? desired : 'stopped'
+  const started = viewDesired === 'running' && !!selectedPort
 
   /** @type {MonitorViewStatus} */
   let status = 'idle'
 
-  // If the device is not detected (but a snapshot exists), prefer a
-  // "disconnected" style state regardless of logical pause reason.
-  if (selectedPort && hasDetectionSnapshot && !selectedDetected) {
-    return {
-      machine,
-      started,
-      status: 'pending',
-      selectedPort,
-      selectedDetected,
-      hasDetectionSnapshot,
+  if (session) {
+    switch (session.status) {
+      case 'connecting':
+        status = 'pending'
+        break
+      case 'active':
+        status = 'connected'
+        break
+      case 'paused':
+        if (session.pauseReason === 'user') {
+          status = started ? 'pending' : 'idle'
+        } else {
+          status = 'suspended'
+        }
+        break
+      case 'error':
+        status = 'error'
+        break
+      default:
+        status = 'idle'
+        break
     }
   }
 
-  switch (logical.kind) {
-    case 'waitingForPort':
-      status =
-        logical.reason === 'port-temporarily-missing' ? 'suspended' : 'pending'
-      break
-    case 'connecting':
-      status = 'pending'
-      break
-    case 'active':
-      status = 'connected'
-      break
-    case 'paused':
-      if (logical.reason === 'suspend') {
-        status = 'suspended'
-      } else if (logical.reason === 'resource-missing') {
-        status = 'suspended'
-      } else if (logical.reason === 'resource-busy') {
-        status = started ? 'pending' : 'idle'
-      } else {
-        status = started ? 'pending' : 'idle'
-      }
-      break
-    case 'error':
-      status = 'error'
-      break
-    case 'closed':
-      status = 'idle'
-      break
-    default:
-      status = 'idle'
-      break
+  if (!state.autoPlay) {
+    status = 'idle'
+  }
+
+  if (selectedPort && hasDetectionSnapshot && !selectedDetected) {
+    status = viewDesired === 'running' ? 'suspended' : status
   }
 
   return {
-    machine,
+    session,
     started,
     status,
     selectedPort,

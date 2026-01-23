@@ -8,13 +8,19 @@ import { messengerx } from '@boardlab/base'
 import {
   connectMonitorClient,
   disconnectMonitorClient,
+  notifyMonitorClientAttached,
+  notifyMonitorClientDetached,
+  notifyMonitorIntentResume,
+  notifyMonitorIntentStart,
+  notifyMonitorIntentStop,
+  notifyMonitorOpenError,
+  notifyMonitorSessionState,
   notifyMonitorViewDidChangeBaudrate,
   notifyMonitorViewDidChangeDetectedPorts,
   notifyMonitorViewDidChangeMonitorSettings,
-  notifyMonitorViewDidPause,
-  notifyMonitorViewDidResume,
   requestMonitorDetectedPorts,
   requestMonitorSendMessage,
+  requestMonitorSessionSnapshot,
   requestMonitorUpdateBaudrate,
   notifyMonitorPhysicalStateChanged,
   requestMonitorPhysicalStateSnapshot,
@@ -29,9 +35,8 @@ class MessengerControlTransport {
     this._didChangeDetectedPorts = new EventEmitter()
     this._didChangeMonitorSettings = new EventEmitter()
     this._didChangeBaudrate = new EventEmitter()
-    this._didPauseMonitor = new EventEmitter()
-    this._didResumeMonitor = new EventEmitter()
     this._didChangePhysicalState = new EventEmitter()
+    this._didChangeSessionState = new EventEmitter()
 
     const messengerRef = this._messenger
     const messengerDisposables = [
@@ -52,18 +57,13 @@ class MessengerControlTransport {
       ),
       messengerx.onNotification(
         messengerRef,
-        notifyMonitorViewDidPause,
-        (payload) => this._didPauseMonitor.fire(payload)
-      ),
-      messengerx.onNotification(
-        messengerRef,
-        notifyMonitorViewDidResume,
-        (payload) => this._didResumeMonitor.fire(payload)
-      ),
-      messengerx.onNotification(
-        messengerRef,
         notifyMonitorPhysicalStateChanged,
         (payload) => this._didChangePhysicalState.fire(payload)
+      ),
+      messengerx.onNotification(
+        messengerRef,
+        notifyMonitorSessionState,
+        (payload) => this._didChangeSessionState.fire(payload)
       ),
     ]
 
@@ -71,9 +71,8 @@ class MessengerControlTransport {
       this._didChangeDetectedPorts,
       this._didChangeMonitorSettings,
       this._didChangeBaudrate,
-      this._didPauseMonitor,
-      this._didResumeMonitor,
       this._didChangePhysicalState,
+      this._didChangeSessionState,
       ...messengerDisposables,
     ]
   }
@@ -97,6 +96,11 @@ class MessengerControlTransport {
     return this._didChangePhysicalState.event
   }
 
+  /** @returns {import('@c4312/evt').Event<import('@boardlab/protocol').MonitorSessionState>} */
+  get onDidChangeSessionState() {
+    return this._didChangeSessionState.event
+  }
+
   /**
    * @returns {import('@c4312/evt').Event<
    *   import('@boardlab/protocol').DidChangeBaudrateNotification
@@ -104,24 +108,6 @@ class MessengerControlTransport {
    */
   get onDidChangeBaudrate() {
     return this._didChangeBaudrate.event
-  }
-
-  /**
-   * @returns {import('@c4312/evt').Event<
-   *   import('@boardlab/protocol').DidPauseMonitorNotification
-   * >}
-   */
-  get onDidPauseMonitor() {
-    return this._didPauseMonitor.event
-  }
-
-  /**
-   * @returns {import('@c4312/evt').Event<
-   *   import('@boardlab/protocol').DidResumeMonitorNotification
-   * >}
-   */
-  get onDidResumeMonitor() {
-    return this._didResumeMonitor.event
   }
 
   /**
@@ -184,6 +170,26 @@ class MessengerControlTransport {
 
     return this._messenger.sendRequest(
       requestMonitorPhysicalStateSnapshot,
+      HOST_EXTENSION,
+      /** @type {unknown} */ (undefined),
+      token
+    )
+  }
+
+  /** @param {{ signal?: AbortSignal }} [options] */
+  async sessionStates(options = {}) {
+    const token = new CancellationTokenImpl()
+    const { signal } = options
+    if (signal) {
+      const abortHandler = () => {
+        token.cancel()
+        signal.removeEventListener('abort', abortHandler)
+      }
+      signal.addEventListener('abort', abortHandler)
+    }
+
+    return this._messenger.sendRequest(
+      requestMonitorSessionSnapshot,
       HOST_EXTENSION,
       /** @type {unknown} */ (undefined),
       token
@@ -265,9 +271,8 @@ export class MonitorClient {
     this._didChangeDetectedPorts = new EventEmitter()
     this._didChangeMonitorSettings = new EventEmitter()
     this._didChangeBaudrate = new EventEmitter()
-    this._didPauseMonitor = new EventEmitter()
-    this._didResumeMonitor = new EventEmitter()
     this._didChangePhysicalState = new EventEmitter()
+    this._didChangeSessionState = new EventEmitter()
 
     this._transportDisposables = [
       this._didChangeDetectedPorts,
@@ -282,17 +287,13 @@ export class MonitorClient {
       this._transport.onDidChangeBaudrate((payload) =>
         this._fireDidChangeBaudrate(payload)
       ),
-      this._didPauseMonitor,
-      this._transport.onDidPauseMonitor((payload) =>
-        this._fireDidPauseMonitor(payload)
-      ),
-      this._didResumeMonitor,
-      this._transport.onDidResumeMonitor((payload) =>
-        this._fireDidResumeMonitor(payload)
-      ),
       this._didChangePhysicalState,
       this._transport.onDidChangePhysicalState((payload) =>
         this._fireDidChangePhysicalState(payload)
+      ),
+      this._didChangeSessionState,
+      this._transport.onDidChangeSessionState((payload) =>
+        this._fireDidChangeSessionState(payload)
       ),
     ]
 
@@ -322,27 +323,18 @@ export class MonitorClient {
     return this._didChangeDetectedPorts.event
   }
 
-  /**
-   * @returns {import('@c4312/evt').Event<
-   *   import('@boardlab/protocol').DidPauseMonitorNotification
-   * >}
-   */
-  get onDidPauseMonitor() {
-    return this._didPauseMonitor.event
-  }
-
-  /**
-   * @returns {import('@c4312/evt').Event<
-   *   import('@boardlab/protocol').DidResumeMonitorNotification
-   * >}
-   */
-  get onDidResumeMonitor() {
-    return this._didResumeMonitor.event
-  }
-
   /** @returns {import('@c4312/evt').Event<MonitorPhysicalState>} */
   get onDidChangePhysicalState() {
     return this._didChangePhysicalState.event
+  }
+
+  /**
+   * @returns {import('@c4312/evt').Event<
+   *   import('@boardlab/protocol').MonitorSessionState
+   * >}
+   */
+  get onDidChangeSessionState() {
+    return this._didChangeSessionState.event
   }
 
   /**
@@ -362,6 +354,11 @@ export class MonitorClient {
   /** @param {{ signal?: AbortSignal }} [options] */
   async physicalStates(options = {}) {
     return this._transport.physicalStates(options)
+  }
+
+  /** @param {{ signal?: AbortSignal }} [options] */
+  async sessionStates(options = {}) {
+    return this._transport.sessionStates(options)
   }
 
   /**
@@ -410,6 +407,96 @@ export class MonitorClient {
       }
     }
     this._transport.dispose()
+  }
+
+  /**
+   * @param {import('boards-list').PortIdentifier} port
+   */
+  notifyClientAttached(port) {
+    try {
+      this._messenger.sendNotification(
+        notifyMonitorClientAttached,
+        HOST_EXTENSION,
+        { clientId: this._clientId, port }
+      )
+    } catch (error) {
+      console.error('Failed to notify monitor client attached', error)
+    }
+  }
+
+  /**
+   * @param {import('boards-list').PortIdentifier} port
+   */
+  notifyClientDetached(port) {
+    try {
+      this._messenger.sendNotification(
+        notifyMonitorClientDetached,
+        HOST_EXTENSION,
+        { clientId: this._clientId, port }
+      )
+    } catch (error) {
+      console.error('Failed to notify monitor client detached', error)
+    }
+  }
+
+  /**
+   * @param {import('boards-list').PortIdentifier} port
+   */
+  notifyIntentStart(port) {
+    try {
+      this._messenger.sendNotification(
+        notifyMonitorIntentStart,
+        HOST_EXTENSION,
+        { port, clientId: this._clientId }
+      )
+    } catch (error) {
+      console.error('Failed to notify monitor intent start', error)
+    }
+  }
+
+  /**
+   * @param {import('boards-list').PortIdentifier} port
+   */
+  notifyIntentStop(port) {
+    try {
+      this._messenger.sendNotification(
+        notifyMonitorIntentStop,
+        HOST_EXTENSION,
+        { port, clientId: this._clientId }
+      )
+    } catch (error) {
+      console.error('Failed to notify monitor intent stop', error)
+    }
+  }
+
+  /**
+   * @param {import('boards-list').PortIdentifier} port
+   */
+  notifyIntentResume(port) {
+    try {
+      this._messenger.sendNotification(
+        notifyMonitorIntentResume,
+        HOST_EXTENSION,
+        { port, clientId: this._clientId }
+      )
+    } catch (error) {
+      console.error('Failed to notify monitor intent resume', error)
+    }
+  }
+
+  /**
+   * @param {import('@boardlab/protocol').MonitorOpenErrorNotification} payload
+   */
+  notifyOpenError(payload) {
+    try {
+      this._messenger.sendNotification(
+        notifyMonitorOpenError,
+        HOST_EXTENSION,
+        payload
+      )
+    } catch (error) {
+      console.error('Failed to notify monitor open error', error)
+    }
   }
 
   /**
@@ -560,18 +647,13 @@ export class MonitorClient {
     this._didChangeBaudrate.fire(payload)
   }
 
-  /** @param {import('@boardlab/protocol').DidPauseMonitorNotification} payload */
-  _fireDidPauseMonitor(payload) {
-    this._didPauseMonitor.fire(payload)
-  }
-
-  /** @param {import('@boardlab/protocol').DidResumeMonitorNotification} payload */
-  _fireDidResumeMonitor(payload) {
-    this._didResumeMonitor.fire(payload)
-  }
-
   /** @param {MonitorPhysicalState} payload */
   _fireDidChangePhysicalState(payload) {
     this._didChangePhysicalState.fire(payload)
+  }
+
+  /** @param {import('@boardlab/protocol').MonitorSessionState} payload */
+  _fireDidChangeSessionState(payload) {
+    this._didChangeSessionState.fire(payload)
   }
 }

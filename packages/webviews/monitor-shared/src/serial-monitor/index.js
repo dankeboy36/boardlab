@@ -17,12 +17,11 @@ export {
   default,
   disconnect,
   mergeSelectedBaudrate,
-  pauseMonitor,
-  resumeMonitor,
   default as serialMonitorReducer,
-  applyMonitorEvent,
   setPhysicalStates,
   upsertPhysicalState,
+  setSessionStates,
+  upsertSessionState,
   setAutoPlay,
   setMonitorSettingsByProtocol,
   setSelectedBaudrate,
@@ -30,4 +29,3 @@ export {
   updateDetectedPorts,
 } from './serialMonitorSlice.js'
 export { useSerialMonitorConnection } from './useSerialMonitorConnection.js'
-export * from './monitorFsm.js'

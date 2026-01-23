@@ -5,6 +5,7 @@ import {
   projectMonitorView,
   selectMonitorView,
 } from '@boardlab/monitor-shared/serial-monitor/serialMonitorSelectors'
+import { createPortKey } from 'boards-list'
 
 const PORT = { protocol: 'serial', address: '/dev/tty.usbmock-1' }
 
@@ -19,34 +20,30 @@ function baseState(overrides) {
       boardsListItems: [],
       boardsListPorts: [],
       autoPlay: true,
-      machine: {
-        logical: { kind: 'idle' },
-        desired: 'stopped',
-        currentAttemptId: null,
-        lastCompletedAttemptId: null,
-        selectedPort: PORT,
-        selectedDetected: true,
-      },
       physicalStates: [],
+      sessionStates: {},
       ...overrides,
     },
   }
 }
 
 describe('serialMonitorSelectors', () => {
-  it('marks status suspended when waiting for port while running', () => {
+  it('marks status suspended when paused for missing device while running', () => {
     const state = baseState({
-      machine: {
-        logical: {
-          kind: 'waitingForPort',
-          reason: 'port-temporarily-missing',
+      sessionStates: {
+        [createPortKey(PORT)]: {
+          portKey: createPortKey(PORT),
           port: PORT,
+          status: 'paused',
+          desired: 'running',
+          detected: false,
+          clients: [],
+          openPending: false,
+          closePending: false,
+          currentAttemptId: null,
+          lastCompletedAttemptId: 1,
+          pauseReason: 'resource-missing',
         },
-        desired: 'running',
-        currentAttemptId: null,
-        lastCompletedAttemptId: 1,
-        selectedPort: PORT,
-        selectedDetected: true,
       },
     })
     const view = selectMonitorView(state)
@@ -54,15 +51,22 @@ describe('serialMonitorSelectors', () => {
     expect(view.started).toBe(true)
   })
 
-  it('marks status suspended when paused due to suspend reason', () => {
+  it('marks status suspended when desired running but port is not detected', () => {
     const state = baseState({
-      machine: {
-        logical: { kind: 'paused', port: PORT, reason: 'suspend' },
-        desired: 'running',
-        currentAttemptId: null,
-        lastCompletedAttemptId: 1,
-        selectedPort: PORT,
-        selectedDetected: true,
+      detectedPorts: {},
+      sessionStates: {
+        [createPortKey(PORT)]: {
+          portKey: createPortKey(PORT),
+          port: PORT,
+          status: 'idle',
+          desired: 'running',
+          detected: false,
+          clients: [],
+          openPending: false,
+          closePending: false,
+          currentAttemptId: null,
+          lastCompletedAttemptId: null,
+        },
       },
     })
     const view = projectMonitorView(state.serialMonitor)

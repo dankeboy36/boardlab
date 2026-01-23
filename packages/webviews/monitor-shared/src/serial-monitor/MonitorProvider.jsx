@@ -27,15 +27,13 @@ import {
   connect as connectAction,
   disconnect,
   mergeSelectedBaudrate,
-  pauseMonitor,
-  resumeMonitor,
-  applyMonitorEvent,
   upsertPhysicalState,
   setAutoPlay,
   setMonitorSettingsByProtocol,
   setSelectedBaudrate,
   setSelectedPort,
   updateDetectedPorts,
+  upsertSessionState,
 } from './serialMonitorSlice.js'
 import { useSerialMonitorConnection } from './useSerialMonitorConnection.js'
 import { emitWebviewTraceEvent } from './trace.js'
@@ -67,16 +65,6 @@ const MonitorContext = createContext(
 )
 
 /**
- * @param {import('boards-list').DetectedPorts | undefined} ports
- * @param {import('boards-list').PortIdentifier | undefined} port
- */
-function isPortDetected(ports, port) {
-  if (!ports || !port) return false
-  const key = createPortKey(port)
-  return Object.values(ports).some((entry) => createPortKey(entry.port) === key)
-}
-
-/**
  * Provides the monitor connection lifecycle and shared stream events.
  *
  * @param {{
@@ -88,10 +76,6 @@ function isPortDetected(ports, port) {
 export function MonitorProvider({ client, children, extensionClient }) {
   const dispatch = useDispatch()
   const serialState = useSelector(selectSerialMonitor)
-  const dispatchMonitorEvent = useCallback(
-    (event) => dispatch(applyMonitorEvent(event)),
-    [dispatch]
-  )
   const monitorView = useSelector(selectMonitorView)
   const [ownedService] = useState(
     () => extensionClient ?? createExtensionClient()
@@ -167,47 +151,20 @@ export function MonitorProvider({ client, children, extensionClient }) {
     [notify]
   )
 
+  const playRef = useRef(() => {})
+  const stopRef = useRef(() => {})
+
   const onStreamBusy = useCallback(() => {
     dispatch(setAutoPlay(false))
+    stopRef.current()
   }, [dispatch])
 
   const applyPhysicalState = useCallback(
     (payload) => {
       if (!payload || !payload.port) return
       dispatch(upsertPhysicalState(payload))
-      if (payload.state === 'STARTED') {
-        dispatch(
-          applyMonitorEvent({
-            type: 'OPEN_OK',
-            port: payload.port,
-            attemptId: payload.attemptId,
-          })
-        )
-      } else if (payload.state === 'STOPPED') {
-        dispatch(
-          applyMonitorEvent({
-            type: 'STREAM_CLOSED',
-            port: payload.port,
-            attemptId: payload.attemptId,
-          })
-        )
-      } else if (payload.state === 'FAILED') {
-        dispatch(
-          applyMonitorEvent({
-            type: 'OPEN_FAIL',
-            port: payload.port,
-            attemptId: payload.attemptId,
-            error: { kind: 'internal', detail: payload.error },
-          })
-        )
-      }
     },
     [dispatch]
-  )
-
-  const monitorOptions = useMemo(
-    () => ({ disconnectHoldMs: 1500, coldStartMs: 1000 }),
-    []
   )
 
   useEffect(() => {
@@ -232,25 +189,6 @@ export function MonitorProvider({ client, children, extensionClient }) {
   useEffect(() => {
     autoPlayRef.current = serialState.autoPlay
   }, [serialState.autoPlay])
-
-  useEffect(() => {
-    const detected = isPortDetected(
-      serialState.detectedPorts,
-      serialState.selectedPort
-    )
-    dispatch(
-      applyMonitorEvent({
-        type: 'PORT_SELECTED',
-        port: serialState.selectedPort,
-        detected,
-      })
-    )
-  }, [dispatch, serialState.detectedPorts, serialState.selectedPort])
-
-  const startedRef = useRef(monitorView.started)
-  useEffect(() => {
-    startedRef.current = monitorView.started
-  }, [monitorView.started])
 
   const lastEditorStatusRef = useRef('')
 
@@ -304,31 +242,64 @@ export function MonitorProvider({ client, children, extensionClient }) {
   const { play, stop } = useSerialMonitorConnection({
     client,
     selectedPort: serialState.selectedPort,
-    detectedPorts: serialState.detectedPorts,
     selectedBaudrate,
     monitorSettingsByProtocol: serialState.monitorSettingsByProtocol,
+    session: monitorView.session,
     onText: onStreamText,
     onStart: onStreamStart,
     onStop: onStreamStop,
     onBusy: onStreamBusy,
-    options: monitorOptions,
-    enabled: true,
-    autoPlay: serialState.autoPlay,
-    machine: monitorView.machine,
-    dispatchEvent: dispatchMonitorEvent,
+    enabled: serialState.autoPlay,
   })
 
-  const playRef = useRef(play)
   useEffect(() => {
     playRef.current = play
   }, [play])
 
-  const stopRef = useRef(stop)
   useEffect(() => {
     stopRef.current = stop
   }, [stop])
 
   const readyToControl = Boolean(client)
+
+  useEffect(() => {
+    if (!client || !serialState.selectedPort) {
+      return undefined
+    }
+    const port = serialState.selectedPort
+    client.notifyClientAttached(port)
+    return () => {
+      client.notifyClientDetached(port)
+    }
+  }, [client, serialState.selectedPort])
+
+  const lastIntentRef = useRef('')
+  useEffect(() => {
+    if (!client || !serialState.selectedPort) {
+      lastIntentRef.current = ''
+      return
+    }
+    const portKey = createPortKey(serialState.selectedPort)
+    if (serialState.autoPlay) {
+      const signature = `${portKey}|start`
+      if (lastIntentRef.current === signature) {
+        return
+      }
+      lastIntentRef.current = signature
+      client.notifyIntentStart(serialState.selectedPort)
+      return
+    }
+    const signature = `${portKey}|stop`
+    if (lastIntentRef.current === signature) {
+      return
+    }
+    lastIntentRef.current = signature
+    client.notifyIntentStop(serialState.selectedPort)
+  }, [
+    client,
+    serialState.selectedPort,
+    serialState.autoPlay,
+  ])
 
   const requestedInitialSelectionRef = useRef(false)
   const lastSelectionSignatureRef = useRef('')
@@ -356,16 +327,12 @@ export function MonitorProvider({ client, children, extensionClient }) {
         incomingKey,
         currentKey,
         wantsAutoPlay,
-        started: startedRef.current,
       })
 
       if (!port) {
         if (currentKey) {
           // Avoid dropping the current selection when unrelated events push an empty selection.
           return
-        }
-        if (startedRef.current && readyToControl) {
-          stopRef.current()
         }
         dispatch(setSelectedPort(undefined))
         return
@@ -379,12 +346,8 @@ export function MonitorProvider({ client, children, extensionClient }) {
         dispatch(mergeSelectedBaudrate({ port, baudrate }))
       }
 
-      if (readyToControl && selectionChanged) {
-        if (wantsAutoPlay) {
-          playRef.current()
-        } else if (startedRef.current) {
-          stopRef.current()
-        }
+      if (readyToControl && selectionChanged && wantsAutoPlay) {
+        playRef.current()
       }
 
       emitWebviewTraceEvent('webviewDidUpdateSelection', {
@@ -428,18 +391,6 @@ export function MonitorProvider({ client, children, extensionClient }) {
         requestedInitialSelectionRef.current = false
       })
   }, [applySelection, client, service])
-
-  const previousStatusRef = useRef(monitorView.status)
-  useEffect(() => {
-    const previous = previousStatusRef.current
-    previousStatusRef.current = monitorView.status
-    if (!client) return
-    if (!monitorView.started) return
-    if (monitorView.status !== 'connected') return
-    if (previous !== 'suspended') return
-    if (!readyToControl) return
-    playRef.current()
-  }, [client, monitorView.started, monitorView.status, readyToControl])
 
   // Establish client connection and subscriptions once
   useEffect(() => {
@@ -489,9 +440,10 @@ export function MonitorProvider({ client, children, extensionClient }) {
           setSelectedBaudrate({ port: event.port, baudrate: event.baudrate })
         )
       ),
-      client.onDidPauseMonitor((event) => dispatch(pauseMonitor(event))),
-      client.onDidResumeMonitor((event) => dispatch(resumeMonitor(event))),
       client.onDidChangePhysicalState((state) => applyPhysicalState(state)),
+      client.onDidChangeSessionState((state) =>
+        dispatch(upsertSessionState(state))
+      ),
     ]
 
     async function fetchDetectedPorts() {

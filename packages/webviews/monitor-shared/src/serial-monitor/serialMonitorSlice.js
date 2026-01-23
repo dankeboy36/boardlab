@@ -3,14 +3,13 @@
 import { createSlice } from '@reduxjs/toolkit'
 import { createBoardsList, createPortKey } from 'boards-list'
 
-import { initialMonitorContext, reduceMonitorContext } from './monitorFsm.js'
-
 /**
  * @typedef {Object} LocalSerialMonitorState
  * @property {import('boards-list').PortIdentifier | undefined} selectedPort
  * @property {boolean} autoPlay
- * @property {import('./monitorFsm.js').MonitorContext} machine
  * @property {import('@boardlab/protocol').MonitorPhysicalState[]} physicalStates
+ * @property {Record<string, import('@boardlab/protocol').MonitorSessionState>}
+ *   sessionStates
  */
 
 /**
@@ -66,21 +65,6 @@ import { initialMonitorContext, reduceMonitorContext } from './monitorFsm.js'
  */
 
 /**
- * @typedef {Object} StartMonitorAction
- * @property {'START_MONITOR'} type
- */
-
-/**
- * @typedef {Object} StopMonitorAction
- * @property {'STOP_MONITOR'} type
- */
-
-/**
- * @typedef {Object} ApplyMonitorEventAction
- * @property {'APPLY_MONITOR_EVENT'} type
- * @property {import('./monitorFsm.js').MonitorEvent} payload
- */
-
 /**
  * @typedef {Object} SetPhysicalStatesAction
  * @property {'SET_PHYSICAL_STATES'} type
@@ -94,17 +78,28 @@ import { initialMonitorContext, reduceMonitorContext } from './monitorFsm.js'
  */
 
 /**
+ * @typedef {Object} SetSessionStatesAction
+ * @property {'SET_SESSION_STATES'} type
+ * @property {ReadonlyArray<import('@boardlab/protocol').MonitorSessionState>} payload
+ */
+
+/**
+ * @typedef {Object} UpsertSessionStateAction
+ * @property {'UPSERT_SESSION_STATE'} type
+ * @property {import('@boardlab/protocol').MonitorSessionState} payload
+ */
+
+/**
  * @typedef {ConnectAction
  *   | SetSelectedPortAction
  *   | SetSelectedBaudrateAction
  *   | MergeSelectedBaudrateAction
  *   | UpdateDetectedPortsAction
  *   | DisconnectAction
- *   | StartMonitorAction
- *   | StopMonitorAction
- *   | ApplyMonitorEventAction
  *   | SetPhysicalStatesAction
- *   | UpsertPhysicalStateAction} SerialMonitorAction
+ *   | UpsertPhysicalStateAction
+ *   | SetSessionStatesAction
+ *   | UpsertSessionStateAction} SerialMonitorAction
  */
 
 /**
@@ -123,8 +118,8 @@ const initialState = {
   boardsListItems: [],
   boardsListPorts: [],
   autoPlay: true,
-  machine: initialMonitorContext(),
   physicalStates: [],
+  sessionStates: {},
 }
 
 const serialMonitorSlice = createSlice({
@@ -142,7 +137,14 @@ const serialMonitorSlice = createSlice({
       state.monitorSettingsByProtocol = monitorSettingsByProtocol
       state.selectedBaudrates = selectedBaudrates
       state.physicalStates = Array.isArray(physicalStates) ? physicalStates : []
-      state.machine = initialMonitorContext()
+      state.sessionStates = Array.isArray(action.payload.sessionStates)
+        ? Object.fromEntries(
+            action.payload.sessionStates.map((entry) => [
+              entry.portKey,
+              entry,
+            ])
+          )
+        : {}
       // Recompute supported baudrates for the current selection
       state.supportedBaudrates = computeSupportedBaudrates(state)
     },
@@ -257,9 +259,6 @@ const serialMonitorSlice = createSlice({
     setAutoPlay(state, action) {
       state.autoPlay = !!action.payload
     },
-    applyMonitorEvent(state, action) {
-      state.machine = reduceMonitorContext(state.machine, action.payload)
-    },
     setPhysicalStates(state, action) {
       state.physicalStates = Array.isArray(action.payload) ? action.payload : []
     },
@@ -274,85 +273,19 @@ const serialMonitorSlice = createSlice({
         incoming,
       ]
     },
-    /**
-     * @param {SerialMonitorState} state
-     * @param {{
-     *   payload: import('@boardlab/protocol').DidPauseMonitorNotification
-     * }} action
-     */
-    pauseMonitor(state, action) {
-      const evt = action.payload
-      if (state.selectedPort) {
-        const selKey = createPortKey(state.selectedPort)
-        if (selKey === createPortKey(evt.port)) {
-          state.machine = {
-            ...state.machine,
-            logical: {
-              kind: 'paused',
-              port: state.selectedPort,
-              reason: 'suspend',
-            },
-            desired: 'running',
-          }
-        }
-      }
+    setSessionStates(state, action) {
+      const entries = Array.isArray(action.payload) ? action.payload : []
+      state.sessionStates = Object.fromEntries(
+        entries.map((entry) => [entry.portKey, entry])
+      )
     },
-    /**
-     * @param {SerialMonitorState} state
-     * @param {{
-     *   payload: import('@boardlab/protocol').DidResumeMonitorNotification
-     * }} action
-     */
-    resumeMonitor(state, action) {
-      const evt = action.payload
-
-      if (!state.selectedPort) {
-        return
+    upsertSessionState(state, action) {
+      const incoming = action.payload
+      if (!incoming?.portKey) return
+      state.sessionStates = {
+        ...state.sessionStates,
+        [incoming.portKey]: incoming,
       }
-
-      const selectedKey = createPortKey(state.selectedPort)
-
-      // Only react if this resume corresponds to our current selection
-      if (
-        createPortKey(evt.didPauseOnPort) !== createPortKey(state.selectedPort)
-      ) {
-        return
-      }
-
-      state.machine = {
-        ...state.machine,
-        logical: { kind: 'connecting', port: state.selectedPort },
-        desired: 'running',
-      }
-
-      // If upload made the board reappear on a different address, switch selection.
-      if (evt.didResumeOnPort) {
-        const resumedKey = createPortKey(evt.didResumeOnPort)
-        if (resumedKey !== selectedKey) {
-          // Preserve previously selected baudrate for the old key
-          const prev = state.selectedBaudrates.find(
-            ([p]) => createPortKey(p) === selectedKey
-          )
-          const prevBaud = prev ? prev[1] : undefined
-
-          // Drop old/new mappings
-          state.selectedBaudrates = state.selectedBaudrates.filter(([p]) => {
-            const k = createPortKey(p)
-            return k !== selectedKey && k !== resumedKey
-          })
-
-          // Switch the selected port
-          state.selectedPort = evt.didResumeOnPort
-
-          // Re-attach saved baudrate (if any) to the new key
-          if (prevBaud) {
-            state.selectedBaudrates.push([evt.didResumeOnPort, prevBaud])
-          }
-        }
-      }
-
-      // Refresh supported baudrates for the (potentially) new selection
-      state.supportedBaudrates = computeSupportedBaudrates(state)
     },
   },
 })
@@ -370,12 +303,11 @@ export const {
   updateDetectedPorts,
   disconnect,
   setMonitorSettingsByProtocol,
-  pauseMonitor,
-  resumeMonitor,
   setAutoPlay,
-  applyMonitorEvent,
   setPhysicalStates,
   upsertPhysicalState,
+  setSessionStates,
+  upsertSessionState,
 } = actions
 
 export default serialMonitorSlice.reducer
@@ -409,4 +341,4 @@ function computeProtocolBaudrateOptions(monitorSettingsByProtocol, protocol) {
   return { values, default: def }
 }
 
-// Legacy projection removed; monitor view derives status directly from FSM.
+// Monitor view derives status from host session state.

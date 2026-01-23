@@ -17,7 +17,12 @@ function scrubProps(props) {
   /** @type {Record<string, any>} */
   const sanitized = {}
   for (const [key, value] of Object.entries(props ?? {})) {
-    if (typeof value === 'boolean') continue
+    if (typeof value === 'boolean') {
+      if (key === 'disabled') {
+        sanitized[key] = value
+      }
+      continue
+    }
     if (/^onVsc[A-Z]/.test(key)) continue
     sanitized[key] = value
   }
@@ -63,7 +68,7 @@ vi.mock('vscode-react-elements-x', () => {
     VscodeButton: stubElement('VscodeButton', 'vscode-button'),
     VscodeButtonGroup: stubElement('VscodeButtonGroup', 'vscode-button-group'),
     VscodeTextfield: stubElement('VscodeTextfield', 'vscode-textfield'),
-    VscodeTextarea: stubElement('VscodeTextarea', 'vscode-textarea'),
+    VscodeTextarea: stubElement('VscodeTextarea', 'textarea'),
     VscodeSingleSelect: stubElement(
       'VscodeSingleSelect',
       'vscode-single-select'

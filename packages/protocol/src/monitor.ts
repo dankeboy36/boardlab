@@ -58,6 +58,45 @@ export interface HostConnectClientResult extends ConnectClientResult {
     readonly monitorSessionId?: string
   }>
   readonly physicalStates?: ReadonlyArray<MonitorPhysicalState>
+  readonly sessionStates?: ReadonlyArray<MonitorSessionState>
+}
+
+export type MonitorSessionStatus =
+  | 'idle'
+  | 'connecting'
+  | 'active'
+  | 'paused'
+  | 'error'
+
+export type MonitorSessionDesired = 'running' | 'stopped'
+
+export type MonitorSessionPauseReason =
+  | 'user'
+  | 'suspend'
+  | 'resource-busy'
+  | 'resource-missing'
+
+export interface MonitorSessionError {
+  readonly code?: string
+  readonly status?: number
+  readonly message?: string
+}
+
+export interface MonitorSessionState {
+  readonly portKey: string
+  readonly port: PortIdentifier
+  readonly status: MonitorSessionStatus
+  readonly desired: MonitorSessionDesired
+  readonly detected: boolean
+  readonly clients: ReadonlyArray<string>
+  readonly openPending: boolean
+  readonly closePending: boolean
+  readonly currentAttemptId: number | null
+  readonly lastCompletedAttemptId: number | null
+  readonly pauseReason?: MonitorSessionPauseReason
+  readonly lastError?: MonitorSessionError
+  readonly monitorSessionId?: string
+  readonly baudrate?: string
 }
 
 export const RequestClientConnect = new JsonRpcRequestType<
@@ -247,6 +286,70 @@ export const requestMonitorPhysicalStateSnapshot: MessengerRequestType<
   ReadonlyArray<MonitorPhysicalState>
 > = {
   method: 'boardlab/monitor/get-physical-state',
+}
+
+export interface MonitorClientAttachParams {
+  readonly clientId: string
+  readonly port: PortIdentifier
+}
+
+export interface MonitorClientDetachParams {
+  readonly clientId: string
+  readonly port: PortIdentifier
+}
+
+export interface MonitorIntentParams {
+  readonly port: PortIdentifier
+  readonly clientId?: string
+}
+
+export interface MonitorOpenErrorNotification {
+  readonly port: PortIdentifier
+  readonly status?: number
+  readonly code?: string
+  readonly message?: string
+}
+
+export const notifyMonitorClientAttached: MessengerNotificationType<MonitorClientAttachParams> =
+  {
+    method: 'boardlab/monitor/client-attached',
+  }
+
+export const notifyMonitorClientDetached: MessengerNotificationType<MonitorClientDetachParams> =
+  {
+    method: 'boardlab/monitor/client-detached',
+  }
+
+export const notifyMonitorIntentStart: MessengerNotificationType<MonitorIntentParams> =
+  {
+    method: 'boardlab/monitor/intent-start',
+  }
+
+export const notifyMonitorIntentStop: MessengerNotificationType<MonitorIntentParams> =
+  {
+    method: 'boardlab/monitor/intent-stop',
+  }
+
+export const notifyMonitorIntentResume: MessengerNotificationType<MonitorIntentParams> =
+  {
+    method: 'boardlab/monitor/intent-resume',
+  }
+
+export const notifyMonitorOpenError: MessengerNotificationType<MonitorOpenErrorNotification> =
+  {
+    method: 'boardlab/monitor/open-error',
+  }
+
+export const notifyMonitorSessionState: MessengerNotificationType<MonitorSessionState> =
+  {
+    method: 'boardlab/monitor/session-state',
+  }
+
+export const requestMonitorSessionSnapshot: MessengerRequestType<
+  void,
+  ReadonlyArray<MonitorSessionState>
+> = {
+  method: 'boardlab/monitor/get-session-state',
 }
 
 export type MonitorBridgeLogLevel =

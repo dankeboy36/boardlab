@@ -4,6 +4,7 @@ import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
 import { createPortKey, type DetectedPorts, PortIdentifier } from 'boards-list'
+import deepEqual from 'fast-deep-equal'
 import * as vscode from 'vscode'
 import type { Messenger } from 'vscode-messenger'
 import type {
@@ -11,6 +12,7 @@ import type {
   NotificationType,
 } from 'vscode-messenger-common'
 import {
+  equalParticipants,
   isWebviewIdMessageParticipant,
   isWebviewTypeMessageParticipant,
 } from 'vscode-messenger-common'
@@ -21,6 +23,13 @@ import {
   disconnectMonitorClient,
   getMonitorBridgeInfo,
   notifyMonitorBridgeError,
+  notifyMonitorClientAttached,
+  notifyMonitorClientDetached,
+  notifyMonitorIntentResume,
+  notifyMonitorIntentStart,
+  notifyMonitorIntentStop,
+  notifyMonitorOpenError,
+  notifyMonitorSessionState,
   notifyMonitorViewDidChangeBaudrate,
   notifyMonitorViewDidChangeDetectedPorts,
   notifyMonitorViewDidChangeMonitorSettings,
@@ -31,19 +40,25 @@ import {
   requestMonitorDetectedPorts,
   requestMonitorPause,
   requestMonitorPhysicalStateSnapshot,
+  requestMonitorSessionSnapshot,
   requestMonitorResume,
   requestMonitorSendMessage,
   requestMonitorUpdateBaudrate,
   type ConnectClientParams,
   type DisconnectMonitorClientParams,
   type HostConnectClientResult,
+  type MonitorClientAttachParams,
+  type MonitorClientDetachParams,
   type MonitorBridgeInfo,
   type MonitorSelectionNotification,
   type MonitorSettingsByProtocol,
   type RequestPauseResumeMonitorParams,
   type RequestSendMonitorMessageParams,
   type RequestUpdateBaudrateParams,
+  type MonitorIntentParams,
+  type MonitorOpenErrorNotification,
   type MonitorBridgeLogEntry,
+  type MonitorSessionState,
   type TraceEventNotification,
 } from '@boardlab/protocol'
 
@@ -57,6 +72,7 @@ import {
   type MonitorBridgeClientOptions,
 } from './monitorBridgeClient'
 import { MonitorPhysicalStateRegistry } from './monitorPhysicalStateRegistry'
+import { MonitorPortSession } from './monitorPortSession'
 
 const DEFAULT_BRIDGE_HOST = '127.0.0.1'
 const DEFAULT_BRIDGE_PORT = 55888
@@ -843,6 +859,9 @@ export interface MonitorManagerOptions {
 export class MonitorManager implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = []
   private readonly clientSessions = new Map<string, MessageParticipant>()
+  private readonly clientPorts = new Map<string, string>()
+  private readonly portSessions = new Map<string, MonitorPortSession>()
+  private readonly sessionSnapshots = new Map<string, MonitorSessionState>()
   private readonly monitorSessionIds = new Map<string, string>()
   private readonly runningMonitors = new Map<
     string,
@@ -1030,6 +1049,36 @@ export class MonitorManager implements vscode.Disposable {
       })
     )
     this.disposables.push(
+      messenger.onNotification(notifyMonitorClientAttached, (params, sender) =>
+        this.handleClientAttached(params, sender)
+      )
+    )
+    this.disposables.push(
+      messenger.onNotification(notifyMonitorClientDetached, (params, sender) =>
+        this.handleClientDetached(params, sender)
+      )
+    )
+    this.disposables.push(
+      messenger.onNotification(notifyMonitorIntentStart, (params, sender) =>
+        this.handleMonitorIntentStart(params, sender)
+      )
+    )
+    this.disposables.push(
+      messenger.onNotification(notifyMonitorIntentStop, (params, sender) =>
+        this.handleMonitorIntentStop(params, sender)
+      )
+    )
+    this.disposables.push(
+      messenger.onNotification(notifyMonitorIntentResume, (params, sender) =>
+        this.handleMonitorIntentResume(params, sender)
+      )
+    )
+    this.disposables.push(
+      messenger.onNotification(notifyMonitorOpenError, (params, sender) =>
+        this.handleMonitorOpenError(params, sender)
+      )
+    )
+    this.disposables.push(
       messenger.onNotification(notifyTraceEvent, (event, sender) =>
         this.handleTraceEvent(event, sender)
       )
@@ -1062,6 +1111,11 @@ export class MonitorManager implements vscode.Disposable {
     this.disposables.push(
       messenger.onRequest(requestMonitorPhysicalStateSnapshot, () =>
         this.physicalStates.snapshot()
+      )
+    )
+    this.disposables.push(
+      messenger.onRequest(requestMonitorSessionSnapshot, () =>
+        this.snapshotSessions()
       )
     )
 
@@ -1105,6 +1159,9 @@ export class MonitorManager implements vscode.Disposable {
       }
     }
     this.clientSessions.clear()
+    this.clientPorts.clear()
+    this.portSessions.clear()
+    this.sessionSnapshots.clear()
   }
 
   getRunningMonitors(): ReadonlyArray<{
@@ -1319,6 +1376,7 @@ export class MonitorManager implements vscode.Disposable {
       selectedBaudrates: finalSelectedBaudrates,
       runningMonitors,
       physicalStates: this.physicalStates.snapshot(),
+      sessionStates: this.snapshotSessions(),
     }
   }
 
@@ -1330,7 +1388,134 @@ export class MonitorManager implements vscode.Disposable {
       return
     }
     this.clientSessions.delete(params.clientId)
+    const portKey = this.clientPorts.get(params.clientId)
+    if (portKey) {
+      const session = this.portSessions.get(portKey)
+      session?.detachClient(params.clientId)
+      this.clientPorts.delete(params.clientId)
+      if (session) {
+        this.emitSessionState(session)
+        this.pruneSessionIfIdle(portKey, session)
+      }
+    }
     this.log('Monitor client disconnected', { clientId: params.clientId })
+  }
+
+  private handleClientAttached(
+    params: MonitorClientAttachParams,
+    _sender?: MessageParticipant
+  ): void {
+    if (!params.clientId || !params.port) {
+      return
+    }
+    const portKey = createPortKey(params.port)
+    const session = this.getOrCreateSession(params.port)
+    session.attachClient(params.clientId)
+    session.markDetected(Boolean(this.detectedPorts[portKey]))
+
+    const previousPortKey = this.clientPorts.get(params.clientId)
+    if (previousPortKey && previousPortKey !== portKey) {
+      const previousSession = this.portSessions.get(previousPortKey)
+      previousSession?.detachClient(params.clientId)
+      if (previousSession) {
+        this.emitSessionState(previousSession)
+        this.pruneSessionIfIdle(previousPortKey, previousSession)
+      }
+    }
+
+    this.clientPorts.set(params.clientId, portKey)
+    this.maybeApplySessionAction(session, 'client-attached')
+    this.emitSessionState(session)
+  }
+
+  private handleClientDetached(
+    params: MonitorClientDetachParams,
+    _sender?: MessageParticipant
+  ): void {
+    if (!params.clientId || !params.port) {
+      return
+    }
+    const portKey = createPortKey(params.port)
+    const session = this.portSessions.get(portKey)
+    if (!session) {
+      return
+    }
+    session.detachClient(params.clientId)
+    this.clientPorts.delete(params.clientId)
+    this.maybeApplySessionAction(session, 'client-detached')
+    this.emitSessionState(session)
+    this.pruneSessionIfIdle(portKey, session)
+  }
+
+  private handleMonitorIntentStart(
+    params: MonitorIntentParams,
+    sender?: MessageParticipant
+  ): void {
+    if (!params.port) {
+      return
+    }
+    const session = this.getOrCreateSession(params.port)
+    const clientId = params.clientId ?? this.resolveClientId(sender)
+    session.intentStart(clientId)
+    this.maybeApplySessionAction(session, 'intent-start')
+    this.emitSessionState(session)
+  }
+
+  private handleMonitorIntentStop(
+    params: MonitorIntentParams,
+    sender?: MessageParticipant
+  ): void {
+    if (!params.port) {
+      return
+    }
+    const session = this.getOrCreateSession(params.port)
+    const clientId = params.clientId ?? this.resolveClientId(sender)
+    session.intentStop(clientId)
+    this.maybeApplySessionAction(session, 'intent-stop')
+    this.emitSessionState(session)
+  }
+
+  private handleMonitorIntentResume(
+    params: MonitorIntentParams,
+    sender?: MessageParticipant
+  ): void {
+    if (!params.port) {
+      return
+    }
+    const session = this.getOrCreateSession(params.port)
+    const clientId = params.clientId ?? this.resolveClientId(sender)
+    session.intentResume(clientId)
+    this.maybeApplySessionAction(session, 'intent-resume')
+    this.emitSessionState(session)
+  }
+
+  private resolveClientId(sender?: MessageParticipant): string | undefined {
+    if (!sender) {
+      return undefined
+    }
+    for (const [clientId, participant] of this.clientSessions.entries()) {
+      if (equalParticipants(participant, sender)) {
+        return clientId
+      }
+    }
+    return undefined
+  }
+
+  private handleMonitorOpenError(
+    params: MonitorOpenErrorNotification,
+    _sender?: MessageParticipant
+  ): void {
+    if (!params.port) {
+      return
+    }
+    const session = this.getOrCreateSession(params.port)
+    session.markOpenError({
+      status: params.status,
+      code: params.code,
+      message: params.message,
+    })
+    this.maybeApplySessionAction(session, 'open-error')
+    this.emitSessionState(session)
   }
 
   dropClientSessionsForParticipant(participant: MessageParticipant): void {
@@ -1344,7 +1529,88 @@ export class MonitorManager implements vscode.Disposable {
         session.webviewId === targetId
       ) {
         this.clientSessions.delete(clientId)
+        const portKey = this.clientPorts.get(clientId)
+        if (portKey) {
+          const portSession = this.portSessions.get(portKey)
+          portSession?.detachClient(clientId)
+          this.clientPorts.delete(clientId)
+          if (portSession) {
+            this.emitSessionState(portSession)
+            this.pruneSessionIfIdle(portKey, portSession)
+          }
+        }
       }
+    }
+  }
+
+  private getOrCreateSession(port: PortIdentifier): MonitorPortSession {
+    const portKey = createPortKey(port)
+    const existing = this.portSessions.get(portKey)
+    if (existing) {
+      existing.updatePort(port)
+      const cachedBaudrate = this.selectedBaudrateCache.get(portKey)
+      existing.setBaudrate(cachedBaudrate)
+      return existing
+    }
+    const session = new MonitorPortSession(port)
+    const cachedBaudrate = this.selectedBaudrateCache.get(portKey)
+    session.setBaudrate(cachedBaudrate)
+    session.markDetected(Boolean(this.detectedPorts[portKey]))
+    this.portSessions.set(portKey, session)
+    return session
+  }
+
+  private snapshotSessions(): ReadonlyArray<MonitorSessionState> {
+    return Array.from(this.portSessions.values()).map((session) =>
+      session.snapshot()
+    )
+  }
+
+  private emitSessionState(session: MonitorPortSession): void {
+    const snapshot = session.snapshot()
+    const previous = this.sessionSnapshots.get(snapshot.portKey)
+    if (previous && deepEqual(previous, snapshot)) {
+      return
+    }
+    this.sessionSnapshots.set(snapshot.portKey, snapshot)
+    this.forEachClient((clientId, participant) => {
+      this.sendNotificationSafe(
+        clientId,
+        participant,
+        notifyMonitorSessionState,
+        snapshot
+      )
+    })
+  }
+
+  private maybeApplySessionAction(
+    session: MonitorPortSession,
+    reason: string
+  ): void {
+    const action = session.nextAction()
+    if (!action) {
+      return
+    }
+    this.emitHostTrace('extMonitorSessionAction', {
+      portKey: createPortKey(action.port),
+      action: action.type,
+      attemptId: action.type === 'open' ? action.attemptId : undefined,
+      reason,
+    })
+  }
+
+  private pruneSessionIfIdle(
+    portKey: string,
+    session: MonitorPortSession
+  ): void {
+    const snapshot = session.snapshot()
+    if (
+      snapshot.clients.length === 0 &&
+      snapshot.desired === 'stopped' &&
+      snapshot.status === 'idle'
+    ) {
+      this.portSessions.delete(portKey)
+      this.sessionSnapshots.delete(portKey)
     }
   }
 
@@ -1352,6 +1618,11 @@ export class MonitorManager implements vscode.Disposable {
     params: RequestUpdateBaudrateParams
   ): Promise<void> {
     await this.bridgeClient.updateBaudrate(params)
+    const session = this.portSessions.get(createPortKey(params.port))
+    session?.setBaudrate(params.baudrate)
+    if (session) {
+      this.emitSessionState(session)
+    }
     this.updateSelectedBaudrateCache(params.port, params.baudrate)
     this.updateRunningMonitorBaudrate(params.port, params.baudrate)
   }
@@ -1372,6 +1643,16 @@ export class MonitorManager implements vscode.Disposable {
       this.bridgeClient.onDidChangeDetectedPorts((ports) => {
         this.detectedPorts = ports
         this.logicalTracker.applyDetectionSnapshot(ports)
+        for (const [portKey, session] of this.portSessions.entries()) {
+          const detectedPort = ports[portKey]?.port
+          if (detectedPort) {
+            session.updatePort(detectedPort)
+          }
+          session.markDetected(Boolean(ports[portKey]))
+          this.maybeApplySessionAction(session, 'detected-ports')
+          this.emitSessionState(session)
+          this.pruneSessionIfIdle(portKey, session)
+        }
         this.forEachClient((clientId, participant) => {
           this.sendNotificationSafe(
             clientId,
@@ -1409,6 +1690,11 @@ export class MonitorManager implements vscode.Disposable {
             payload
           )
         })
+        const session = this.portSessions.get(createPortKey(payload.port))
+        session?.setBaudrate(payload.baudrate)
+        if (session) {
+          this.emitSessionState(session)
+        }
         this.updateSelectedBaudrateCache(payload.port, payload.baudrate)
         this.updateRunningMonitorBaudrate(payload.port, payload.baudrate)
       })
@@ -1424,6 +1710,9 @@ export class MonitorManager implements vscode.Disposable {
             payload
           )
         })
+        const session = this.getOrCreateSession(payload.port)
+        session.markPaused('suspend')
+        this.emitSessionState(session)
         this.setMonitorState(payload.port, 'suspended')
       })
     )
@@ -1443,6 +1732,14 @@ export class MonitorManager implements vscode.Disposable {
           const monitorSessionId =
             this.monitorSessionIds.get(createPortKey(resumedPort)) ??
             this.monitorSessionIds.get(createPortKey(payload.didPauseOnPort))
+          const session = this.getOrCreateSession(resumedPort)
+          session.markMonitorStarted({
+            monitorSessionId,
+            baudrate: this.selectedBaudrateCache.get(
+              createPortKey(resumedPort)
+            ),
+          })
+          this.emitSessionState(session)
           this.physicalStates.markStart(resumedPort, {
             monitorSessionId,
             reason: 'resume',
@@ -1461,6 +1758,12 @@ export class MonitorManager implements vscode.Disposable {
             event.monitorSessionId
           )
         }
+        const session = this.getOrCreateSession(event.port)
+        session.markMonitorStarted({
+          monitorSessionId: event.monitorSessionId,
+          baudrate: event.baudrate,
+        })
+        this.emitSessionState(session)
         this.physicalStates.markStart(event.port, {
           monitorSessionId: event.monitorSessionId,
           baudrate: event.baudrate,
@@ -1477,6 +1780,10 @@ export class MonitorManager implements vscode.Disposable {
         // even if the bridge stop notification arrives before any physical
         // state change listeners run.
         this.logicalTracker.applyEvent({ type: 'USER_STOP', port: event.port })
+        const session = this.getOrCreateSession(event.port)
+        session.markMonitorStopped()
+        this.maybeApplySessionAction(session, 'monitor-stopped')
+        this.emitSessionState(session)
         this.physicalStates.markStop(event.port, {
           monitorSessionId: event.monitorSessionId,
           reason: 'stop',
@@ -1549,6 +1856,13 @@ export class MonitorManager implements vscode.Disposable {
       if (entry.monitorSessionId) {
         this.monitorSessionIds.set(key, entry.monitorSessionId)
       }
+      const session = this.getOrCreateSession(entry.port)
+      session.markDetected(Boolean(this.detectedPorts[key]))
+      session.markMonitorStarted({
+        monitorSessionId: entry.monitorSessionId,
+        baudrate: entry.baudrate,
+      })
+      this.emitSessionState(session)
       this.physicalStates.markStart(entry.port, {
         monitorSessionId: entry.monitorSessionId,
         baudrate: entry.baudrate,

@@ -89,12 +89,12 @@ function MonitorSendBar({ client, lineEnding }) {
     sendPlaceholder = 'Select a port to send'
     playDisabled = true
     sendDisabled = true
-  } else if (!detected) {
-    sendPlaceholder = `No device detected on ${selectedPort.address}`
-    playDisabled = true
-    sendDisabled = true
   } else if (status === 'suspended') {
     sendPlaceholder = `${sendPlaceholder} — waiting for device…`
+    playDisabled = true
+    sendDisabled = true
+  } else if (!detected) {
+    sendPlaceholder = `No device detected on ${selectedPort.address}`
     playDisabled = true
     sendDisabled = true
   } else if (status !== 'connected') {
