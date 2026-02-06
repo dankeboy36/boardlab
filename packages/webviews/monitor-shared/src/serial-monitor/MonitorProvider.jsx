@@ -243,6 +243,7 @@ export function MonitorProvider({ client, children, extensionClient }) {
     client,
     selectedPort: serialState.selectedPort,
     selectedBaudrate,
+    selectedDetected: monitorView.selectedDetected,
     monitorSettingsByProtocol: serialState.monitorSettingsByProtocol,
     session: monitorView.session,
     onText: onStreamText,
@@ -295,11 +296,7 @@ export function MonitorProvider({ client, children, extensionClient }) {
     }
     lastIntentRef.current = signature
     client.notifyIntentStop(serialState.selectedPort)
-  }, [
-    client,
-    serialState.selectedPort,
-    serialState.autoPlay,
-  ])
+  }, [client, serialState.selectedPort, serialState.autoPlay])
 
   const requestedInitialSelectionRef = useRef(false)
   const lastSelectionSignatureRef = useRef('')

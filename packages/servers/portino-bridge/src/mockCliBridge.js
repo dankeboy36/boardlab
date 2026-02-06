@@ -2,7 +2,7 @@
 import EventEmitter from 'node:events'
 
 import { Port } from 'ardunno-cli'
-import { createPortKey } from 'boards-list'
+import { createPortKey, parsePortKey } from 'boards-list'
 import pDefer from 'p-defer'
 
 /** A lightweight in-memory mock of CliBridge for tests. */
@@ -259,9 +259,12 @@ export class MockCliBridge {
     const res = []
     for (const key of Object.keys(this._monitors)) {
       const ref = this._monitors[key]
-      const [protoPart, address] = key.split('://')
-      const [, protocol] = protoPart.split('arduino+')
-      if (ref.baudrate) res.push([{ protocol, address }, ref.baudrate])
+      if (!ref.baudrate) {
+        continue
+      }
+      try {
+        res.push([parsePortKey(key), ref.baudrate])
+      } catch {}
     }
     return res
   }
@@ -387,13 +390,4 @@ export class MockCliBridge {
     }
     return mockMonitor
   }
-}
-
-function parsePortKey(portKey) {
-  const [protoPart, address] = portKey.split('://')
-  const [, protocol] = protoPart.split('arduino+')
-  if (!protocol || !address) {
-    throw new Error(`Invalid port key: ${portKey}`)
-  }
-  return { protocol, address }
 }

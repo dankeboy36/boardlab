@@ -32,6 +32,7 @@
     "out"
   ],
   "scripts": {
+    "prebuild": "npm --prefix ../../protocol run build",
     "build": "tsc -p ./",
     "clean": "rimraf out",
     "pretest": "npm run build",

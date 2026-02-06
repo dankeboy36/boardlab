@@ -59,7 +59,10 @@ export interface HostConnectClientResult extends ConnectClientResult {
   }>
   readonly physicalStates?: ReadonlyArray<MonitorPhysicalState>
   readonly sessionStates?: ReadonlyArray<MonitorSessionState>
+  readonly transport?: MonitorTransport
 }
+
+export type MonitorTransport = 'http' | 'ws'
 
 export type MonitorSessionStatus =
   | 'idle'
@@ -343,6 +346,28 @@ export const notifyMonitorOpenError: MessengerNotificationType<MonitorOpenErrorN
 export const notifyMonitorSessionState: MessengerNotificationType<MonitorSessionState> =
   {
     method: 'boardlab/monitor/session-state',
+  }
+
+export interface MonitorStreamDataNotification {
+  readonly portKey: string
+  readonly data: Uint8Array
+}
+
+export interface MonitorStreamErrorNotification {
+  readonly portKey: string
+  readonly code?: string
+  readonly status?: number
+  readonly message?: string
+}
+
+export const notifyMonitorStreamData: MessengerNotificationType<MonitorStreamDataNotification> =
+  {
+    method: 'boardlab/monitor/stream-data',
+  }
+
+export const notifyMonitorStreamError: MessengerNotificationType<MonitorStreamErrorNotification> =
+  {
+    method: 'boardlab/monitor/stream-error',
   }
 
 export const requestMonitorSessionSnapshot: MessengerRequestType<

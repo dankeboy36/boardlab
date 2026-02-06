@@ -6,12 +6,13 @@ import path from 'node:path'
 import util from 'node:util'
 
 import { Port } from 'ardunno-cli'
-import { createPortKey } from 'boards-list'
+import { createPortKey, parsePortKey } from 'boards-list'
 import cors from 'cors'
 import express from 'express'
 import deepEqual from 'fast-deep-equal'
 import { FQBN } from 'fqbn'
 import { ClientError } from 'nice-grpc'
+import { ResponseError } from 'vscode-jsonrpc'
 import { createWebSocketConnection } from 'vscode-ws-jsonrpc'
 import { WebSocketServer } from 'ws'
 
@@ -25,6 +26,12 @@ import {
   NotifyMonitorDidStart,
   NotifyMonitorDidStop,
   NotifyTraceEvent,
+  RequestMonitorClose,
+  RequestMonitorOpen,
+  RequestMonitorSubscribe,
+  RequestMonitorUnsubscribe,
+  RequestMonitorWrite,
+  RequestPortinoHello,
   RequestClientConnect,
   RequestDetectedPorts,
   RequestPauseMonitor,
@@ -39,6 +46,11 @@ import { TraceWriter, hashToken } from './traceWriter.js'
 
 const DEFAULT_HOST = '127.0.0.1'
 const MAX_PROPERTY_STRING_LENGTH = 256
+const WS_CONTROL_PATH = '/control'
+const WS_DATA_PATH = '/data'
+const WS_CLOSE_GRACE_MS = 7_000
+const PORTINO_PROTOCOL_VERSION = 1
+const PORTINO_CAPABILITIES = ['multi-client', 'tail', 'tx_allow_all']
 // https://docs.datadoghq.com/tracing/error_tracking/exception_replay/#identifier-based-redaction
 // https://github.com/DataDog/dd-trace-py/blob/main/ddtrace/debugging/_redaction.py
 const DDT_DATADOG_REDACTION_IDENTIFIERS = [
@@ -308,6 +320,85 @@ class AttachmentRegistry {
   }
 }
 
+class RingBuffer {
+  constructor(maxBytes = 0) {
+    this.maxBytes = Math.max(0, Number(maxBytes) || 0)
+    /** @type {Buffer[]} */
+    this.chunks = []
+    this.size = 0
+  }
+
+  ensureCapacity(maxBytes) {
+    const next = Math.max(0, Number(maxBytes) || 0)
+    if (next > this.maxBytes) {
+      this.maxBytes = next
+    }
+  }
+
+  push(buf) {
+    if (!this.maxBytes) {
+      return
+    }
+    if (!buf || !buf.length) {
+      return
+    }
+    const buffer = Buffer.isBuffer(buf) ? buf : Buffer.from(buf)
+    if (buffer.length >= this.maxBytes) {
+      this.chunks = [buffer.slice(buffer.length - this.maxBytes)]
+      this.size = this.chunks[0].length
+      return
+    }
+    this.chunks.push(buffer)
+    this.size += buffer.length
+    while (this.size > this.maxBytes && this.chunks.length > 0) {
+      const head = this.chunks[0]
+      const overflow = this.size - this.maxBytes
+      if (head.length <= overflow) {
+        this.chunks.shift()
+        this.size -= head.length
+      } else {
+        this.chunks[0] = head.slice(overflow)
+        this.size -= overflow
+      }
+    }
+  }
+
+  tail(bytes) {
+    const requested = Math.max(0, Number(bytes) || 0)
+    if (!requested || !this.size) {
+      return Buffer.alloc(0)
+    }
+    let remaining = Math.min(requested, this.size)
+    /** @type {Buffer[]} */
+    const parts = []
+    for (let i = this.chunks.length - 1; i >= 0 && remaining > 0; i -= 1) {
+      const chunk = this.chunks[i]
+      if (chunk.length <= remaining) {
+        parts.push(chunk)
+        remaining -= chunk.length
+      } else {
+        parts.push(chunk.slice(chunk.length - remaining))
+        remaining = 0
+      }
+    }
+    if (parts.length === 0) {
+      return Buffer.alloc(0)
+    }
+    return Buffer.concat(parts.reverse())
+  }
+}
+
+/**
+ * @param {unknown} value
+ * @returns {value is { type: 'Buffer'; data: readonly number[] }}
+ */
+const isBufferPayload = (value) =>
+  !!value &&
+  typeof value === 'object' &&
+  !Array.isArray(value) &&
+  /** @type {{ type?: string }} */ (value).type === 'Buffer' &&
+  Array.isArray(/** @type {{ data?: unknown }} */ (value).data)
+
 const baseConsoleFunctions = {
   log: console.log.bind(console),
   info: console.info.bind(console),
@@ -464,6 +555,33 @@ function createMonitorBridgeLogStream() {
  *   | import('./cliBridge.js').CliBridge
  *   | Promise<import('./cliBridge.js').CliBridge>} [cliBridgeFactory]
  * @property {string | string[]} [redactedIdentifiers]
+ */
+
+/** @typedef {import('ws').WebSocket} WsSocket */
+
+/**
+ * @typedef {Object} WsSubscriberInfo
+ * @property {string} connectionId
+ * @property {string[]} channels
+ */
+
+/**
+ * @typedef {Object} SerialStreamEntry
+ * @property {import('ardunno-cli').Port} port
+ * @property {import('./monitor.js').PortinoMonitor | undefined} monitor
+ * @property {Set<import('express').Response>} clients
+ * @property {Map<string, import('express').Response>} clientIndex
+ * @property {Map<string, WsSubscriberInfo>} wsSubscribers
+ * @property {Map<string, number>} wsConnections
+ * @property {NodeJS.Timeout} [wsCloseTimer]
+ * @property {string} [sessionId]
+ * @property {string} [baudrate]
+ * @property {boolean} [closed]
+ * @property {number} [lastCount]
+ * @property {boolean} [startedNotified]
+ * @property {number} [rxBytesSinceSummary]
+ * @property {number} [rxChunksSinceSummary]
+ * @property {number} [rxSummaryAt]
  */
 
 /**
@@ -732,7 +850,47 @@ export async function createServer(options = {}) {
   app.use(cors())
   app.use(express.json({ limit: '1mb' }))
   const server = http.createServer(app)
-  const wss = new WebSocketServer({ server, path: '/serial' })
+  const wss = new WebSocketServer({
+    noServer: true,
+    perMessageDeflate: false,
+  })
+  const controlWss = new WebSocketServer({
+    noServer: true,
+    perMessageDeflate: false,
+  })
+  const dataWss = new WebSocketServer({
+    noServer: true,
+    perMessageDeflate: false,
+  })
+  const handleUpgrade = (req, socket, head) => {
+    let pathname = ''
+    try {
+      pathname = new URL(req?.url ?? '', 'http://localhost').pathname
+    } catch {
+      socket.destroy()
+      return
+    }
+    if (pathname === '/serial') {
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit('connection', ws, req)
+      })
+      return
+    }
+    if (pathname === WS_CONTROL_PATH) {
+      controlWss.handleUpgrade(req, socket, head, (ws) => {
+        controlWss.emit('connection', ws, req)
+      })
+      return
+    }
+    if (pathname === WS_DATA_PATH) {
+      dataWss.handleUpgrade(req, socket, head, (ws) => {
+        dataWss.emit('connection', ws, req)
+      })
+      return
+    }
+    socket.destroy()
+  }
+  server.on('upgrade', handleUpgrade)
   const attachmentRegistry = new AttachmentRegistry()
   attachmentRegistry.configure({
     ...controlOptions,
@@ -924,6 +1082,41 @@ export async function createServer(options = {}) {
     })
   })
 
+  app.get('/control/state', (_req, res) => {
+    const ports = []
+    for (const [portKey, entry] of activeSerialStreams.entries()) {
+      const status = entry.monitor?.isPaused?.()
+        ? 'paused'
+        : entry.monitor
+          ? 'running'
+          : 'stopped'
+      const subscribers = Array.from(entry.wsSubscribers.entries()).map(
+        ([clientKey, info]) => ({
+          clientKey,
+          channels: info.channels,
+          connectionId: info.connectionId,
+        })
+      )
+      ports.push({
+        portKey,
+        portId: portIdByKey.get(portKey),
+        status,
+        subscribers,
+      })
+    }
+    const portIds = Array.from(portIdByKey.entries()).map(
+      ([portKey, portId]) => ({
+        portKey,
+        portId,
+      })
+    )
+    res.json({
+      timestamp: new Date().toISOString(),
+      ports,
+      portIds,
+    })
+  })
+
   const describeDetectedPorts = () => {
     const state = watcher?.state ?? {}
     return Object.entries(state).map(([portKey, entry]) => ({
@@ -939,12 +1132,15 @@ export async function createServer(options = {}) {
   const describeActiveStreams = () => {
     const streams = []
     for (const [portKey, entry] of activeSerialStreams.entries()) {
+      const httpClientIds = Array.from(entry.clientIndex.keys())
+      const wsClientIds = Array.from(entry.wsSubscribers.keys())
+      const clientIds = [...httpClientIds, ...wsClientIds]
       streams.push({
         portKey,
         monitorSessionId: entry.sessionId,
-        clientCount: entry.clients.size,
+        clientCount: clientIds.length,
         lastCount: entry.lastCount,
-        clientIds: Array.from(entry.clientIndex.keys()),
+        clientIds,
       })
     }
     return streams
@@ -954,12 +1150,13 @@ export async function createServer(options = {}) {
     const monitors = []
     for (const [portKey, info] of runningMonitorsByKey.entries()) {
       const stream = activeSerialStreams.get(portKey)
+      const clientCount = stream ? getActiveClientCount(stream) : 0
       monitors.push({
         portKey,
         port: info.port,
         baudrate: info.baudrate,
         monitorSessionId: info.monitorSessionId,
-        clientCount: stream?.clients.size ?? 0,
+        clientCount,
         lastCount: stream?.lastCount,
       })
     }
@@ -977,7 +1174,7 @@ export async function createServer(options = {}) {
       /** @type {Record<string, number>} */
       const counts = {}
       for (const [key, entry] of activeSerialStreams.entries()) {
-        counts[key] = entry.clients.size
+        counts[key] = getActiveClientCount(entry)
       }
       v(
         `[metrics] ws=${portinoConnections.size} active=${JSON.stringify(
@@ -1046,25 +1243,21 @@ export async function createServer(options = {}) {
     wsBaseUrl,
   })
   // Broadcast hub for raw serial streams: one monitor per unique port+baudrate+fqbn
-  /**
-   * @type {Map<
-   *   string,
-   *   {
-   *     port: import('ardunno-cli').Port
-   *     monitor: import('./monitor.js').PortinoMonitor | undefined
-   *     clients: Set<import('express').Response>
-   *     clientIndex: Map<string, import('express').Response>
-   *     sessionId?: string
-   *     baudrate?: string
-   *     closed?: boolean
-   *     lastCount?: number
-   *     rxBytesSinceSummary?: number
-   *     rxChunksSinceSummary?: number
-   *     rxSummaryAt?: number
-   *   }
-   * >}
-   */
+  /** @type {Map<string, SerialStreamEntry>} */
   const activeSerialStreams = new Map()
+  /** @type {Map<string, WsSocket>} */
+  const wsControlConnections = new Map()
+  /** @type {Map<string, WsSocket>} */
+  const wsDataConnections = new Map()
+  /** @type {Map<string, Set<string>>} */
+  const wsSubscriptionsByConnection = new Map()
+  /** @type {Map<string, number>} */
+  const portIdByKey = new Map()
+  /** @type {Map<number, string>} */
+  const portKeyById = new Map()
+  /** @type {Map<number, number>} */
+  const portSeqById = new Map()
+  let nextPortId = 1
 
   /**
    * Tracks currently running monitors (at least one HTTP client streaming).
@@ -1088,6 +1281,601 @@ export async function createServer(options = {}) {
 
   const createMonitorSessionId = () =>
     `ms_${Date.now()}_${randomUUID().slice(0, 8)}`
+
+  /** @type {Map<string, { messageConnection: import('vscode-jsonrpc').MessageConnection }>} */
+  const portinoControlClients = new Map()
+  /** @type {Map<string, WsSocket>} */
+  const portinoDataConnections = new Map()
+  /** @type {Map<string, { monitorIds: Set<number>; monitorIdsByPortKey: Map<string, number> }>} */
+  const portinoClients = new Map()
+  /** @type {Map<number, { clientId: string; portKey: string }>} */
+  const portinoMonitors = new Map()
+  /** @type {Map<
+   *   string,
+   *   {
+   *     portKey: string
+   *     basePortKey: string
+   *     port: import('boards-list').PortIdentifier
+   *     monitor?: import('./monitor.js').PortinoMonitor
+   *     monitorIds: Set<number>
+   *     subscribers: Map<number, string>
+   *     ringBuffer: RingBuffer
+   *     openPromise?: Promise<void>
+   *     closing?: boolean
+   *     sessionId: string
+   *     config: { baudrate?: string; optionsHash: string }
+   *     monitorStarted?: boolean
+   *     writeChain?: Promise<void>
+   *   }
+   * >}
+   */
+  const portinoPorts = new Map()
+  /** @type {Map<string, string>} */
+  const portinoPortKeyByBase = new Map()
+  let nextMonitorId = 1
+
+  const allocateMonitorId = () => {
+    const next = nextMonitorId++ >>> 0
+    if (next === 0) {
+      nextMonitorId = 1
+      return allocateMonitorId()
+    }
+    return next
+  }
+
+  const createPortinoError = (code, message, status, extra = {}) =>
+    new ResponseError(-32000, message, { code, status, ...extra })
+
+  const parseMonitorPortKey = (portKey) => {
+    if (typeof portKey !== 'string' || !portKey) {
+      throw createPortinoError(
+        'invalid-port-key',
+        'Invalid portKey',
+        400
+      )
+    }
+    const firstAt = portKey.indexOf('@')
+    const secondAt = portKey.indexOf('@', firstAt + 1)
+    if (firstAt <= 0 || secondAt <= firstAt + 1 || secondAt >= portKey.length) {
+      throw createPortinoError(
+        'invalid-port-key',
+        'Invalid portKey',
+        400
+      )
+    }
+    const basePortKey = portKey.slice(0, firstAt)
+    const baudratePart = portKey.slice(firstAt + 1, secondAt)
+    const optionsHash = portKey.slice(secondAt + 1)
+    if (!optionsHash) {
+      throw createPortinoError(
+        'invalid-port-key',
+        'Invalid portKey',
+        400
+      )
+    }
+    let port
+    try {
+      port = parsePortKey(basePortKey)
+    } catch {
+      throw createPortinoError(
+        'invalid-port-key',
+        'Invalid portKey',
+        400
+      )
+    }
+    const baudrate =
+      baudratePart && baudratePart !== 'na' ? baudratePart : undefined
+    return {
+      portKey,
+      basePortKey,
+      port,
+      baudrate,
+      optionsHash,
+    }
+  }
+
+  const resolvePortinoClient = (clientId) => {
+    let entry = portinoClients.get(clientId)
+    if (!entry) {
+      entry = {
+        monitorIds: new Set(),
+        monitorIdsByPortKey: new Map(),
+      }
+      portinoClients.set(clientId, entry)
+    }
+    return entry
+  }
+
+  const getMonitorRefCount = (entry) => entry.subscribers.size
+
+  const sendPortinoDataFrame = (clientId, monitorId, kind, payload) => {
+    const socket = portinoDataConnections.get(clientId)
+    if (!socket || socket.readyState !== 1) {
+      return
+    }
+    const buffer = Buffer.isBuffer(payload) ? payload : Buffer.from(payload)
+    const frame = Buffer.allocUnsafe(5 + buffer.length)
+    frame.writeUInt32LE(monitorId, 0)
+    frame.writeUInt8(kind, 4)
+    buffer.copy(frame, 5)
+    try {
+      socket.send(frame, { binary: true })
+    } catch (error) {
+      console.warn('[portino][control] ws data send failed', error)
+    }
+  }
+
+  const ensureMonitorSettings = async (protocol, baudrate) => {
+    try {
+      const result = await cliBridge.fetchMonitorSettingsForProtocol(
+        String(protocol)
+      )
+      const settingsOrError = result[String(protocol)]
+      if (settingsOrError instanceof Error) {
+        const msg = settingsOrError.message || String(settingsOrError)
+        throw createPortinoError(
+          'protocol-error',
+          `Monitor unavailable for protocol ${protocol}: ${msg}`,
+          400
+        )
+      }
+      const settings = settingsOrError
+      const hasBaudrate = Array.isArray(settings)
+        ? !!settings.find((setting) => setting.settingId === 'baudrate')
+        : false
+      if (hasBaudrate && typeof baudrate !== 'string') {
+        throw createPortinoError(
+          'baudrate-required',
+          'Baudrate required for this protocol',
+          400
+        )
+      }
+    } catch (error) {
+      if (error instanceof ResponseError) {
+        throw error
+      }
+      const msg = String(/** @type {any} */ (error)?.message || error)
+      throw createPortinoError(
+        'settings-unavailable',
+        `Failed to resolve monitor settings for ${protocol}: ${msg}`,
+        400
+      )
+    }
+  }
+
+  const ensurePortinoEntry = async (parsed) => {
+    const existingKey = portinoPortKeyByBase.get(parsed.basePortKey)
+    if (existingKey && existingKey !== parsed.portKey) {
+      const current = portinoPorts.get(existingKey)
+      const currentConfig = current
+        ? {
+            portKey: current.portKey,
+            baudrate: current.config.baudrate,
+            optionsHash: current.config.optionsHash,
+          }
+        : {
+            portKey: existingKey,
+          }
+      throw createPortinoError(
+        'PORT_IN_USE_DIFFERENT_CONFIG',
+        'Port already open with different config',
+        409,
+        {
+          portPath: parsed.port?.address ?? parsed.basePortKey,
+          currentConfig,
+          requestedConfig: {
+            portKey: parsed.portKey,
+            baudrate: parsed.baudrate,
+            optionsHash: parsed.optionsHash,
+          },
+        }
+      )
+    }
+
+    let entry = portinoPorts.get(parsed.portKey)
+    if (entry) {
+      return entry
+    }
+
+    const isPortDetected = Boolean(watcher?.state?.[parsed.basePortKey])
+    if (!isPortDetected) {
+      throw createPortinoError(
+        'port-not-detected',
+        `Port ${parsed.port?.address ?? parsed.basePortKey} is not detected.`,
+        404
+      )
+    }
+
+    await ensureMonitorSettings(parsed.port?.protocol, parsed.baudrate)
+
+    entry = {
+      portKey: parsed.portKey,
+      basePortKey: parsed.basePortKey,
+      port: parsed.port,
+      monitor: undefined,
+      monitorIds: new Set(),
+      subscribers: new Map(),
+      ringBuffer: new RingBuffer(0),
+      sessionId: createMonitorSessionId(),
+      config: {
+        baudrate: parsed.baudrate,
+        optionsHash: parsed.optionsHash,
+      },
+      writeChain: Promise.resolve(),
+    }
+    portinoPorts.set(parsed.portKey, entry)
+    portinoPortKeyByBase.set(parsed.basePortKey, parsed.portKey)
+    return entry
+  }
+
+  const closePortinoEntry = async (entry, reason, clientId) => {
+    if (entry.closing) {
+      return
+    }
+    entry.closing = true
+    const monitor = entry.monitor
+    entry.monitor = undefined
+    entry.openPromise = undefined
+    if (monitor) {
+      try {
+        await monitor.dispose?.()
+      } catch {}
+    }
+    try {
+      await cliBridge.releaseMonitor(entry.port)
+    } catch (error) {
+      console.error('Error releasing monitor:', error)
+    }
+    if (entry.monitorStarted) {
+      notifyMonitorStopped(entry.basePortKey, entry.port, entry.sessionId)
+      entry.monitorStarted = false
+    }
+    console.log('[portino][control] port closed', {
+      portKey: entry.portKey,
+      clientId,
+      refCount: getMonitorRefCount(entry),
+      reason,
+    })
+    entry.closing = false
+  }
+
+  const dropPortinoEntryIfIdle = (entry) => {
+    if (entry.monitorIds.size > 0) {
+      return
+    }
+    portinoPorts.delete(entry.portKey)
+    if (portinoPortKeyByBase.get(entry.basePortKey) === entry.portKey) {
+      portinoPortKeyByBase.delete(entry.basePortKey)
+    }
+  }
+
+  const startPortinoMonitorLoop = (entry, monitor, respIterator, buffered) => {
+    ;(async () => {
+      try {
+        if (buffered.length) {
+          for (const buf of buffered) {
+            entry.ringBuffer.push(buf)
+            for (const [monitorId, clientId] of entry.subscribers.entries()) {
+              sendPortinoDataFrame(clientId, monitorId, 0, buf)
+            }
+          }
+          buffered.length = 0
+        }
+        while (true) {
+          const { value: chunk, done } = await respIterator.next()
+          if (done) break
+          const buf = Buffer.from(chunk)
+          entry.ringBuffer.push(buf)
+          for (const [monitorId, clientId] of entry.subscribers.entries()) {
+            sendPortinoDataFrame(clientId, monitorId, 0, buf)
+          }
+        }
+      } catch (error) {
+        const name = /** @type {any} */ (error)?.name || ''
+        const msg = String(
+          (error && /** @type {any} */ (error).details) || error || ''
+        )
+        const isAbort = name === 'AbortError' || /aborted/i.test(msg)
+        if (!isAbort) {
+          console.error('Portino data stream error:', error)
+        }
+      } finally {
+        if (entry.monitor === monitor) {
+          await closePortinoEntry(entry, 'stream-ended')
+        }
+      }
+    })()
+  }
+
+  const openPortinoMonitorIfNeeded = async (entry, clientId) => {
+    if (entry.monitor) {
+      return entry.monitor
+    }
+    if (entry.openPromise) {
+      await entry.openPromise
+      if (!entry.monitor) {
+        throw createPortinoError(
+          'monitor-open-failed',
+          'Monitor open failed',
+          502
+        )
+      }
+      return entry.monitor
+    }
+
+    entry.openPromise = (async () => {
+      const onDidChangeBaudrate = () => {}
+      /** @type {import('./monitor.js').PortinoMonitor} */
+      let monitor
+      try {
+        monitor = await cliBridge.acquireMonitor(
+          {
+            port: Port.fromJSON(entry.port),
+            baudrate: entry.config.baudrate,
+          },
+          onDidChangeBaudrate
+        )
+        entry.monitor = monitor
+      } catch (err) {
+        const message = String(
+          (err && /** @type {any} */ (err).details) || err
+        )
+        if (message.includes('Serial port busy')) {
+          throw createPortinoError('port-busy', 'Serial port busy', 423)
+        }
+        const stillDetected = Boolean(watcher?.state?.[entry.basePortKey])
+        if (!stillDetected) {
+          throw createPortinoError(
+            'port-not-detected',
+            `Port ${entry.port?.address ?? entry.basePortKey} is not detected.`,
+            404
+          )
+        }
+        throw createPortinoError('monitor-open-failed', message, 502)
+      }
+
+      const respIterator = monitor.messages[Symbol.asyncIterator]()
+      /** @type {Buffer[]} */
+      const bufferedChunks = []
+      try {
+        const READY = Symbol('ready')
+        while (true) {
+          const winner = await Promise.race([
+            monitor.ready.then(() => READY),
+            respIterator.next(),
+          ])
+          if (winner === READY) break
+          const { value, done } =
+            /** @type {{ value?: Uint8Array; done: boolean }} */ (winner)
+          if (done) break
+          if (value && value.length) bufferedChunks.push(Buffer.from(value))
+        }
+        await monitor.ready
+      } catch (err) {
+        entry.monitor = undefined
+        try {
+          await cliBridge.releaseMonitor(entry.port)
+        } catch {}
+        if (err instanceof ClientError) {
+          if (err.details.includes('Serial port busy')) {
+            throw createPortinoError('port-busy', 'Serial port busy', 423)
+          }
+          const stillDetected = Boolean(watcher?.state?.[entry.basePortKey])
+          if (!stillDetected) {
+            throw createPortinoError(
+              'port-not-detected',
+              `Port ${entry.port?.address ?? entry.basePortKey} is not detected.`,
+              404
+            )
+          }
+          throw createPortinoError('monitor-open-failed', err.details, 502)
+        }
+        throw createPortinoError(
+          'monitor-open-failed',
+          String(/** @type {any} */ (err)?.message || err),
+          502
+        )
+      }
+
+      startPortinoMonitorLoop(entry, monitor, respIterator, bufferedChunks)
+
+      if (!entry.monitorStarted) {
+        entry.monitorStarted = true
+        notifyMonitorStarted(
+          entry.basePortKey,
+          entry.port,
+          entry.config.baudrate,
+          entry.sessionId
+        )
+        console.log('[portino][control] port opened', {
+          portKey: entry.portKey,
+          clientId,
+          refCount: getMonitorRefCount(entry),
+        })
+      }
+    })()
+
+    try {
+      await entry.openPromise
+    } finally {
+      entry.openPromise = undefined
+    }
+
+    if (!entry.monitor) {
+      throw createPortinoError(
+        'monitor-open-failed',
+        'Monitor open failed',
+        502
+      )
+    }
+    return entry.monitor
+  }
+
+  const closePortinoMonitor = async (monitorId, reason) => {
+    const monitorEntry = portinoMonitors.get(monitorId)
+    if (!monitorEntry) {
+      return { ok: true }
+    }
+    const entry = portinoPorts.get(monitorEntry.portKey)
+    if (entry) {
+      entry.subscribers.delete(monitorId)
+      entry.monitorIds.delete(monitorId)
+      console.log('[portino][control] monitor closed', {
+        portKey: entry.portKey,
+        clientId: monitorEntry.clientId,
+        refCount: getMonitorRefCount(entry),
+        reason,
+      })
+      if (entry.subscribers.size === 0 && entry.monitor) {
+        await closePortinoEntry(entry, reason, monitorEntry.clientId)
+      }
+      dropPortinoEntryIfIdle(entry)
+    }
+    portinoMonitors.delete(monitorId)
+    const clientEntry = portinoClients.get(monitorEntry.clientId)
+    if (clientEntry) {
+      clientEntry.monitorIds.delete(monitorId)
+      clientEntry.monitorIdsByPortKey.delete(monitorEntry.portKey)
+    }
+    return { ok: true }
+  }
+
+  const cleanupPortinoClient = async (clientId, reason) => {
+    const clientEntry = portinoClients.get(clientId)
+    if (clientEntry) {
+      for (const monitorId of Array.from(clientEntry.monitorIds)) {
+        await closePortinoMonitor(monitorId, reason)
+      }
+    }
+    const dataSocket = portinoDataConnections.get(clientId)
+    if (dataSocket) {
+      try {
+        dataSocket.close()
+      } catch {}
+    }
+    portinoClients.delete(clientId)
+    portinoDataConnections.delete(clientId)
+    portinoControlClients.delete(clientId)
+    console.log('[portino][control] client cleanup', { clientId, reason })
+  }
+
+  const getOrCreatePortId = (portKey) => {
+    const existing = portIdByKey.get(portKey)
+    if (existing) {
+      return existing
+    }
+    const portId = nextPortId++
+    portIdByKey.set(portKey, portId)
+    portKeyById.set(portId, portKey)
+    return portId
+  }
+
+  const nextPortSeq = (portId) => {
+    const next = (portSeqById.get(portId) ?? 0) + 1
+    const normalized = next >>> 0
+    portSeqById.set(portId, normalized)
+    return normalized
+  }
+
+  const getActiveClientCount = (entry) =>
+    entry.clients.size + entry.wsSubscribers.size
+
+  const getWsConnectionIds = (entry) => entry.wsConnections.keys()
+
+  const sendWsDataFrame = (portKey, payload, entry) => {
+    if (!entry.wsConnections.size) {
+      return
+    }
+    const portId = getOrCreatePortId(portKey)
+    const seq = nextPortSeq(portId)
+    const frame = Buffer.allocUnsafe(9 + payload.length)
+    frame[0] = 0x01
+    frame.writeUInt32LE(portId, 1)
+    frame.writeUInt32LE(seq, 5)
+    payload.copy(frame, 9)
+    for (const connectionId of getWsConnectionIds(entry)) {
+      const socket = wsDataConnections.get(connectionId)
+      if (!socket || socket.readyState !== 1) {
+        continue
+      }
+      try {
+        socket.send(frame, { binary: true })
+      } catch (error) {
+        console.warn('[serial] ws data send failed', error)
+      }
+    }
+  }
+
+  const cancelWsCloseTimer = (entry) => {
+    if (!entry.wsCloseTimer) {
+      return
+    }
+    clearTimeout(entry.wsCloseTimer)
+    entry.wsCloseTimer = undefined
+  }
+
+  const scheduleWsCloseTimer = (entry, portKey, reason) => {
+    if (entry.wsCloseTimer) {
+      return
+    }
+    entry.wsCloseTimer = setTimeout(async () => {
+      entry.wsCloseTimer = undefined
+      if (entry.clients.size > 0 || entry.wsSubscribers.size > 0) {
+        return
+      }
+      const isPaused = entry.monitor?.isPaused?.()
+      if (isPaused) {
+        v(`[serial] monitor paused; keeping entry for ${portKey}`)
+        return
+      }
+      v(`[serial] grace close -> closing monitor for ${portKey}`)
+      bridgeLog('info', 'Monitor stream closed (grace)', {
+        portKey,
+        monitorSessionId: entry.sessionId,
+        reason,
+      })
+      entry.closed = true
+      notifyMonitorStopped(portKey, entry.port, entry.sessionId)
+      try {
+        await entry.monitor?.dispose?.()
+      } catch {}
+      try {
+        await cliBridge.releaseMonitor(entry.port)
+      } catch (error) {
+        console.error('Error releasing monitor:', error)
+      }
+      activeSerialStreams.delete(portKey)
+      if (DEBUG) {
+        console.log(`[serial] monitor removed for ${portKey}`)
+      }
+    }, WS_CLOSE_GRACE_MS)
+  }
+
+  const sendControlMessage = (connectionId, payload) => {
+    const socket = wsControlConnections.get(connectionId)
+    if (!socket || socket.readyState !== 1) {
+      return
+    }
+    try {
+      socket.send(JSON.stringify(payload))
+    } catch (error) {
+      console.warn('[serial] ws control send failed', error)
+    }
+  }
+
+  const broadcastControlStatus = (portKey, status) => {
+    const entry = activeSerialStreams.get(portKey)
+    if (!entry) {
+      return
+    }
+    for (const connectionId of entry.wsConnections.keys()) {
+      sendControlMessage(connectionId, {
+        type: 'status',
+        portKey,
+        status,
+      })
+    }
+  }
 
   function notifyMonitorStarted(portKey, port, baudrate, monitorSessionId) {
     const portJson = toPortIdentifier(port)
@@ -1117,6 +1905,7 @@ export async function createServer(options = {}) {
         baudrate: finalBaudrate,
         monitorSessionId,
       })
+      broadcastControlStatus(portKey, 'running')
     } else {
       runningMonitorsByKey.set(portKey, {
         port: portJson,
@@ -1148,6 +1937,7 @@ export async function createServer(options = {}) {
         monitorSessionId,
       })
       broadcastMonitorDidStop(toPortIdentifier(port), monitorSessionId)
+      broadcastControlStatus(portKey, 'stopped')
       if (monitorSessionId) {
         monitorSessionBaudrates.delete(monitorSessionId)
         attachedClientsBySession.delete(monitorSessionId)
@@ -1252,6 +2042,7 @@ export async function createServer(options = {}) {
       if (mapped === prevRes) prevEntry.clientIndex.delete(clientId)
 
       const remaining = prevEntry.clients.size
+      const totalRemaining = getActiveClientCount(prevEntry)
       if (DEBUG) {
         console.log(
           `[serial] -client ${clientId} on ${prevPortKey}; remaining=${remaining}`
@@ -1264,7 +2055,8 @@ export async function createServer(options = {}) {
           attachedClientsBySession.delete(prevEntry.sessionId)
         }
       }
-      if (remaining === 0 && !prevEntry.closed) {
+      if (totalRemaining === 0 && !prevEntry.closed) {
+        cancelWsCloseTimer(prevEntry)
         if (DEBUG) {
           console.log(
             `[serial] last client -> closing monitor for ${prevPortKey}`
@@ -1316,6 +2108,10 @@ export async function createServer(options = {}) {
     portinoConnections.forEach((connection) => {
       safeNotify(connection, NotifyMonitorDidPause, { port })
     })
+    try {
+      const portKey = createPortKey(toPortIdentifier(port))
+      broadcastControlStatus(portKey, 'paused')
+    } catch {}
   }
 
   const broadcastMonitorDidResume = (port, resumedPort = port) => {
@@ -1325,6 +2121,10 @@ export async function createServer(options = {}) {
         didResumeOnPort: resumedPort,
       })
     })
+    try {
+      const portKey = createPortKey(toPortIdentifier(resumedPort))
+      broadcastControlStatus(portKey, 'running')
+    } catch {}
   }
 
   const broadcastMonitorDidStart = (port, baudrate, monitorSessionId) => {
@@ -1344,6 +2144,311 @@ export async function createServer(options = {}) {
         monitorSessionId,
       })
     })
+  }
+
+  const createControlError = (code, message, status) =>
+    Object.assign(new Error(message), { code, status })
+
+  const ensureMonitorEntry = async ({
+    portKey,
+    protocol,
+    address,
+    baudrate,
+    fqbn,
+    clientId,
+  }) => {
+    let entry = activeSerialStreams.get(portKey)
+    if (entry) {
+      if (!entry.sessionId) {
+        entry.sessionId = createMonitorSessionId()
+      }
+      if (baudrate) {
+        entry.baudrate = baudrate
+      }
+      return entry
+    }
+
+    const isPortDetected = Boolean(watcher?.state?.[portKey])
+    if (!isPortDetected) {
+      throw createControlError(
+        'port-not-detected',
+        `Port ${address} is not detected.`,
+        404
+      )
+    }
+
+    // Ensure monitor settings for the selected protocol were retrieved successfully
+    try {
+      const result = await cliBridge.fetchMonitorSettingsForProtocol(
+        String(protocol)
+      )
+      const settingsOrError = result[String(protocol)]
+      if (settingsOrError instanceof Error) {
+        const msg = settingsOrError.message || String(settingsOrError)
+        throw createControlError(
+          'protocol-error',
+          `Monitor unavailable for protocol ${protocol}: ${msg}`,
+          400
+        )
+      }
+      const settings = settingsOrError
+      const hasBaudrate = Array.isArray(settings)
+        ? !!settings.find((s) => s.settingId === 'baudrate')
+        : false
+      v(`[serial] settings for proto=${protocol} hasBaudrate=${hasBaudrate}`)
+      if (hasBaudrate && typeof baudrate !== 'string') {
+        throw createControlError(
+          'baudrate-required',
+          'Baudrate required for this protocol',
+          400
+        )
+      }
+    } catch (error) {
+      if (error?.code) {
+        throw error
+      }
+      const msg = String(/** @type {any} */ (error)?.message || error)
+      throw createControlError(
+        'settings-unavailable',
+        `Failed to resolve monitor settings for ${protocol}: ${msg}`,
+        400
+      )
+    }
+
+    // First client for this key: acquire monitor and start broadcast loop
+    const port = Port.fromJSON({ protocol, address })
+    const monitorSessionId = createMonitorSessionId()
+    // Place a placeholder entry immediately to prevent concurrent duplicate
+    // acquisitions for the same port while we initialize the monitor.
+    const clients = new Set()
+    const clientIndex = new Map()
+    const wsSubscribers = new Map()
+    const wsConnections = new Map()
+    entry = {
+      port,
+      /** @type {import('./monitor.js').PortinoMonitor | undefined} */
+      monitor: undefined,
+      clients,
+      clientIndex,
+      wsSubscribers,
+      wsConnections,
+      sessionId: monitorSessionId,
+      baudrate: typeof baudrate === 'string' ? baudrate : undefined,
+      lastCount: undefined,
+      startedNotified: false,
+      rxBytesSinceSummary: 0,
+      rxChunksSinceSummary: 0,
+      rxSummaryAt: Date.now(),
+    }
+    activeSerialStreams.set(portKey, entry)
+    const onDidChangeBaudrate = createNotifyDidChangeBaudrateCallback(
+      (portinoConnection) => {
+        return (
+          // Only notify clients that are connected to this port
+          !!portinoConnection.clientId &&
+          // Exclude the current client
+          portinoConnection.clientId !== clientId
+        )
+      }
+    )
+    /** @type {import('./monitor.js').PortinoMonitor} */
+    let monitor
+    try {
+      monitor = await cliBridge.acquireMonitor(
+        {
+          port,
+          baudrate: typeof baudrate === 'string' ? baudrate : undefined,
+          fqbn: fqbn ? new FQBN(/** @type {string} */ (fqbn)) : undefined,
+        },
+        onDidChangeBaudrate
+      )
+      // Assign monitor to the placeholder entry now that it's ready
+      entry.monitor = monitor
+    } catch (err) {
+      // Fail fast for busy/denied ports without crashing the process
+      const message = String((err && /** @type {any} */ (err).details) || err)
+      if (message.includes('Serial port busy')) {
+        activeSerialStreams.delete(portKey)
+        throw createControlError('port-busy', 'Serial port busy', 423)
+      }
+      // Cleanup placeholder
+      activeSerialStreams.delete(portKey)
+      const stillDetected = Boolean(watcher?.state?.[portKey])
+      if (!stillDetected) {
+        throw createControlError(
+          'port-not-detected',
+          `Port ${address} is not detected.`,
+          404
+        )
+      }
+      throw createControlError('monitor-open-failed', message, 502)
+    }
+    v(
+      `[serial] acquired monitor for ${portKey} @ ${
+        typeof baudrate === 'string' ? baudrate : '-'
+      }${fqbn ? ' ' + fqbn : ''}`
+    )
+
+    // Prime the stream: read until success/error, buffering any early data
+    const respIterator = monitor.messages[Symbol.asyncIterator]()
+    const bufferedChunks = []
+    try {
+      // Drain until monitor.ready resolves; buffer any early data
+      const READY = Symbol('ready')
+      // Loop until `monitor.ready` resolves or the iterator ends
+      while (true) {
+        const winner = await Promise.race([
+          monitor.ready.then(() => READY),
+          respIterator.next(),
+        ])
+        if (winner === READY) break
+        const { value, done } =
+          /** @type {{ value?: Uint8Array; done: boolean }} */ (winner)
+        if (done) break
+        if (value && value.length) bufferedChunks.push(Buffer.from(value))
+      }
+      // Surface any error from `ready`
+      await monitor.ready
+    } catch (err) {
+      if (err instanceof ClientError) {
+        if (err.details.includes('Serial port busy')) {
+          activeSerialStreams.delete(portKey)
+          throw createControlError('port-busy', 'Serial port busy', 423)
+        }
+        const stillDetected = Boolean(watcher?.state?.[portKey])
+        if (!stillDetected) {
+          activeSerialStreams.delete(portKey)
+          throw createControlError(
+            'port-not-detected',
+            `Port ${address} is not detected.`,
+            404
+          )
+        }
+        activeSerialStreams.delete(portKey)
+        throw createControlError('monitor-open-failed', err.details, 502)
+      }
+      // Cleanup on priming failure
+      activeSerialStreams.delete(portKey)
+      try {
+        await cliBridge.releaseMonitor(port)
+      } catch {}
+      throw createControlError(
+        'monitor-open-failed',
+        String(/** @type {any} */ (err)?.message || err),
+        502
+      )
+    }
+
+    // Broadcast incoming chunks to all connected clients
+    const streamEntry = /**
+     * @type {{
+     *   port: import('ardunno-cli').Port
+     *   monitor: import('./monitor.js').PortinoMonitor | undefined
+     *   clients: Set<import('express').Response>
+     *   clientIndex: Map<string, import('express').Response>
+     *   wsSubscribers: Map<string, { connectionId: string; channels: string[] }>
+     *   wsConnections: Map<string, number>
+     *   wsCloseTimer?: NodeJS.Timeout
+     *   sessionId?: string
+     *   closed?: boolean
+     *   lastCount?: number
+     *   baudrate?: string
+     *   startedNotified?: boolean
+     * }}
+     */ (entry)
+    ;(async () => {
+      try {
+        // First, flush any buffered chunks captured during priming
+        if (bufferedChunks.length) {
+          const total = bufferedChunks.reduce((n, b) => n + b.length, 0)
+          v(
+            `[serial] primed ${portKey}: buffered=${bufferedChunks.length} totalBytes=${total}`
+          )
+        }
+        for (const buf of bufferedChunks) {
+          for (const clientRes of clients) {
+            clientRes.write(buf)
+          }
+          sendWsDataFrame(portKey, buf, streamEntry)
+          try {
+            const m = Buffer.from(buf)
+              .toString('utf8')
+              .match(/\[count:(\d+)\]/)
+            if (m) streamEntry.lastCount = Number(m[1])
+          } catch {}
+        }
+        bufferedChunks.length = 0
+
+        // Then continue with the same iterator to avoid double-opening
+        while (true) {
+          const { value: chunk, done } = await respIterator.next()
+          if (done) break
+          const buf = Buffer.from(chunk)
+          recordSerialRxChunk(
+            streamEntry,
+            buf.length,
+            getActiveClientCount(streamEntry),
+            {
+              portKey,
+              monitorSessionId: streamEntry.sessionId,
+            }
+          )
+          for (const clientRes of clients) {
+            clientRes.write(buf)
+          }
+          sendWsDataFrame(portKey, buf, streamEntry)
+          try {
+            const m = buf.toString('utf8').match(/\[count:(\d+)\]/)
+            if (m) streamEntry.lastCount = Number(m[1])
+          } catch {}
+        }
+      } catch (err) {
+        const name = /** @type {any} */ (err)?.name || ''
+        const msg = String(
+          (err && /** @type {any} */ (err).details) || err || ''
+        )
+        const isAbort = name === 'AbortError' || /aborted/i.test(msg)
+        if (!isAbort) {
+          console.error('Serial data stream error:', err)
+          // Only surface non-abort errors to connected clients
+          for (const clientRes of clients) {
+            try {
+              clientRes.write(Buffer.from(`\n[error] ${msg}\n`))
+            } catch {}
+          }
+        }
+      } finally {
+        flushSerialRxSummary(streamEntry, {
+          portKey,
+          monitorSessionId: streamEntry.sessionId,
+        })
+        v(`[serial] monitor ended for ${portKey} (stream finished)`)
+        const keepEntry = monitor?.isPaused?.()
+        if (keepEntry) {
+          v(`[serial] monitor paused; keeping entry for ${portKey}`)
+        } else {
+          // Cleanup when monitor ends
+          for (const clientRes of clients) {
+            try {
+              clientRes.end()
+            } catch {}
+          }
+          notifyMonitorStopped(portKey, streamEntry.port, streamEntry.sessionId)
+          try {
+            await cliBridge.releaseMonitor(port)
+          } catch {}
+          // Only delete if this entry is still the active one for the key and not already closed
+          const current = activeSerialStreams.get(portKey)
+          if (current && current.monitor === monitor && !current.closed) {
+            current.closed = true
+            activeSerialStreams.delete(portKey)
+            v(`[serial] monitor removed for ${portKey}`)
+          }
+        }
+      }
+    })()
+
+    return entry
   }
 
   app.get('/monitor', async (req, res) => {
@@ -1439,15 +2544,20 @@ export async function createServer(options = {}) {
       // acquisitions for the same port while we initialize the monitor.
       const clients = new Set()
       const clientIndex = new Map()
+      const wsSubscribers = new Map()
+      const wsConnections = new Map()
       entry = {
         port,
         /** @type {import('./monitor.js').PortinoMonitor | undefined} */
         monitor: undefined,
         clients,
         clientIndex,
+        wsSubscribers,
+        wsConnections,
         sessionId: monitorSessionId,
         baudrate: requestBaudrate,
         lastCount: undefined,
+        startedNotified: false,
         rxBytesSinceSummary: 0,
         rxChunksSinceSummary: 0,
         rxSummaryAt: Date.now(),
@@ -1560,6 +2670,9 @@ export async function createServer(options = {}) {
        *   monitor: import('./monitor.js').PortinoMonitor | undefined
        *   clients: Set<import('express').Response>
        *   clientIndex: Map<string, import('express').Response>
+       *   wsSubscribers: Map<string, { connectionId: string; channels: string[] }>
+       *   wsConnections: Map<string, number>
+       *   wsCloseTimer?: NodeJS.Timeout
        *   sessionId?: string
        *   closed?: boolean
        *   lastCount?: number
@@ -1580,6 +2693,7 @@ export async function createServer(options = {}) {
             for (const clientRes of clients) {
               clientRes.write(buf)
             }
+            sendWsDataFrame(portKey, buf, streamEntry)
             try {
               const m = Buffer.from(buf)
                 .toString('utf8')
@@ -1594,13 +2708,19 @@ export async function createServer(options = {}) {
             const { value: chunk, done } = await respIterator.next()
             if (done) break
             const buf = Buffer.from(chunk)
-            recordSerialRxChunk(streamEntry, buf.length, clients.size, {
-              portKey,
-              monitorSessionId: streamEntry.sessionId,
-            })
+            recordSerialRxChunk(
+              streamEntry,
+              buf.length,
+              getActiveClientCount(streamEntry),
+              {
+                portKey,
+                monitorSessionId: streamEntry.sessionId,
+              }
+            )
             for (const clientRes of clients) {
               clientRes.write(buf)
             }
+            sendWsDataFrame(portKey, buf, streamEntry)
             try {
               const m = buf.toString('utf8').match(/\[count:(\d+)\]/)
               if (m) streamEntry.lastCount = Number(m[1])
@@ -1664,6 +2784,9 @@ export async function createServer(options = {}) {
      *   monitor: import('./monitor.js').PortinoMonitor | undefined
      *   clients: Set<import('express').Response>
      *   clientIndex: Map<string, import('express').Response>
+     *   wsSubscribers: Map<string, { connectionId: string; channels: string[] }>
+     *   wsConnections: Map<string, number>
+     *   wsCloseTimer?: NodeJS.Timeout
      *   closed?: boolean
      *   lastCount?: number
      *   baudrate?: string
@@ -1721,6 +2844,7 @@ export async function createServer(options = {}) {
 
     // Register this response as a client
     streamEntry.clients.add(res)
+    cancelWsCloseTimer(streamEntry)
     streamEntry.clientIndex.set(clientId, res)
     globalClientIndex.set(clientId, { portKey, res })
     if (previousRes && previousRes !== res) {
@@ -1740,10 +2864,12 @@ export async function createServer(options = {}) {
       streamEntry,
       clientId,
       portKey,
-      { clients: streamEntry.clients.size, streamId }
+      { clients: getActiveClientCount(streamEntry), streamId }
     )
     v(
-      `[serial] +client ${clientId} on ${portKey}; total=${streamEntry.clients.size}`
+      `[serial] +client ${clientId} on ${portKey}; total=${getActiveClientCount(
+        streamEntry
+      )}`
     )
 
     if (sessionId) {
@@ -1755,7 +2881,11 @@ export async function createServer(options = {}) {
       sessionClients.add(clientId)
     }
 
-    if (streamEntry.clients.size === 1) {
+    if (
+      !streamEntry.startedNotified &&
+      getActiveClientCount(streamEntry) === 1
+    ) {
+      streamEntry.startedNotified = true
       bridgeLog('info', 'Monitor stream opened', {
         clientId,
         portKey,
@@ -1793,6 +2923,7 @@ export async function createServer(options = {}) {
       }
 
       const remaining = streamEntry.clients.size
+      const totalRemaining = getActiveClientCount(streamEntry)
       if (sessionId) {
         const sessionClients = attachedClientsBySession.get(sessionId)
         sessionClients?.delete(clientId)
@@ -1817,7 +2948,8 @@ export async function createServer(options = {}) {
         { remaining, reason, streamId: meta?.streamId, elapsedMs }
       )
       v(`[serial] -client ${clientId} on ${portKey}; remaining=${remaining}`)
-      if (remaining === 0) {
+      if (totalRemaining === 0) {
+        cancelWsCloseTimer(streamEntry)
         const isPaused = streamEntry.monitor?.isPaused?.()
         if (isPaused) {
           v(
@@ -1844,6 +2976,8 @@ export async function createServer(options = {}) {
         if (DEBUG) {
           console.log(`[serial] monitor removed for ${portKey}`)
         }
+      } else if (remaining === 0) {
+        v(`[serial] http clients cleared; ws still active for ${portKey}`)
       }
     }
     req.on('close', () => onReqGone('close'))
@@ -1941,6 +3075,14 @@ export async function createServer(options = {}) {
         },
       },
     ]
+    disposables.push(
+      messageConnection.onError((error) => {
+        bridgeLog('warn', 'Client rpc error', {
+          clientId: portinoConnection.clientId,
+          message: String(error instanceof Error ? error?.message : error),
+        })
+      })
+    )
 
     // Now start listening for incoming JSON-RPC messages
     messageConnection.listen()
@@ -2182,12 +3324,20 @@ export async function createServer(options = {}) {
     )
 
     // Clean up when client disconnects
-    ws.on('close', () => {
+    ws.on('close', (code, reasonBuffer) => {
       if (portinoConnection) {
         portinoConnection.closed = true
         portinoConnections.delete(portinoConnection)
+        let reason = ''
+        if (typeof reasonBuffer === 'string') {
+          reason = reasonBuffer
+        } else if (reasonBuffer instanceof Buffer) {
+          reason = reasonBuffer.toString('utf8')
+        }
         bridgeLog('info', 'Client disconnected', {
           clientId: portinoConnection.clientId,
+          code,
+          reason: reason || undefined,
         })
         traceWriter.emit(
           'clientDidDisconnect',
@@ -2201,6 +3351,675 @@ export async function createServer(options = {}) {
 
       messageConnection.dispose()
       disposables.forEach((d) => d.dispose())
+    })
+    ws.on('error', (error) => {
+      bridgeLog('warn', 'Client connection error', {
+        clientId: portinoConnection.clientId,
+        message: String(error?.message || error),
+      })
+    })
+  })
+
+  const normalizeChannels = (channels) =>
+    Array.isArray(channels)
+      ? channels.filter((channel) => typeof channel === 'string')
+      : []
+
+  const buildSubscriptionKey = (portKey, clientKey) =>
+    `${portKey}::${clientKey}`
+
+  const registerConnectionSubscription = (connectionId, portKey, clientKey) => {
+    const key = buildSubscriptionKey(portKey, clientKey)
+    const existing = wsSubscriptionsByConnection.get(connectionId)
+    if (existing) {
+      existing.add(key)
+      return
+    }
+    wsSubscriptionsByConnection.set(connectionId, new Set([key]))
+  }
+
+  const removeConnectionSubscription = (connectionId, portKey, clientKey) => {
+    const key = buildSubscriptionKey(portKey, clientKey)
+    const existing = wsSubscriptionsByConnection.get(connectionId)
+    if (!existing) {
+      return
+    }
+    existing.delete(key)
+    if (existing.size === 0) {
+      wsSubscriptionsByConnection.delete(connectionId)
+    }
+  }
+
+  const removeWsSubscriber = ({
+    portKey,
+    clientKey,
+    notify = true,
+    reason,
+    socket = undefined,
+  }) => {
+    const entry = activeSerialStreams.get(portKey)
+    if (!entry) {
+      if (notify && socket) {
+        try {
+          socket.send(
+            JSON.stringify({ type: 'unsubscribed', portKey, clientKey })
+          )
+        } catch {}
+      }
+      return
+    }
+    const existing = entry.wsSubscribers.get(clientKey)
+    if (!existing) {
+      if (notify && socket) {
+        try {
+          socket.send(
+            JSON.stringify({ type: 'unsubscribed', portKey, clientKey })
+          )
+        } catch {}
+      }
+      return
+    }
+    entry.wsSubscribers.delete(clientKey)
+    const connectionId = existing.connectionId
+    const current = entry.wsConnections.get(connectionId) ?? 0
+    if (current <= 1) {
+      entry.wsConnections.delete(connectionId)
+    } else {
+      entry.wsConnections.set(connectionId, current - 1)
+    }
+    removeConnectionSubscription(connectionId, portKey, clientKey)
+    bridgeLog('info', 'Monitor ws unsubscribed', {
+      portKey,
+      clientKey,
+      connectionId,
+      reason,
+    })
+    if (entry.wsSubscribers.size === 0 && entry.clients.size === 0) {
+      scheduleWsCloseTimer(entry, portKey, reason ?? 'last-unsubscribe')
+    }
+    if (notify && socket) {
+      try {
+        socket.send(
+          JSON.stringify({ type: 'unsubscribed', portKey, clientKey })
+        )
+      } catch {}
+    }
+  }
+
+  const cleanupWsConnection = (connectionId, reason) => {
+    const subscriptions = wsSubscriptionsByConnection.get(connectionId)
+    if (subscriptions) {
+      for (const key of Array.from(subscriptions)) {
+        const [portKey, clientKey] = key.split('::')
+        removeWsSubscriber({
+          portKey,
+          clientKey,
+          notify: false,
+          reason,
+        })
+      }
+      wsSubscriptionsByConnection.delete(connectionId)
+    }
+    wsControlConnections.delete(connectionId)
+    wsDataConnections.delete(connectionId)
+  }
+
+  const resolveConnectionId = (req) => {
+    try {
+      const url = new URL(req?.url ?? '', httpBaseUrl || 'http://localhost')
+      return url.searchParams.get('connectionId') ?? randomUUID()
+    } catch {
+      return randomUUID()
+    }
+  }
+
+  const handleWsSubscribe = async (socket, connectionId, payload) => {
+    const portKey = typeof payload?.portKey === 'string' ? payload.portKey : ''
+    const clientKey =
+      typeof payload?.clientKey === 'string' ? payload.clientKey : ''
+    if (!portKey || !clientKey) {
+      socket.send(
+        JSON.stringify({
+          type: 'error',
+          portKey,
+          clientKey,
+          message: 'Missing portKey/clientKey',
+        })
+      )
+      return
+    }
+    let parsed
+    try {
+      parsed = parsePortKey(portKey)
+    } catch {
+      socket.send(
+        JSON.stringify({
+          type: 'error',
+          portKey,
+          clientKey,
+          message: 'Invalid portKey',
+        })
+      )
+      return
+    }
+    const channels = normalizeChannels(payload?.channels)
+    const baudrate =
+      typeof payload?.baudrate === 'string' ? payload.baudrate : undefined
+    const fqbn = typeof payload?.fqbn === 'string' ? payload.fqbn : undefined
+    try {
+      const entry = await ensureMonitorEntry({
+        portKey,
+        protocol: parsed.protocol,
+        address: parsed.address,
+        baudrate,
+        fqbn,
+        clientId: clientKey,
+      })
+      cancelWsCloseTimer(entry)
+      const existing = entry.wsSubscribers.get(clientKey)
+      let shouldIncrement = true
+      if (existing) {
+        if (existing.connectionId === connectionId) {
+          shouldIncrement = false
+        } else {
+          const prevCount = entry.wsConnections.get(existing.connectionId) ?? 0
+          if (prevCount <= 1) {
+            entry.wsConnections.delete(existing.connectionId)
+          } else {
+            entry.wsConnections.set(existing.connectionId, prevCount - 1)
+          }
+          removeConnectionSubscription(
+            existing.connectionId,
+            portKey,
+            clientKey
+          )
+        }
+      }
+      entry.wsSubscribers.set(clientKey, {
+        connectionId,
+        channels,
+      })
+      if (shouldIncrement) {
+        const current = entry.wsConnections.get(connectionId) ?? 0
+        entry.wsConnections.set(connectionId, current + 1)
+      }
+      registerConnectionSubscription(connectionId, portKey, clientKey)
+      if (baudrate && entry.baudrate !== baudrate) {
+        updateMonitorBaudrate(portKey, entry.port, baudrate)
+        entry.baudrate = baudrate
+      }
+      bridgeLog('info', 'Monitor ws subscribed', {
+        portKey,
+        clientKey,
+        connectionId,
+        channels,
+      })
+      if (!entry.startedNotified && getActiveClientCount(entry) === 1) {
+        entry.startedNotified = true
+        notifyMonitorStarted(
+          portKey,
+          entry.port,
+          baudrate ?? entry.baudrate,
+          entry.sessionId
+        )
+      }
+      socket.send(
+        JSON.stringify({
+          type: 'subscribed',
+          portKey,
+          clientKey,
+          portId: getOrCreatePortId(portKey),
+        })
+      )
+      const status = entry.monitor?.isPaused?.()
+        ? 'paused'
+        : entry.monitor
+          ? 'running'
+          : 'stopped'
+      socket.send(
+        JSON.stringify({
+          type: 'status',
+          portKey,
+          status,
+        })
+      )
+    } catch (error) {
+      const message = String(error?.message || error || 'Subscribe failed')
+      const code = error?.code
+      const status = error?.status
+      socket.send(
+        JSON.stringify({
+          type: 'error',
+          portKey,
+          clientKey,
+          code,
+          status,
+          message,
+        })
+      )
+    }
+  }
+
+  const handleWsUnsubscribe = (socket, payload, reason = 'unsubscribe') => {
+    const portKey = typeof payload?.portKey === 'string' ? payload.portKey : ''
+    const clientKey =
+      typeof payload?.clientKey === 'string' ? payload.clientKey : ''
+    if (!portKey || !clientKey) {
+      return
+    }
+    removeWsSubscriber({
+      portKey,
+      clientKey,
+      notify: true,
+      reason,
+      socket,
+    })
+  }
+
+  const handleWsPause = async (socket, payload) => {
+    const portKey = typeof payload?.portKey === 'string' ? payload.portKey : ''
+    if (!portKey) {
+      return
+    }
+    try {
+      const parsed = parsePortKey(portKey)
+      const port = Port.fromJSON(parsed)
+      const paused = await cliBridge.pauseMonitor(port)
+      if (paused) {
+        broadcastMonitorDidPause(port)
+        bridgeLog('info', 'Monitor paused', {
+          port: toPortIdentifier(port),
+          portKey,
+          monitorSessionId: activeSerialStreams.get(portKey)?.sessionId,
+        })
+        broadcastControlStatus(portKey, 'paused')
+      }
+      socket.send(
+        JSON.stringify({
+          type: 'status',
+          portKey,
+          status: paused ? 'paused' : 'running',
+        })
+      )
+    } catch (error) {
+      socket.send(
+        JSON.stringify({
+          type: 'error',
+          portKey,
+          message: String(error?.message || error),
+        })
+      )
+    }
+  }
+
+  const handleWsResume = async (socket, payload) => {
+    const portKey = typeof payload?.portKey === 'string' ? payload.portKey : ''
+    if (!portKey) {
+      return
+    }
+    try {
+      const parsed = parsePortKey(portKey)
+      const port = Port.fromJSON(parsed)
+      const resumed = await cliBridge.resumeMonitor(port)
+      const entry = activeSerialStreams.get(portKey)
+      const shouldNotify = resumed || entry || runningMonitorsByKey.has(portKey)
+      if (shouldNotify) {
+        broadcastMonitorDidResume(port)
+        bridgeLog('info', 'Monitor resumed', {
+          port: toPortIdentifier(port),
+          portKey,
+          monitorSessionId:
+            entry?.sessionId ??
+            runningMonitorsByKey.get(portKey)?.monitorSessionId,
+        })
+        const baudrate =
+          entry?.baudrate ?? runningMonitorsByKey.get(portKey)?.baudrate
+        notifyMonitorStarted(
+          portKey,
+          entry?.port ?? port,
+          baudrate,
+          entry?.sessionId ??
+            runningMonitorsByKey.get(portKey)?.monitorSessionId
+        )
+      }
+      socket.send(
+        JSON.stringify({
+          type: 'status',
+          portKey,
+          status: shouldNotify ? 'running' : 'stopped',
+        })
+      )
+    } catch (error) {
+      socket.send(
+        JSON.stringify({
+          type: 'error',
+          portKey,
+          message: String(error?.message || error),
+        })
+      )
+    }
+  }
+
+  const handleWsStop = async (socket, payload) => {
+    const portKey = typeof payload?.portKey === 'string' ? payload.portKey : ''
+    if (!portKey) {
+      return
+    }
+    const entry = activeSerialStreams.get(portKey)
+    if (!entry) {
+      socket.send(
+        JSON.stringify({
+          type: 'status',
+          portKey,
+          status: 'stopped',
+        })
+      )
+      return
+    }
+    try {
+      cancelWsCloseTimer(entry)
+      for (const clientRes of entry.clients) {
+        try {
+          clientRes.end()
+        } catch {}
+      }
+      for (const [clientKey, info] of entry.wsSubscribers.entries()) {
+        removeConnectionSubscription(info.connectionId, portKey, clientKey)
+      }
+      entry.wsSubscribers.clear()
+      entry.wsConnections.clear()
+      entry.closed = true
+      notifyMonitorStopped(portKey, entry.port, entry.sessionId)
+      try {
+        await entry.monitor?.dispose?.()
+      } catch {}
+      try {
+        await cliBridge.releaseMonitor(entry.port)
+      } catch {}
+      activeSerialStreams.delete(portKey)
+      socket.send(
+        JSON.stringify({
+          type: 'status',
+          portKey,
+          status: 'stopped',
+        })
+      )
+    } catch (error) {
+      socket.send(
+        JSON.stringify({
+          type: 'error',
+          portKey,
+          message: String(error?.message || error),
+        })
+      )
+    }
+  }
+
+  const resolvePortinoClientId = (req) => {
+    try {
+      const url = new URL(req?.url ?? '', httpBaseUrl || 'http://localhost')
+      return url.searchParams.get('clientId') ?? ''
+    } catch {
+      return ''
+    }
+  }
+
+  controlWss.on('connection', (ws) => {
+    const clientId = randomUUID()
+    bridgeLog('info', 'Monitor control channel connected', { clientId })
+
+    /** @type {import('vscode-ws-jsonrpc').IWebSocket} */
+    const socket = {
+      send: ws.send.bind(ws),
+      onMessage: ws.on.bind(ws, 'message'),
+      onError: ws.on.bind(ws, 'error'),
+      onClose: ws.on.bind(ws, 'close'),
+      dispose: ws.close.bind(ws),
+    }
+    const logger = new BridgeWebSocketLogger(baseConsoleFunctions)
+    const messageConnection = createWebSocketConnection(socket, logger)
+    portinoControlClients.set(clientId, { messageConnection })
+    resolvePortinoClient(clientId)
+
+    messageConnection.onRequest(RequestPortinoHello, async () => ({
+      serverVersion: bridgeIdentity.version ?? 'unknown',
+      protocolVersion: PORTINO_PROTOCOL_VERSION,
+      capabilities: PORTINO_CAPABILITIES,
+      clientId,
+    }))
+
+    messageConnection.onRequest(RequestMonitorOpen, async (params) => {
+      const parsed = parseMonitorPortKey(params?.portKey)
+      const entry = await ensurePortinoEntry(parsed)
+      const clientEntry = resolvePortinoClient(clientId)
+      const existing = clientEntry.monitorIdsByPortKey.get(parsed.portKey)
+      if (existing) {
+        return { monitorId: existing, effectivePortKey: parsed.portKey }
+      }
+      if (params?.mode === 'exclusive') {
+        for (const monitorId of entry.monitorIds) {
+          const owner = portinoMonitors.get(monitorId)
+          if (owner && owner.clientId !== clientId) {
+            throw createPortinoError(
+              'PORT_IN_USE_EXCLUSIVE',
+              'Port already open by another client',
+              409,
+              {
+                portPath: parsed.port?.address ?? parsed.basePortKey,
+              }
+            )
+          }
+        }
+      }
+      const monitorId = allocateMonitorId()
+      entry.monitorIds.add(monitorId)
+      portinoMonitors.set(monitorId, {
+        clientId,
+        portKey: parsed.portKey,
+      })
+      clientEntry.monitorIds.add(monitorId)
+      clientEntry.monitorIdsByPortKey.set(parsed.portKey, monitorId)
+      console.log('[portino][control] monitor opened', {
+        portKey: parsed.portKey,
+        clientId,
+        refCount: getMonitorRefCount(entry),
+      })
+      return { monitorId, effectivePortKey: parsed.portKey }
+    })
+
+    messageConnection.onRequest(
+      RequestMonitorSubscribe,
+      async (params) => {
+        const monitorId = params?.monitorId
+        if (typeof monitorId !== 'number') {
+          throw createPortinoError(
+            'invalid-monitor-id',
+            'Invalid monitorId',
+            400
+          )
+        }
+        const monitorEntry = portinoMonitors.get(monitorId)
+        if (!monitorEntry) {
+          throw createPortinoError(
+            'monitor-not-found',
+            'Unknown monitorId',
+            404
+          )
+        }
+        const entry = portinoPorts.get(monitorEntry.portKey)
+        if (!entry) {
+          throw createPortinoError(
+            'monitor-not-found',
+            'Unknown monitorId',
+            404
+          )
+        }
+        if (!entry.subscribers.has(monitorId)) {
+          entry.subscribers.set(monitorId, monitorEntry.clientId)
+          const tailBytes =
+            typeof params?.tailBytes === 'number' ? params.tailBytes : 0
+          if (tailBytes > 0) {
+            entry.ringBuffer.ensureCapacity(tailBytes)
+            const tail = entry.ringBuffer.tail(tailBytes)
+            if (tail.length) {
+              sendPortinoDataFrame(monitorEntry.clientId, monitorId, 0, tail)
+            }
+          }
+          try {
+            await openPortinoMonitorIfNeeded(entry, monitorEntry.clientId)
+          } catch (error) {
+            entry.subscribers.delete(monitorId)
+            throw error
+          }
+          console.log('[portino][control] monitor subscribed', {
+            portKey: entry.portKey,
+            clientId: monitorEntry.clientId,
+            refCount: getMonitorRefCount(entry),
+          })
+        } else if (!entry.monitor) {
+          await openPortinoMonitorIfNeeded(entry, monitorEntry.clientId)
+        }
+        return { ok: true }
+      }
+    )
+
+    messageConnection.onRequest(
+      RequestMonitorUnsubscribe,
+      async (params) => {
+        const monitorId = params?.monitorId
+        if (typeof monitorId !== 'number') {
+          return { ok: true }
+        }
+        const monitorEntry = portinoMonitors.get(monitorId)
+        if (!monitorEntry) {
+          return { ok: true }
+        }
+        const entry = portinoPorts.get(monitorEntry.portKey)
+        if (entry && entry.subscribers.delete(monitorId)) {
+          console.log('[portino][control] monitor unsubscribed', {
+            portKey: entry.portKey,
+            clientId: monitorEntry.clientId,
+            refCount: getMonitorRefCount(entry),
+          })
+          if (entry.subscribers.size === 0 && entry.monitor) {
+            await closePortinoEntry(entry, 'last-unsubscribe', clientId)
+          }
+        }
+        return { ok: true }
+      }
+    )
+
+    messageConnection.onRequest(RequestMonitorClose, async (params) => {
+      const monitorId = params?.monitorId
+      if (typeof monitorId !== 'number') {
+        return { ok: true }
+      }
+      return closePortinoMonitor(monitorId, 'monitor-close')
+    })
+
+    messageConnection.onRequest(RequestMonitorWrite, async (params) => {
+      const monitorId = params?.monitorId
+      if (typeof monitorId !== 'number') {
+        throw createPortinoError(
+          'invalid-monitor-id',
+          'Invalid monitorId',
+          400
+        )
+      }
+      const monitorEntry = portinoMonitors.get(monitorId)
+      if (!monitorEntry) {
+        throw createPortinoError(
+          'monitor-not-found',
+          'Unknown monitorId',
+          404
+        )
+      }
+      const entry = portinoPorts.get(monitorEntry.portKey)
+      if (!entry) {
+        throw createPortinoError(
+          'monitor-not-found',
+          'Unknown monitorId',
+          404
+        )
+      }
+      if (!entry.subscribers.has(monitorId)) {
+        throw createPortinoError(
+          'monitor-not-subscribed',
+          'Monitor not subscribed',
+          409
+        )
+      }
+      await openPortinoMonitorIfNeeded(entry, monitorEntry.clientId)
+      const raw = params?.data
+      let buffer
+      if (raw instanceof Uint8Array) {
+        buffer = Buffer.from(raw)
+      } else if (raw instanceof ArrayBuffer) {
+        buffer = Buffer.from(raw)
+      } else if (ArrayBuffer.isView(raw)) {
+        buffer = Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength)
+      } else if (Array.isArray(raw)) {
+        buffer = Buffer.from(raw)
+      } else if (isBufferPayload(raw)) {
+        buffer = Buffer.from(raw.data)
+      } else if (typeof raw === 'string') {
+        buffer = Buffer.from(raw)
+      } else {
+        buffer = Buffer.alloc(0)
+      }
+      if (!buffer.length) {
+        return { bytesWritten: 0 }
+      }
+      const text = buffer.toString('utf8')
+      entry.writeChain = (entry.writeChain ?? Promise.resolve())
+        .then(() => {
+          entry.monitor?.sendMessage(text)
+          console.log('[portino][control] monitor write', {
+            portKey: entry.portKey,
+            clientId: monitorEntry.clientId,
+            bytes: buffer.length,
+            ts: new Date().toISOString(),
+          })
+        })
+        .catch((error) => {
+          console.error('Monitor write failed', error)
+        })
+      await entry.writeChain
+      return { bytesWritten: buffer.length }
+    })
+
+    messageConnection.listen()
+
+    ws.on('close', () => {
+      cleanupPortinoClient(clientId, 'control-close').catch((error) => {
+        console.error('Failed to cleanup portino client', error)
+      })
+      messageConnection.dispose()
+    })
+    ws.on('error', (error) => {
+      bridgeLog('warn', 'Monitor control channel error', {
+        clientId,
+        message: String(error?.message || error),
+      })
+    })
+  })
+
+  dataWss.on('connection', (ws, req) => {
+    const clientId = resolvePortinoClientId(req)
+    if (!clientId) {
+      try {
+        ws.close()
+      } catch {}
+      return
+    }
+    portinoDataConnections.set(clientId, ws)
+    bridgeLog('info', 'Monitor data channel connected', { clientId })
+
+    ws.on('close', () => {
+      if (portinoDataConnections.get(clientId) === ws) {
+        portinoDataConnections.delete(clientId)
+      }
+      bridgeLog('info', 'Monitor data channel disconnected', { clientId })
     })
   })
   function recordSerialRxChunk(entry, bytes, clients, context) {
@@ -2297,7 +4116,16 @@ export async function createServer(options = {}) {
         { layer: 'bridge' }
       )
       try {
+        server.off('upgrade', handleUpgrade)
+      } catch {}
+      try {
         wss.close()
+      } catch {}
+      try {
+        controlWss.close()
+      } catch {}
+      try {
+        dataWss.close()
       } catch {}
       traceWriter.emit(
         'logDidWrite',

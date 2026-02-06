@@ -4,6 +4,6 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    setupFiles: [],
+    setupFiles: ['packages/webviews/monitor-shared/vitest.setup.js'],
   },
 })

@@ -535,7 +535,6 @@ export function fromPhysicalState(state: MonitorPhysicalState): MonitorEvent[] {
       })
       break
     case 'STOPPED':
-      events.push({ type: 'USER_STOP', port: state.port })
       events.push({ type: 'PORT_SELECTED', port: state.port, detected: true })
       events.push({ type: 'PORT_DETECTED', port: state.port })
       events.push({

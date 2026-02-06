@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { useSerialMonitorConnection } from './useSerialMonitorConnection.js'
 
+vi.mock('@boardlab/base', () => ({
+  vscode: { messenger: undefined },
+}))
+
 const PORT = { protocol: 'serial', address: '/dev/mock0' }
 
 const MONITOR_SETTINGS = {
@@ -166,6 +170,109 @@ describe('useSerialMonitorConnection', () => {
 
     await waitFor(() => {
       expect(openMonitor).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('re-issues intent start when detected and session is missing', async () => {
+    const openMonitor = vi.fn().mockResolvedValue(neverReader)
+    const client = makeClient(openMonitor)
+
+    const { rerender } = renderHook(
+      (props) => useSerialMonitorConnection(props),
+      {
+        initialProps: {
+          client,
+          selectedPort: PORT,
+          selectedBaudrate: '9600',
+          selectedDetected: true,
+          monitorSettingsByProtocol: MONITOR_SETTINGS,
+          session: undefined,
+          onText: vi.fn(),
+          onStart: vi.fn(),
+          onStop: vi.fn(),
+          onBusy: vi.fn(),
+        },
+      }
+    )
+
+    await waitFor(() => {
+      expect(client.notifyIntentStart).toHaveBeenCalledTimes(1)
+    })
+
+    rerender({
+      client,
+      selectedPort: PORT,
+      selectedBaudrate: '9600',
+      selectedDetected: true,
+      monitorSettingsByProtocol: MONITOR_SETTINGS,
+      session: undefined,
+      onText: vi.fn(),
+      onStart: vi.fn(),
+      onStop: vi.fn(),
+      onBusy: vi.fn(),
+    })
+
+    await waitFor(() => {
+      expect(client.notifyIntentStart).toHaveBeenCalledTimes(1)
+    })
+
+    rerender({
+      client,
+      selectedPort: PORT,
+      selectedBaudrate: '9600',
+      selectedDetected: false,
+      monitorSettingsByProtocol: MONITOR_SETTINGS,
+      session: undefined,
+      onText: vi.fn(),
+      onStart: vi.fn(),
+      onStop: vi.fn(),
+      onBusy: vi.fn(),
+    })
+
+    rerender({
+      client,
+      selectedPort: PORT,
+      selectedBaudrate: '9600',
+      selectedDetected: true,
+      monitorSettingsByProtocol: MONITOR_SETTINGS,
+      session: undefined,
+      onText: vi.fn(),
+      onStart: vi.fn(),
+      onStop: vi.fn(),
+      onBusy: vi.fn(),
+    })
+
+    await waitFor(() => {
+      expect(client.notifyIntentStart).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('re-issues intent start when session desired is stopped while auto-play is on', async () => {
+    const openMonitor = vi.fn().mockResolvedValue(neverReader)
+    const client = makeClient(openMonitor)
+
+    renderHook(() =>
+      useSerialMonitorConnection({
+        client,
+        selectedPort: PORT,
+        selectedBaudrate: '9600',
+        selectedDetected: true,
+        monitorSettingsByProtocol: MONITOR_SETTINGS,
+        session: makeSession({
+          desired: 'stopped',
+          status: 'idle',
+          openPending: false,
+          currentAttemptId: null,
+        }),
+        onText: vi.fn(),
+        onStart: vi.fn(),
+        onStop: vi.fn(),
+        onBusy: vi.fn(),
+      })
+    )
+
+    await waitFor(() => {
+      expect(client.notifyIntentStart).toHaveBeenCalledTimes(1)
     })
   })
 })

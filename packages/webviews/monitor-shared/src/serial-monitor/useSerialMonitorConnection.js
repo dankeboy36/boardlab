@@ -18,6 +18,7 @@ const buildPortKey = (
  * @property {import('./client.js').MonitorClient} client
  * @property {import('boards-list').PortIdentifier | undefined} selectedPort
  * @property {string | undefined} selectedBaudrate
+ * @property {boolean} [selectedDetected]
  * @property {import('@boardlab/protocol').MonitorSettingsByProtocol} monitorSettingsByProtocol
  * @property {import('@boardlab/protocol').MonitorSessionState | undefined} session
  * @property {(text: string) => void} onText
@@ -31,6 +32,7 @@ export function useSerialMonitorConnection({
   client,
   selectedPort,
   selectedBaudrate,
+  selectedDetected,
   monitorSettingsByProtocol,
   session,
   onText,
@@ -47,6 +49,7 @@ export function useSerialMonitorConnection({
   const lastAttemptRef = useRef(/** @type {number | null} */ (null))
   const seqRef = useRef(0)
   const lastPortKeyRef = useRef(buildPortKey(selectedPort))
+  const lastIntentKeyRef = useRef('')
 
   useEffect(() => {
     const portKey = buildPortKey(selectedPort)
@@ -55,6 +58,7 @@ export function useSerialMonitorConnection({
     }
     lastPortKeyRef.current = portKey
     lastAttemptRef.current = null
+    lastIntentKeyRef.current = ''
     attachedRef.current = false
     openingRef.current = false
     if (abortRef.current) {
@@ -62,6 +66,38 @@ export function useSerialMonitorConnection({
       abortRef.current = undefined
     }
   }, [selectedPort])
+
+  useEffect(() => {
+    const portKey = buildPortKey(selectedPort)
+    if (!enabled || !client || !selectedPort) {
+      lastIntentKeyRef.current = ''
+      return
+    }
+    const detected = Boolean(selectedDetected)
+    if (!detected) {
+      lastIntentKeyRef.current = `${portKey ?? ''}|detected:false`
+      return
+    }
+    if (session && session.portKey === portKey) {
+      if (session.desired !== 'stopped') {
+        lastIntentKeyRef.current = `${portKey ?? ''}|session`
+        return
+      }
+      const signature = `${portKey ?? ''}|detected:true|session-stopped`
+      if (lastIntentKeyRef.current === signature) {
+        return
+      }
+      lastIntentKeyRef.current = signature
+      client.notifyIntentStart(selectedPort)
+      return
+    }
+    const signature = `${portKey ?? ''}|detected:true|missing-session`
+    if (lastIntentKeyRef.current === signature) {
+      return
+    }
+    lastIntentKeyRef.current = signature
+    client.notifyIntentStart(selectedPort)
+  }, [client, enabled, selectedPort, selectedDetected, session])
 
   const play = useCallback(() => {
     if (!client || !selectedPort) {
@@ -334,6 +370,7 @@ export function useSerialMonitorConnection({
     client,
     selectedPort,
     selectedBaudrate,
+    selectedDetected,
     monitorSettingsByProtocol,
     session,
     enabled,

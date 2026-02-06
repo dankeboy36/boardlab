@@ -60,8 +60,8 @@
     "prereset": "npm run reset --workspaces",
     "reset": "rimraf schemas out node_modules .vscode-test",
     "test": "vitest run --config ./packages/extension/vitest.config.ts",
-    "test:ci": "npm run test:ci --workspaces --if-present && npm run test:e2e && npm test && npm run test:vsix",
-    "test:e2e": "npm --workspaces --if-present run test:e2e",
+    "test:ci": "npm --workspaces --if-present --fail-fast run test:ci && npm --workspaces --if-present --fail-fast run test:e2e && npm test && npm run test:vsix",
+    "test:e2e": "npm --workspaces --if-present --fail-fast run test:e2e",
     "pretest:vsix": "npm run compile",
     "test:vsix": "node ./out/test/runTest.js",
     "watch": "tsc -watch -p ./"
@@ -753,6 +753,18 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "Log monitor bridge heartbeat pings. Enable for debugging only.",
+          "tags": [
+            "advanced"
+          ]
+        },
+        "boardlab.monitor.transport": {
+          "type": "string",
+          "enum": [
+            "http",
+            "ws"
+          ],
+          "default": "http",
+          "markdownDescription": "Selects the transport used for monitor data streaming. Use 'ws' to enable the WebSocket data channel; keep 'http' for the legacy fetch-based stream.",
           "tags": [
             "advanced"
           ]

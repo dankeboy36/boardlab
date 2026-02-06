@@ -41,8 +41,8 @@ describe('monitorLogicalTracker', () => {
 
     const snapshot = tracker.snapshot()
     expect(snapshot).toHaveLength(1)
-    expect(snapshot[0]?.context.desired).toBe('stopped')
-    expect(snapshot[0]?.context.logical.kind).toBe('paused')
+    expect(snapshot[0]?.context.desired).toBe('running')
+    expect(snapshot[0]?.context.logical.kind).toBe('waitingForPort')
     expect(snapshot[0]?.context.lastCompletedAttemptId).toBe(1)
     expect(changes.every((id) => id === 1)).toBe(true)
     expect(changes.length).toBeGreaterThanOrEqual(4)

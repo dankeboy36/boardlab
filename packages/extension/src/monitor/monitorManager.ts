@@ -30,6 +30,8 @@ import {
   notifyMonitorIntentStop,
   notifyMonitorOpenError,
   notifyMonitorSessionState,
+  notifyMonitorStreamData,
+  notifyMonitorStreamError,
   notifyMonitorViewDidChangeBaudrate,
   notifyMonitorViewDidChangeDetectedPorts,
   notifyMonitorViewDidChangeMonitorSettings,
@@ -71,6 +73,10 @@ import {
   MonitorBridgeClient,
   type MonitorBridgeClientOptions,
 } from './monitorBridgeClient'
+import {
+  MonitorBridgeWsClient,
+  type MonitorBridgeWsClientOptions,
+} from './monitorBridgeWsClient'
 import { MonitorPhysicalStateRegistry } from './monitorPhysicalStateRegistry'
 import { MonitorPortSession } from './monitorPortSession'
 
@@ -854,6 +860,9 @@ export interface MonitorManagerOptions {
   readonly bridgeClientFactory?: (
     clientOptions: MonitorBridgeClientOptions
   ) => MonitorBridgeClient
+  readonly bridgeWsClientFactory?: (
+    clientOptions: MonitorBridgeWsClientOptions
+  ) => MonitorBridgeWsClient
 }
 
 export class MonitorManager implements vscode.Disposable {
@@ -899,6 +908,10 @@ export class MonitorManager implements vscode.Disposable {
   private readonly bridgeLogChannel: vscode.OutputChannel
   private serviceClient: MonitorBridgeServiceClient
   private bridgeClient: MonitorBridgeClient
+  private bridgeWsClient: MonitorBridgeWsClient | undefined
+  private readonly transport: 'http' | 'ws'
+  private readonly wsSubscriptions = new Map<string, Set<string>>()
+  private readonly clientChannels = new Map<string, ReadonlyArray<string>>()
   private readonly outputChannel: vscode.OutputChannel
 
   private detectedPorts: DetectedPorts = {}
@@ -917,6 +930,9 @@ export class MonitorManager implements vscode.Disposable {
     )
     this.disposables.push(this.bridgeLogChannel)
     const configuration = vscode.workspace.getConfiguration('boardlab.monitor')
+    const configuredTransport =
+      configuration.get<'http' | 'ws'>('transport', 'http') ?? 'http'
+    this.transport = configuredTransport === 'ws' ? 'ws' : 'http'
     const configuredPort = configuration.get<number>('bridgePort', 0)
     const preferredPort =
       configuredPort > 0 ? configuredPort : DEFAULT_BRIDGE_PORT
@@ -1030,6 +1046,23 @@ export class MonitorManager implements vscode.Disposable {
     this.disposables.push(
       this.bridgeClient.onBridgeLog((entry) => this.handleBridgeLog(entry))
     )
+
+    const bridgeWsClientFactory =
+      options.bridgeWsClientFactory ??
+      ((clientOptions: MonitorBridgeWsClientOptions) =>
+        new MonitorBridgeWsClient(clientOptions))
+    if (this.transport === 'ws') {
+      this.bridgeWsClient = bridgeWsClientFactory({
+        resolveBridgeInfo: async () => this.serviceClient.getBridgeInfo(),
+      })
+      this.disposables.push(this.bridgeWsClient)
+      this.disposables.push(
+        this.bridgeWsClient.onData((event) => this.handleWsData(event))
+      )
+      this.disposables.push(
+        this.bridgeWsClient.onError((event) => this.handleWsError(event))
+      )
+    }
     this.disposables.push(this.physicalStates)
     this.disposables.push(this.onDidChangeMonitorStateEmitter)
     this.disposables.push(this.onDidChangeRunningMonitorsEmitter)
@@ -1279,6 +1312,10 @@ export class MonitorManager implements vscode.Disposable {
     this.monitorSettingsByProtocol = result.monitorSettingsByProtocol
     this.detectedPorts = result.detectedPorts
     this.clientSessions.set(params.clientId, sender)
+    this.clientChannels.set(
+      params.clientId,
+      this.resolveClientChannels(sender)
+    )
     const senderContext: {
       senderType?: MessageParticipant['type']
       webviewId?: string
@@ -1377,6 +1414,7 @@ export class MonitorManager implements vscode.Disposable {
       runningMonitors,
       physicalStates: this.physicalStates.snapshot(),
       sessionStates: this.snapshotSessions(),
+      transport: this.transport,
     }
   }
 
@@ -1388,8 +1426,12 @@ export class MonitorManager implements vscode.Disposable {
       return
     }
     this.clientSessions.delete(params.clientId)
+    this.clientChannels.delete(params.clientId)
     const portKey = this.clientPorts.get(params.clientId)
     if (portKey) {
+      if (this.transport === 'ws') {
+        this.unsubscribeWsClient(params.clientId, portKey)
+      }
       const session = this.portSessions.get(portKey)
       session?.detachClient(params.clientId)
       this.clientPorts.delete(params.clientId)
@@ -1415,6 +1457,9 @@ export class MonitorManager implements vscode.Disposable {
 
     const previousPortKey = this.clientPorts.get(params.clientId)
     if (previousPortKey && previousPortKey !== portKey) {
+      if (this.transport === 'ws') {
+        this.unsubscribeWsClient(params.clientId, previousPortKey)
+      }
       const previousSession = this.portSessions.get(previousPortKey)
       previousSession?.detachClient(params.clientId)
       if (previousSession) {
@@ -1441,6 +1486,9 @@ export class MonitorManager implements vscode.Disposable {
       return
     }
     session.detachClient(params.clientId)
+    if (this.transport === 'ws') {
+      this.unsubscribeWsClient(params.clientId, portKey)
+    }
     this.clientPorts.delete(params.clientId)
     this.maybeApplySessionAction(session, 'client-detached')
     this.emitSessionState(session)
@@ -1457,6 +1505,9 @@ export class MonitorManager implements vscode.Disposable {
     const session = this.getOrCreateSession(params.port)
     const clientId = params.clientId ?? this.resolveClientId(sender)
     session.intentStart(clientId)
+    if (this.transport === 'ws' && clientId) {
+      this.subscribeWsClient(clientId, params.port)
+    }
     this.maybeApplySessionAction(session, 'intent-start')
     this.emitSessionState(session)
   }
@@ -1471,6 +1522,10 @@ export class MonitorManager implements vscode.Disposable {
     const session = this.getOrCreateSession(params.port)
     const clientId = params.clientId ?? this.resolveClientId(sender)
     session.intentStop(clientId)
+    this.logicalTracker.applyEvent({ type: 'USER_STOP', port: params.port })
+    if (this.transport === 'ws' && clientId) {
+      this.unsubscribeWsClient(clientId, createPortKey(params.port))
+    }
     this.maybeApplySessionAction(session, 'intent-stop')
     this.emitSessionState(session)
   }
@@ -1485,6 +1540,9 @@ export class MonitorManager implements vscode.Disposable {
     const session = this.getOrCreateSession(params.port)
     const clientId = params.clientId ?? this.resolveClientId(sender)
     session.intentResume(clientId)
+    if (this.transport === 'ws' && clientId) {
+      this.subscribeWsClient(clientId, params.port)
+    }
     this.maybeApplySessionAction(session, 'intent-resume')
     this.emitSessionState(session)
   }
@@ -1499,6 +1557,132 @@ export class MonitorManager implements vscode.Disposable {
       }
     }
     return undefined
+  }
+
+  private resolveClientChannels(
+    sender?: MessageParticipant
+  ): ReadonlyArray<string> {
+    if (sender && isWebviewTypeMessageParticipant(sender)) {
+      if (sender.webviewType === 'plotter') {
+        return ['plotter']
+      }
+      if (sender.webviewType === 'monitor') {
+        return ['monitor']
+      }
+    }
+    return ['monitor']
+  }
+
+  private subscribeWsClient(clientId: string, port: PortIdentifier): void {
+    if (!this.bridgeWsClient) {
+      return
+    }
+    const portKey = createPortKey(port)
+    let subscribers = this.wsSubscriptions.get(portKey)
+    if (!subscribers) {
+      subscribers = new Set()
+      this.wsSubscriptions.set(portKey, subscribers)
+    }
+    const wasEmpty = subscribers.size === 0
+    subscribers.add(clientId)
+    if (!wasEmpty) {
+      return
+    }
+    const baudrate = this.selectedBaudrateCache.get(portKey)
+    this.bridgeWsClient
+      .subscribe({
+        port,
+        baudrate,
+      })
+      .catch((error) => {
+        this.logError('Failed to subscribe monitor ws', error)
+      })
+  }
+
+  private unsubscribeWsClient(clientId: string, portKey: string): void {
+    if (!this.bridgeWsClient) {
+      return
+    }
+    const subscribers = this.wsSubscriptions.get(portKey)
+    if (subscribers) {
+      subscribers.delete(clientId)
+      if (subscribers.size === 0) {
+        this.wsSubscriptions.delete(portKey)
+        this.bridgeWsClient.unsubscribe(portKey).catch((error) => {
+          this.logError('Failed to unsubscribe monitor ws', error)
+        })
+        return
+      }
+    }
+  }
+
+  private handleWsData(event: {
+    portKey: string
+    monitorId?: number
+    data: Uint8Array
+  }): void {
+    const subscribers = this.wsSubscriptions.get(event.portKey)
+    if (!subscribers || subscribers.size === 0) {
+      return
+    }
+    const payload = { portKey: event.portKey, data: event.data }
+    for (const clientId of subscribers) {
+      const participant = this.clientSessions.get(clientId)
+      if (!participant) {
+        continue
+      }
+      this.sendNotificationSafe(
+        clientId,
+        participant,
+        notifyMonitorStreamData,
+        payload
+      )
+    }
+  }
+
+  private handleWsError(event: {
+    portKey?: string
+    clientKey?: string
+    code?: string
+    status?: number
+    message: string
+  }): void {
+    if (!event.portKey) {
+      return
+    }
+    const session = this.portSessions.get(event.portKey)
+    if (session) {
+      session.markOpenError({
+        code: event.code,
+        status: event.status,
+        message: event.message,
+      })
+      this.emitSessionState(session)
+    }
+    const targets = event.clientKey
+      ? [event.clientKey]
+      : Array.from(this.wsSubscriptions.get(event.portKey) ?? [])
+    if (!targets.length) {
+      return
+    }
+    const payload = {
+      portKey: event.portKey,
+      code: event.code,
+      status: event.status,
+      message: event.message,
+    }
+    for (const clientId of targets) {
+      const participant = this.clientSessions.get(clientId)
+      if (!participant) {
+        continue
+      }
+      this.sendNotificationSafe(
+        clientId,
+        participant,
+        notifyMonitorStreamError,
+        payload
+      )
+    }
   }
 
   private handleMonitorOpenError(
@@ -1531,6 +1715,9 @@ export class MonitorManager implements vscode.Disposable {
         this.clientSessions.delete(clientId)
         const portKey = this.clientPorts.get(clientId)
         if (portKey) {
+          if (this.transport === 'ws') {
+            this.unsubscribeWsClient(clientId, portKey)
+          }
           const portSession = this.portSessions.get(portKey)
           portSession?.detachClient(clientId)
           this.clientPorts.delete(clientId)
@@ -1630,6 +1817,11 @@ export class MonitorManager implements vscode.Disposable {
   private async handleSendMonitorMessage(
     params: RequestSendMonitorMessageParams
   ): Promise<void> {
+    if (this.transport === 'ws' && this.bridgeWsClient) {
+      const portKey = createPortKey(params.port)
+      await this.bridgeWsClient.write(portKey, Buffer.from(params.message))
+      return
+    }
     await this.bridgeClient.sendMonitorMessage(params)
   }
 
@@ -1776,10 +1968,6 @@ export class MonitorManager implements vscode.Disposable {
 
     this.disposables.push(
       this.bridgeClient.onDidStopMonitor((event) => {
-        // Make sure the host logical tracker records the user stop immediately
-        // even if the bridge stop notification arrives before any physical
-        // state change listeners run.
-        this.logicalTracker.applyEvent({ type: 'USER_STOP', port: event.port })
         const session = this.getOrCreateSession(event.port)
         session.markMonitorStopped()
         this.maybeApplySessionAction(session, 'monitor-stopped')

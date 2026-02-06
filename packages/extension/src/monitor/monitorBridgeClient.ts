@@ -266,6 +266,21 @@ export class MonitorBridgeClient implements vscode.Disposable {
     const socket = new WebSocket(info.wsUrl, {
       perMessageDeflate: false,
     })
+    socket.on('close', (code, reasonBuffer) => {
+      let reason = ''
+      if (typeof reasonBuffer === 'string') {
+        reason = reasonBuffer
+      } else if (reasonBuffer instanceof Buffer) {
+        reason = reasonBuffer.toString('utf8')
+      }
+      this.log('socket closed', {
+        code,
+        reason: reason || undefined,
+      })
+    })
+    socket.on('error', (error) => {
+      this.log('socket error', error)
+    })
 
     await new Promise<void>((resolve, reject) => {
       const onOpen = () => {
