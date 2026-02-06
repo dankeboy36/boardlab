@@ -53,7 +53,18 @@ describe('serialMonitorSelectors', () => {
 
   it('marks status suspended when desired running but port is not detected', () => {
     const state = baseState({
-      detectedPorts: {},
+      detectedPorts: {
+        [createPortKey({ protocol: 'serial', address: '/dev/tty.other' })]: {
+          port: {
+            protocol: 'serial',
+            address: '/dev/tty.other',
+            label: '',
+            protocolLabel: '',
+            properties: {},
+            hardwareId: '',
+          },
+        },
+      },
       sessionStates: {
         [createPortKey(PORT)]: {
           portKey: createPortKey(PORT),

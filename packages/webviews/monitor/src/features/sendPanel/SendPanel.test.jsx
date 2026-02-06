@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react'
+import { fireEvent, render, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { SendPanel } from '@boardlab/monitor-shared/serial-monitor'
@@ -10,7 +10,7 @@ describe('SendPanel', () => {
     localStorage.clear()
   })
 
-  it('sends the suffix-appended payload but keeps the raw input in history', () => {
+  it('sends the suffix-appended payload but keeps the raw input in history', async () => {
     const onSend = vi.fn()
     const placeholder = 'Type something'
 
@@ -24,24 +24,18 @@ describe('SendPanel', () => {
     )
 
     const textarea = getByPlaceholderText(placeholder)
-    let currentValue = ''
-    Object.defineProperty(textarea, 'value', {
-      configurable: true,
-      get() {
-        return currentValue
-      },
-      set(value) {
-        currentValue = value
-      },
-    })
-
     fireEvent.input(textarea, {
+      target: { value: 'hello' },
+    })
+    fireEvent.change(textarea, {
       target: { value: 'hello' },
     })
 
     fireEvent.click(getByTitle('Send'))
 
-    expect(onSend).toHaveBeenCalledWith('hello\r\n')
+    await waitFor(() => {
+      expect(onSend).toHaveBeenCalledWith('hello\r\n')
+    })
     expect(localStorage.getItem(HISTORY_KEY)).toBe(JSON.stringify(['hello']))
   })
 })
