@@ -1282,15 +1282,26 @@ export async function createServer(options = {}) {
   const createMonitorSessionId = () =>
     `ms_${Date.now()}_${randomUUID().slice(0, 8)}`
 
-  /** @type {Map<string, { messageConnection: import('vscode-jsonrpc').MessageConnection }>} */
+  /**
+   * @type {Map<
+   *   string,
+   *   { messageConnection: import('vscode-jsonrpc').MessageConnection }
+   * >}
+   */
   const portinoControlClients = new Map()
   /** @type {Map<string, WsSocket>} */
   const portinoDataConnections = new Map()
-  /** @type {Map<string, { monitorIds: Set<number>; monitorIdsByPortKey: Map<string, number> }>} */
+  /**
+   * @type {Map<
+   *   string,
+   *   { monitorIds: Set<number>; monitorIdsByPortKey: Map<string, number> }
+   * >}
+   */
   const portinoClients = new Map()
   /** @type {Map<number, { clientId: string; portKey: string }>} */
   const portinoMonitors = new Map()
-  /** @type {Map<
+  /**
+   * @type {Map<
    *   string,
    *   {
    *     portKey: string
@@ -1328,40 +1339,24 @@ export async function createServer(options = {}) {
 
   const parseMonitorPortKey = (portKey) => {
     if (typeof portKey !== 'string' || !portKey) {
-      throw createPortinoError(
-        'invalid-port-key',
-        'Invalid portKey',
-        400
-      )
+      throw createPortinoError('invalid-port-key', 'Invalid portKey', 400)
     }
     const firstAt = portKey.indexOf('@')
     const secondAt = portKey.indexOf('@', firstAt + 1)
     if (firstAt <= 0 || secondAt <= firstAt + 1 || secondAt >= portKey.length) {
-      throw createPortinoError(
-        'invalid-port-key',
-        'Invalid portKey',
-        400
-      )
+      throw createPortinoError('invalid-port-key', 'Invalid portKey', 400)
     }
     const basePortKey = portKey.slice(0, firstAt)
     const baudratePart = portKey.slice(firstAt + 1, secondAt)
     const optionsHash = portKey.slice(secondAt + 1)
     if (!optionsHash) {
-      throw createPortinoError(
-        'invalid-port-key',
-        'Invalid portKey',
-        400
-      )
+      throw createPortinoError('invalid-port-key', 'Invalid portKey', 400)
     }
     let port
     try {
       port = parsePortKey(basePortKey)
     } catch {
-      throw createPortinoError(
-        'invalid-port-key',
-        'Invalid portKey',
-        400
-      )
+      throw createPortinoError('invalid-port-key', 'Invalid portKey', 400)
     }
     const baudrate =
       baudratePart && baudratePart !== 'na' ? baudratePart : undefined
@@ -1617,11 +1612,16 @@ export async function createServer(options = {}) {
         )
         entry.monitor = monitor
       } catch (err) {
-        const message = String(
-          (err && /** @type {any} */ (err).details) || err
-        )
+        const message = String((err && /** @type {any} */ (err).details) || err)
         if (message.includes('Serial port busy')) {
           throw createPortinoError('port-busy', 'Serial port busy', 423)
+        }
+        if (/no such file or directory/i.test(message)) {
+          throw createPortinoError(
+            'port-not-detected',
+            `Port ${entry.port?.address ?? entry.basePortKey} is not detected.`,
+            404
+          )
         }
         const stillDetected = Boolean(watcher?.state?.[entry.basePortKey])
         if (!stillDetected) {
@@ -1660,6 +1660,13 @@ export async function createServer(options = {}) {
           if (err.details.includes('Serial port busy')) {
             throw createPortinoError('port-busy', 'Serial port busy', 423)
           }
+          if (/no such file or directory/i.test(err.details)) {
+            throw createPortinoError(
+              'port-not-detected',
+              `Port ${entry.port?.address ?? entry.basePortKey} is not detected.`,
+              404
+            )
+          }
           const stillDetected = Boolean(watcher?.state?.[entry.basePortKey])
           if (!stillDetected) {
             throw createPortinoError(
@@ -1670,11 +1677,15 @@ export async function createServer(options = {}) {
           }
           throw createPortinoError('monitor-open-failed', err.details, 502)
         }
-        throw createPortinoError(
-          'monitor-open-failed',
-          String(/** @type {any} */ (err)?.message || err),
-          502
-        )
+        const message = String(/** @type {any} */ (err)?.message || err)
+        if (/no such file or directory/i.test(message)) {
+          throw createPortinoError(
+            'port-not-detected',
+            `Port ${entry.port?.address ?? entry.basePortKey} is not detected.`,
+            404
+          )
+        }
+        throw createPortinoError('monitor-open-failed', message, 502)
       }
 
       startPortinoMonitorLoop(entry, monitor, respIterator, bufferedChunks)
@@ -3827,87 +3838,69 @@ export async function createServer(options = {}) {
       return { monitorId, effectivePortKey: parsed.portKey }
     })
 
-    messageConnection.onRequest(
-      RequestMonitorSubscribe,
-      async (params) => {
-        const monitorId = params?.monitorId
-        if (typeof monitorId !== 'number') {
-          throw createPortinoError(
-            'invalid-monitor-id',
-            'Invalid monitorId',
-            400
-          )
-        }
-        const monitorEntry = portinoMonitors.get(monitorId)
-        if (!monitorEntry) {
-          throw createPortinoError(
-            'monitor-not-found',
-            'Unknown monitorId',
-            404
-          )
-        }
-        const entry = portinoPorts.get(monitorEntry.portKey)
-        if (!entry) {
-          throw createPortinoError(
-            'monitor-not-found',
-            'Unknown monitorId',
-            404
-          )
-        }
-        if (!entry.subscribers.has(monitorId)) {
-          entry.subscribers.set(monitorId, monitorEntry.clientId)
-          const tailBytes =
-            typeof params?.tailBytes === 'number' ? params.tailBytes : 0
-          if (tailBytes > 0) {
-            entry.ringBuffer.ensureCapacity(tailBytes)
-            const tail = entry.ringBuffer.tail(tailBytes)
-            if (tail.length) {
-              sendPortinoDataFrame(monitorEntry.clientId, monitorId, 0, tail)
-            }
+    messageConnection.onRequest(RequestMonitorSubscribe, async (params) => {
+      const monitorId = params?.monitorId
+      if (typeof monitorId !== 'number') {
+        throw createPortinoError('invalid-monitor-id', 'Invalid monitorId', 400)
+      }
+      const monitorEntry = portinoMonitors.get(monitorId)
+      if (!monitorEntry) {
+        throw createPortinoError('monitor-not-found', 'Unknown monitorId', 404)
+      }
+      const entry = portinoPorts.get(monitorEntry.portKey)
+      if (!entry) {
+        throw createPortinoError('monitor-not-found', 'Unknown monitorId', 404)
+      }
+      if (!entry.subscribers.has(monitorId)) {
+        entry.subscribers.set(monitorId, monitorEntry.clientId)
+        const tailBytes =
+          typeof params?.tailBytes === 'number' ? params.tailBytes : 0
+        if (tailBytes > 0) {
+          entry.ringBuffer.ensureCapacity(tailBytes)
+          const tail = entry.ringBuffer.tail(tailBytes)
+          if (tail.length) {
+            sendPortinoDataFrame(monitorEntry.clientId, monitorId, 0, tail)
           }
-          try {
-            await openPortinoMonitorIfNeeded(entry, monitorEntry.clientId)
-          } catch (error) {
-            entry.subscribers.delete(monitorId)
-            throw error
-          }
-          console.log('[portino][control] monitor subscribed', {
-            portKey: entry.portKey,
-            clientId: monitorEntry.clientId,
-            refCount: getMonitorRefCount(entry),
-          })
-        } else if (!entry.monitor) {
+        }
+        try {
           await openPortinoMonitorIfNeeded(entry, monitorEntry.clientId)
+        } catch (error) {
+          entry.subscribers.delete(monitorId)
+          throw error
         }
-        return { ok: true }
+        console.log('[portino][control] monitor subscribed', {
+          portKey: entry.portKey,
+          clientId: monitorEntry.clientId,
+          refCount: getMonitorRefCount(entry),
+        })
+      } else if (!entry.monitor) {
+        await openPortinoMonitorIfNeeded(entry, monitorEntry.clientId)
       }
-    )
+      return { ok: true }
+    })
 
-    messageConnection.onRequest(
-      RequestMonitorUnsubscribe,
-      async (params) => {
-        const monitorId = params?.monitorId
-        if (typeof monitorId !== 'number') {
-          return { ok: true }
-        }
-        const monitorEntry = portinoMonitors.get(monitorId)
-        if (!monitorEntry) {
-          return { ok: true }
-        }
-        const entry = portinoPorts.get(monitorEntry.portKey)
-        if (entry && entry.subscribers.delete(monitorId)) {
-          console.log('[portino][control] monitor unsubscribed', {
-            portKey: entry.portKey,
-            clientId: monitorEntry.clientId,
-            refCount: getMonitorRefCount(entry),
-          })
-          if (entry.subscribers.size === 0 && entry.monitor) {
-            await closePortinoEntry(entry, 'last-unsubscribe', clientId)
-          }
-        }
+    messageConnection.onRequest(RequestMonitorUnsubscribe, async (params) => {
+      const monitorId = params?.monitorId
+      if (typeof monitorId !== 'number') {
         return { ok: true }
       }
-    )
+      const monitorEntry = portinoMonitors.get(monitorId)
+      if (!monitorEntry) {
+        return { ok: true }
+      }
+      const entry = portinoPorts.get(monitorEntry.portKey)
+      if (entry && entry.subscribers.delete(monitorId)) {
+        console.log('[portino][control] monitor unsubscribed', {
+          portKey: entry.portKey,
+          clientId: monitorEntry.clientId,
+          refCount: getMonitorRefCount(entry),
+        })
+        if (entry.subscribers.size === 0 && entry.monitor) {
+          await closePortinoEntry(entry, 'last-unsubscribe', clientId)
+        }
+      }
+      return { ok: true }
+    })
 
     messageConnection.onRequest(RequestMonitorClose, async (params) => {
       const monitorId = params?.monitorId
@@ -3920,27 +3913,15 @@ export async function createServer(options = {}) {
     messageConnection.onRequest(RequestMonitorWrite, async (params) => {
       const monitorId = params?.monitorId
       if (typeof monitorId !== 'number') {
-        throw createPortinoError(
-          'invalid-monitor-id',
-          'Invalid monitorId',
-          400
-        )
+        throw createPortinoError('invalid-monitor-id', 'Invalid monitorId', 400)
       }
       const monitorEntry = portinoMonitors.get(monitorId)
       if (!monitorEntry) {
-        throw createPortinoError(
-          'monitor-not-found',
-          'Unknown monitorId',
-          404
-        )
+        throw createPortinoError('monitor-not-found', 'Unknown monitorId', 404)
       }
       const entry = portinoPorts.get(monitorEntry.portKey)
       if (!entry) {
-        throw createPortinoError(
-          'monitor-not-found',
-          'Unknown monitorId',
-          404
-        )
+        throw createPortinoError('monitor-not-found', 'Unknown monitorId', 404)
       }
       if (!entry.subscribers.has(monitorId)) {
         throw createPortinoError(

@@ -1312,10 +1312,7 @@ export class MonitorManager implements vscode.Disposable {
     this.monitorSettingsByProtocol = result.monitorSettingsByProtocol
     this.detectedPorts = result.detectedPorts
     this.clientSessions.set(params.clientId, sender)
-    this.clientChannels.set(
-      params.clientId,
-      this.resolveClientChannels(sender)
-    )
+    this.clientChannels.set(params.clientId, this.resolveClientChannels(sender))
     const senderContext: {
       senderType?: MessageParticipant['type']
       webviewId?: string
@@ -1611,7 +1608,6 @@ export class MonitorManager implements vscode.Disposable {
         this.bridgeWsClient.unsubscribe(portKey).catch((error) => {
           this.logError('Failed to unsubscribe monitor ws', error)
         })
-        return
       }
     }
   }
@@ -1693,6 +1689,17 @@ export class MonitorManager implements vscode.Disposable {
       return
     }
     const session = this.getOrCreateSession(params.port)
+    const message = typeof params.message === 'string' ? params.message : ''
+    const isMissingPort =
+      params.code === 'port-not-detected' ||
+      params.status === 404 ||
+      /no such file or directory/i.test(message)
+    if (isMissingPort) {
+      session.markDetected(false)
+      session.markPaused('resource-missing')
+      this.emitSessionState(session)
+      return
+    }
     session.markOpenError({
       status: params.status,
       code: params.code,
