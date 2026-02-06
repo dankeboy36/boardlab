@@ -93,6 +93,75 @@ describe('MonitorPortSession', () => {
     expect(session.snapshot().status).toBe('active')
   })
 
+  it('keeps multi-client sessions running across two reattach cycles', () => {
+    const session = new MonitorPortSession(PORT)
+    session.attachClient('monitor')
+    session.attachClient('plotter')
+    session.markDetected(true)
+    session.intentStart('monitor')
+    session.intentStart('plotter')
+
+    let action = session.nextAction()
+    expect(action?.type).toBe('open')
+    session.markMonitorStarted({ monitorSessionId: 'ms-1', baudrate: '9600' })
+
+    let openCount = 0
+    for (let i = 0; i < 2; i += 1) {
+      session.markDetected(false)
+      session.markMonitorStopped('resource-missing')
+      session.markDetected(true)
+      action = session.nextAction()
+      if (action?.type === 'open') {
+        openCount += 1
+        session.markMonitorStarted({
+          monitorSessionId: `ms-${i + 2}`,
+          baudrate: '9600',
+        })
+      }
+    }
+
+    const snapshot = session.snapshot()
+    expect(openCount).toBe(2)
+    expect(snapshot.status).toBe('active')
+    expect(snapshot.clients).toEqual(['monitor', 'plotter'])
+    expect(snapshot.desired).toBe('running')
+  })
+
+  it('keeps two ports isolated on detach/reattach', () => {
+    const portA = PORT
+    const portB = { protocol: 'serial', address: '/dev/mock1' } as const
+
+    const sessionA = new MonitorPortSession(portA)
+    const sessionB = new MonitorPortSession(portB)
+
+    sessionA.attachClient('monitor-a')
+    sessionB.attachClient('monitor-b')
+    sessionA.markDetected(true)
+    sessionB.markDetected(true)
+    sessionA.intentStart('monitor-a')
+    sessionB.intentStart('monitor-b')
+
+    let actionA = sessionA.nextAction()
+    let actionB = sessionB.nextAction()
+    expect(actionA?.type).toBe('open')
+    expect(actionB?.type).toBe('open')
+    sessionA.markMonitorStarted({ monitorSessionId: 'ms-a', baudrate: '9600' })
+    sessionB.markMonitorStarted({ monitorSessionId: 'ms-b', baudrate: '9600' })
+
+    sessionA.markDetected(false)
+    sessionA.markMonitorStopped('resource-missing')
+    expect(sessionA.snapshot().status).toBe('paused')
+    expect(sessionB.snapshot().status).toBe('active')
+
+    sessionA.markDetected(true)
+    actionA = sessionA.nextAction()
+    expect(actionA?.type).toBe('open')
+    sessionA.markMonitorStarted({ monitorSessionId: 'ms-a2', baudrate: '9600' })
+
+    expect(sessionA.snapshot().status).toBe('active')
+    expect(sessionB.snapshot().status).toBe('active')
+  })
+
   it('clears 502 errors when the monitor starts again', () => {
     const session = new MonitorPortSession(PORT)
     session.attachClient('client-a')

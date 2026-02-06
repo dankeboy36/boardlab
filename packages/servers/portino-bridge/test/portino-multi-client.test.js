@@ -274,7 +274,17 @@ describe('portino ws multi-client', () => {
     const client1 = await createClient(server.port)
     const client2 = await createClient(server.port)
 
-    await client1.connection.sendRequest('monitor.open', { portKey })
+    const { monitorId } = await client1.connection.sendRequest('monitor.open', {
+      portKey,
+    })
+    await client1.connection.sendRequest('monitor.subscribe', { monitorId })
+    const initialPayload = Array.from(Buffer.from('config-conflict-initial'))
+    const initialDataPromise = client1.dataWaiter.waitFor(monitorId)
+    await client1.connection.sendRequest('monitor.write', {
+      monitorId,
+      data: initialPayload,
+    })
+    await initialDataPromise
     const conflictKey = portKey.replace('@115200@', '@921600@')
 
     let error
@@ -288,6 +298,14 @@ describe('portino ws multi-client', () => {
 
     expect(error).toBeTruthy()
     expect(error?.data?.code).toBe('PORT_IN_USE_DIFFERENT_CONFIG')
+
+    const followupPayload = Array.from(Buffer.from('config-conflict-followup'))
+    const followupDataPromise = client1.dataWaiter.waitFor(monitorId)
+    await client1.connection.sendRequest('monitor.write', {
+      monitorId,
+      data: followupPayload,
+    })
+    await followupDataPromise
 
     await client1.close()
     await client2.close()
