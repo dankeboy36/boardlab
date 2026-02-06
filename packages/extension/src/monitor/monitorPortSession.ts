@@ -148,8 +148,7 @@ export class MonitorPortSession {
     if (this.desired === 'running' && this.clients.size > 0) {
       this.status = 'paused'
       this.pauseReason =
-        reason ??
-        (this.detected ? 'resource-busy' : 'resource-missing')
+        reason ?? (this.detected ? 'resource-busy' : 'resource-missing')
     } else {
       this.status = 'idle'
       this.pauseReason = undefined
@@ -178,11 +177,7 @@ export class MonitorPortSession {
     if (this.openPending || this.closePending) {
       return null
     }
-    if (
-      this.desired === 'running' &&
-      this.clients.size > 0 &&
-      this.detected
-    ) {
+    if (this.desired === 'running' && this.clients.size > 0 && this.detected) {
       if (
         this.status === 'idle' ||
         this.status === 'paused' ||

@@ -1,14 +1,15 @@
 // @ts-check
 
 import { useCallback, useEffect, useRef } from 'react'
-
 import { createPortKey } from 'boards-list'
 
 import { emitWebviewTraceEvent } from './trace.js'
 
 const buildPortKey = (
   /**
-   * @type {Readonly<Pick<import('boards-list').PortIdentifier, 'protocol' | 'address'>>
+   * @type {Readonly<
+   *       Pick<import('boards-list').PortIdentifier, 'protocol' | 'address'>
+   *     >
    *   | undefined}
    */ port
 ) => (port ? createPortKey(port) : undefined)
@@ -25,7 +26,7 @@ const buildPortKey = (
  * @property {() => void} onStart
  * @property {() => void} onStop
  * @property {() => void} onBusy
- * @property {boolean} [enabled=true]
+ * @property {boolean} [enabled=true] Default is `true`
  * @returns {{ play: () => void; stop: () => void }}
  */
 export function useSerialMonitorConnection({

@@ -1,11 +1,11 @@
 // @ts-check
 import { describe, expect, it } from 'vitest'
+import { createPortKey } from 'boards-list'
 
 import {
   projectMonitorView,
   selectMonitorView,
 } from '@boardlab/monitor-shared/serial-monitor/serialMonitorSelectors'
-import { createPortKey } from 'boards-list'
 
 const PORT = { protocol: 'serial', address: '/dev/tty.usbmock-1' }
 

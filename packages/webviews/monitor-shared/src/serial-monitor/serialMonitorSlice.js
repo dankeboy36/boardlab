@@ -9,7 +9,7 @@ import { createBoardsList, createPortKey } from 'boards-list'
  * @property {boolean} autoPlay
  * @property {import('@boardlab/protocol').MonitorPhysicalState[]} physicalStates
  * @property {Record<string, import('@boardlab/protocol').MonitorSessionState>}
- *   sessionStates
+ *   SessionStates
  */
 
 /**
@@ -65,7 +65,8 @@ import { createBoardsList, createPortKey } from 'boards-list'
  */
 
 /**
-/**
+ * /**
+ *
  * @typedef {Object} SetPhysicalStatesAction
  * @property {'SET_PHYSICAL_STATES'} type
  * @property {import('@boardlab/protocol').MonitorPhysicalState[]} payload
@@ -139,10 +140,7 @@ const serialMonitorSlice = createSlice({
       state.physicalStates = Array.isArray(physicalStates) ? physicalStates : []
       state.sessionStates = Array.isArray(action.payload.sessionStates)
         ? Object.fromEntries(
-            action.payload.sessionStates.map((entry) => [
-              entry.portKey,
-              entry,
-            ])
+            action.payload.sessionStates.map((entry) => [entry.portKey, entry])
           )
         : {}
       // Recompute supported baudrates for the current selection

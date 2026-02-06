@@ -52,13 +52,13 @@ const resolveClientKey = () => {
     const storageKey = webviewId
       ? `${CLIENT_KEY_STORAGE}:${webviewId}`
       : CLIENT_KEY_STORAGE
-    if (typeof sessionStorage !== 'undefined') {
-      const existing = sessionStorage.getItem(storageKey)
+    if (typeof window.sessionStorage !== 'undefined') {
+      const existing = window.sessionStorage.getItem(storageKey)
       if (existing) {
         return existing
       }
       const next = nanoid()
-      sessionStorage.setItem(storageKey, next)
+      window.sessionStorage.setItem(storageKey, next)
       return next
     }
   } catch {}
@@ -133,7 +133,11 @@ class MessengerControlTransport {
     return this._didChangePhysicalState.event
   }
 
-  /** @returns {import('@c4312/evt').Event<import('@boardlab/protocol').MonitorSessionState>} */
+  /**
+   * @returns {import('@c4312/evt').Event<
+   *   import('@boardlab/protocol').MonitorSessionState
+   * >}
+   */
   get onDidChangeSessionState() {
     return this._didChangeSessionState.event
   }
@@ -334,10 +338,8 @@ export class MonitorClient {
       this._transport.onDidChangeSessionState((payload) =>
         this._fireDidChangeSessionState(payload)
       ),
-      messengerx.onNotification(
-        messenger,
-        notifyMonitorStreamData,
-        (payload) => this._handleStreamData(payload)
+      messengerx.onNotification(messenger, notifyMonitorStreamData, (payload) =>
+        this._handleStreamData(payload)
       ),
       messengerx.onNotification(
         messenger,
@@ -359,12 +361,10 @@ export class MonitorClient {
     if (!this._deferredConnect) {
       const deferred = defer()
       const signal = AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined
-      this._transport
-        .connect(this._clientId, { signal })
-        .then((result) => {
-          this._transportMode = result?.transport ?? 'http'
-          deferred.resolve(result)
-        }, deferred.reject)
+      this._transport.connect(this._clientId, { signal }).then((result) => {
+        this._transportMode = result?.transport ?? 'http'
+        deferred.resolve(result)
+      }, deferred.reject)
       this._deferredConnect = deferred
     }
     return this._deferredConnect.promise
@@ -472,9 +472,7 @@ export class MonitorClient {
     this._transport.dispose()
   }
 
-  /**
-   * @param {import('boards-list').PortIdentifier} port
-   */
+  /** @param {import('boards-list').PortIdentifier} port */
   notifyClientAttached(port) {
     try {
       this._messenger.sendNotification(
@@ -487,9 +485,7 @@ export class MonitorClient {
     }
   }
 
-  /**
-   * @param {import('boards-list').PortIdentifier} port
-   */
+  /** @param {import('boards-list').PortIdentifier} port */
   notifyClientDetached(port) {
     try {
       this._messenger.sendNotification(
@@ -502,9 +498,7 @@ export class MonitorClient {
     }
   }
 
-  /**
-   * @param {import('boards-list').PortIdentifier} port
-   */
+  /** @param {import('boards-list').PortIdentifier} port */
   notifyIntentStart(port) {
     try {
       this._messenger.sendNotification(
@@ -517,9 +511,7 @@ export class MonitorClient {
     }
   }
 
-  /**
-   * @param {import('boards-list').PortIdentifier} port
-   */
+  /** @param {import('boards-list').PortIdentifier} port */
   notifyIntentStop(port) {
     try {
       this._messenger.sendNotification(
@@ -532,9 +524,7 @@ export class MonitorClient {
     }
   }
 
-  /**
-   * @param {import('boards-list').PortIdentifier} port
-   */
+  /** @param {import('boards-list').PortIdentifier} port */
   notifyIntentResume(port) {
     try {
       this._messenger.sendNotification(
@@ -547,9 +537,7 @@ export class MonitorClient {
     }
   }
 
-  /**
-   * @param {import('@boardlab/protocol').MonitorOpenErrorNotification} payload
-   */
+  /** @param {import('@boardlab/protocol').MonitorOpenErrorNotification} payload */
   notifyOpenError(payload) {
     try {
       this._messenger.sendNotification(

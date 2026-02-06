@@ -64,9 +64,7 @@ function stableStringify(value: unknown): string {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return JSON.stringify(value)
   }
-  const entries = Object.entries(value).sort(([a], [b]) =>
-    a.localeCompare(b)
-  )
+  const entries = Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
   return JSON.stringify(Object.fromEntries(entries))
 }
 
