@@ -33,15 +33,32 @@ import {
 
 const CLIENT_KEY_STORAGE = 'boardlab.monitor.clientKey'
 
+const resolveWebviewId = () => {
+  try {
+    if (typeof window !== 'undefined') {
+      return (
+        window.__BOARDLAB_WEBVIEW_ID__ ||
+        window.__BOARDLAB_WEBVIEW_TYPE__ ||
+        undefined
+      )
+    }
+  } catch {}
+  return undefined
+}
+
 const resolveClientKey = () => {
   try {
+    const webviewId = resolveWebviewId()
+    const storageKey = webviewId
+      ? `${CLIENT_KEY_STORAGE}:${webviewId}`
+      : CLIENT_KEY_STORAGE
     if (typeof sessionStorage !== 'undefined') {
-      const existing = sessionStorage.getItem(CLIENT_KEY_STORAGE)
+      const existing = sessionStorage.getItem(storageKey)
       if (existing) {
         return existing
       }
       const next = nanoid()
-      sessionStorage.setItem(CLIENT_KEY_STORAGE, next)
+      sessionStorage.setItem(storageKey, next)
       return next
     }
   } catch {}

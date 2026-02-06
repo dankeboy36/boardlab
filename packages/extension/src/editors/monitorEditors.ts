@@ -520,6 +520,9 @@ abstract class MonitorBaseEditorProvider<
     const stateScript = initialState
       ? `window.__INITIAL_VSCODE_STATE__ = ${JSON.stringify(initialState).replace(/</g, '\\u003c')};`
       : ''
+    const webviewInstanceId = `${this.webviewAssetType}-${Date.now().toString(
+      36
+    )}-${Math.random().toString(36).slice(2, 8)}`
 
     return /* html */ `
       <!DOCTYPE html>
@@ -543,6 +546,7 @@ abstract class MonitorBaseEditorProvider<
           <div id="root"></div>
           <script nonce="${nonce}">
             window.__CSP_NONCE__ = '${nonce}';
+            window.__BOARDLAB_WEBVIEW_ID__ = '${webviewInstanceId}';
             window.__BOARDLAB_WEBVIEW_TYPE__ = '${this.webviewAssetType}';
             ${stateScript}
           </script>
