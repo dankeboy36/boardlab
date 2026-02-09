@@ -1,5 +1,5 @@
 // @ts-check
-import { expect, test } from '@playwright/test'
+import { test } from '@playwright/test'
 import { createPortKey } from 'boards-list'
 
 import { MockCliBridge, createServer } from './utils/bridge.js'
@@ -18,7 +18,7 @@ const buildPersistedState = (port, baudrate = BAUDRATE) => ({
 
 const installState = async (page, state) => {
   await page.addInitScript((payload) => {
-    localStorage.setItem('vscodeState', JSON.stringify(payload))
+    window.localStorage.setItem('vscodeState', JSON.stringify(payload))
   }, state)
 }
 

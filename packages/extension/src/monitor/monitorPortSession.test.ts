@@ -142,7 +142,7 @@ describe('MonitorPortSession', () => {
     sessionB.intentStart('monitor-b')
 
     let actionA = sessionA.nextAction()
-    let actionB = sessionB.nextAction()
+    const actionB = sessionB.nextAction()
     expect(actionA?.type).toBe('open')
     expect(actionB?.type).toBe('open')
     sessionA.markMonitorStarted({ monitorSessionId: 'ms-a', baudrate: '9600' })
