@@ -123,7 +123,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           if-no-files-found: error
-          name: boardlab-${{ needs.determine-version.outputs.version }}-preview-${{ needs.determine-version.outputs.short_sha }}
+          name: boardlab-${{ needs.determine-version.outputs.version }}
           path: '*.vsix'
 
   release:
