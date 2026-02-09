@@ -2,15 +2,17 @@ import * as vscode from 'vscode'
 
 import type { PortQName } from './cli/arduino'
 
-export type TaskKind =
-  | 'compile'
-  | 'upload'
-  | 'burn-bootloader'
-  | 'export-binary'
-  | 'archive-sketch'
-  | 'upload-using-programmer'
-  | 'get-board-info'
-
+export const taskKindLiterals = [
+  'compile',
+  'upload',
+  'burn-bootloader',
+  'export-binary',
+  'archive-sketch',
+  'upload-using-programmer',
+  'compile-with-debug-symbols',
+  'get-board-info',
+] as const
+export type TaskKind = (typeof taskKindLiterals)[number]
 export type TaskStatus = 'idle' | 'running' | 'blocked'
 
 type TaskKey = string

@@ -536,6 +536,24 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand(
+      'boardlab.compileWithDebugSymbols',
+      async (params: { sketchPath?: string; fqbn?: string } = {}) => {
+        const resolved = await resolveSketchTaskParams(
+          boardlabContext,
+          params,
+          {
+            needFqbn: true,
+            reuseCurrentBoard: false,
+          }
+        )
+        if (!resolved || !resolved.fqbn) {
+          return
+        }
+        const { sketchPath, fqbn } = resolved
+        await tasks.compileWithDebugSymbols({ sketchPath, fqbn })
+      }
+    ),
+    vscode.commands.registerCommand(
       'boardlab.task.runFromTree',
       async (arg?: unknown) => {
         // Normalize arguments: either meta object or TreeItem with a command meta.
