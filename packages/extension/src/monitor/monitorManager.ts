@@ -884,11 +884,17 @@ export class MonitorManager implements vscode.Disposable {
   private readonly onDidChangeMonitorStateEmitter =
     new vscode.EventEmitter<MonitorStateChangeEvent>()
 
+  private readonly onDidReceiveMonitorDataEmitter = new vscode.EventEmitter<{
+    port: PortIdentifier
+    data: Uint8Array
+  }>()
+
   private readonly onDidChangeRunningMonitorsEmitter = new vscode.EventEmitter<
     ReadonlyArray<{ port: PortIdentifier; baudrate?: string }>
   >()
 
   readonly onDidChangeMonitorState = this.onDidChangeMonitorStateEmitter.event
+  readonly onDidReceiveMonitorData = this.onDidReceiveMonitorDataEmitter.event
 
   readonly onDidChangeRunningMonitors =
     this.onDidChangeRunningMonitorsEmitter.event
@@ -1066,6 +1072,7 @@ export class MonitorManager implements vscode.Disposable {
     this.disposables.push(this.physicalStates)
     this.disposables.push(this.onDidChangeMonitorStateEmitter)
     this.disposables.push(this.onDidChangeRunningMonitorsEmitter)
+    this.disposables.push(this.onDidReceiveMonitorDataEmitter)
     this.disposables.push(
       messenger.onRequest(getMonitorBridgeInfo, async (_params, sender) =>
         this.handleGetBridgeInfo(sender)
@@ -1255,6 +1262,71 @@ export class MonitorManager implements vscode.Disposable {
     await this.bridgeClient.updateBaudrate({ port, baudrate })
     this.updateSelectedBaudrateCache(port, baudrate)
     this.updateRunningMonitorBaudrate(port, baudrate)
+  }
+
+  registerExternalMonitorClient(
+    clientId: string,
+    port: PortIdentifier,
+    options?: { autoStart?: boolean; baudrate?: string }
+  ): void {
+    const portKey = createPortKey(port)
+    const session = this.getOrCreateSession(port)
+    session.attachClient(clientId)
+    session.markDetected(Boolean(this.detectedPorts[portKey]))
+    const previousPortKey = this.clientPorts.get(clientId)
+    if (previousPortKey && previousPortKey !== portKey) {
+      this.unsubscribeWsClient(clientId, previousPortKey)
+      const previousSession = this.portSessions.get(previousPortKey)
+      previousSession?.detachClient(clientId)
+      if (previousSession) {
+        this.emitSessionState(previousSession)
+        this.pruneSessionIfIdle(previousPortKey, previousSession)
+      }
+    }
+    if (options?.baudrate) {
+      this.selectedBaudrateCache.set(portKey, options.baudrate)
+      session.setBaudrate(options.baudrate)
+    }
+    this.clientPorts.set(clientId, portKey)
+    this.subscribeWsClient(clientId, port)
+    if (options?.autoStart !== false) {
+      session.intentStart(clientId)
+    }
+    this.maybeApplySessionAction(session, 'external-client-attached')
+    this.emitSessionState(session)
+  }
+
+  unregisterExternalMonitorClient(
+    clientId: string,
+    port?: PortIdentifier
+  ): void {
+    const portKey =
+      port !== undefined ? createPortKey(port) : this.clientPorts.get(clientId)
+    if (!portKey) {
+      return
+    }
+    const session = this.portSessions.get(portKey)
+    session?.detachClient(clientId)
+    this.unsubscribeWsClient(clientId, portKey)
+    if (!port || this.clientPorts.get(clientId) === portKey) {
+      this.clientPorts.delete(clientId)
+    }
+    if (session) {
+      this.maybeApplySessionAction(session, 'external-client-detached')
+      this.emitSessionState(session)
+      this.pruneSessionIfIdle(portKey, session)
+    }
+  }
+
+  async sendMonitorMessage(
+    port: PortIdentifier,
+    message: string | Uint8Array
+  ): Promise<void> {
+    if (!this.bridgeWsClient) {
+      throw new Error('Monitor bridge websocket client not available')
+    }
+    const payload = typeof message === 'string' ? Buffer.from(message) : message
+    await this.bridgeWsClient.write(createPortKey(port), payload)
   }
 
   getBaudrateOptions(
@@ -1620,6 +1692,12 @@ export class MonitorManager implements vscode.Disposable {
     const subscribers = this.wsSubscriptions.get(event.portKey)
     if (!subscribers || subscribers.size === 0) {
       return
+    }
+    const session = this.portSessions.get(event.portKey)
+    const detectedPort = this.detectedPorts[event.portKey]?.port
+    const port = session?.snapshot().port ?? detectedPort
+    if (port) {
+      this.onDidReceiveMonitorDataEmitter.fire({ port, data: event.data })
     }
     const payload = { portKey: event.portKey, data: event.data }
     for (const clientId of subscribers) {
