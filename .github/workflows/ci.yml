@@ -149,6 +149,9 @@ jobs:
       - name: Download Arduino Built-in Examples
         run: npm run download:builtins
 
+      - name: Set Version
+        run: npm pkg set version="${{ needs.determine-version.outputs.version }}"
+
       - name: Package
         run: npm run package
 
