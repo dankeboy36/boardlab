@@ -1,3 +1,11 @@
+## [0.0.6](https://github.com/dankeboy36/boardlab/compare/0.0.5...0.0.6) (2026-02-09)
+
+
+### Bug Fixes
+
+* improve monitor reliability ([#15](https://github.com/dankeboy36/boardlab/issues/15)) ([e8c9537](https://github.com/dankeboy36/boardlab/commit/e8c95379602814f26f54c50f4abe019f6e742e01))
+* set next version of VSIX from default branch ([#16](https://github.com/dankeboy36/boardlab/issues/16)) ([c7ae099](https://github.com/dankeboy36/boardlab/commit/c7ae099eaf7651e1be0edd97a522371aa17732e9))
+
 ## [0.0.5](https://github.com/dankeboy36/boardlab/compare/0.0.4...0.0.5) (2026-01-06)
 
 
