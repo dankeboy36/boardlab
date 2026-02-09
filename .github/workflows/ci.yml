@@ -42,12 +42,16 @@ jobs:
         id: get_version
         run: |
           set -euo pipefail
-          OUTPUT="$(npx semantic-release --dry-run --no-ci 2>/dev/null || true)"
-          VERSION="$(echo "$OUTPUT" | awk '/next release version is/ {print $5}' | tail -n1)"
+          MODE=""
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then MODE="--release"; fi
+          VERSION=$(npx next-version-helper $MODE)
           if [ -z "$VERSION" ]; then
-            VERSION="$(node -p "require('./package.json').version")"
+            echo "semantic-release did not return a next version." >&2
+            exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        env:
+          DEBUG: semantic-release-next-version,semantic-release:*
 
       - name: Get Short SHA
         id: get_sha
