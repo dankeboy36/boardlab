@@ -566,7 +566,7 @@ abstract class MonitorBaseEditorProvider<
       binding.editorStatus ??
       this.mapMonitorStateToEditorStatus(document, state)
     const stateLabel = resolved.charAt(0).toUpperCase() + resolved.slice(1)
-    panel.title = `${this.stateConfig.titlePrefix}: ${document.title} — ${stateLabel}`
+    panel.title = `${document.title} — ${stateLabel}`
   }
 
   private mapMonitorStateToEditorStatus(
