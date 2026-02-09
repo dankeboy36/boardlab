@@ -20,6 +20,7 @@ import {
   willInstallLibrary,
   willUninstallLibrary,
 } from '@boardlab/protocol'
+import { messengerx } from '@boardlab/base'
 
 import { createLibrariesMock } from './mocks/librariesMock'
 
@@ -47,26 +48,40 @@ export function createLibraries(messenger?: Messenger | undefined): Libraries {
     onDidErrorUninstallEmitter,
     onDidUpdateIndexEmitter,
   ]
-  messenger.onNotification(willInstallLibrary, (event) =>
-    onWillInstallEmitter.fire(event)
+  toDispose.push(
+    messengerx.onNotification(messenger, willInstallLibrary, (event) =>
+      onWillInstallEmitter.fire(event)
+    )
   )
-  messenger.onNotification(didInstallLibrary, (event) =>
-    onDidInstallEmitter.fire(event)
+  toDispose.push(
+    messengerx.onNotification(messenger, didInstallLibrary, (event) =>
+      onDidInstallEmitter.fire(event)
+    )
   )
-  messenger.onNotification(didErrorInstallLibrary, (event) =>
-    onDidErrorInstallEmitter.fire(event)
+  toDispose.push(
+    messengerx.onNotification(messenger, didErrorInstallLibrary, (event) =>
+      onDidErrorInstallEmitter.fire(event)
+    )
   )
-  messenger.onNotification(willUninstallLibrary, (event) =>
-    onWillUninstallEmitter.fire(event)
+  toDispose.push(
+    messengerx.onNotification(messenger, willUninstallLibrary, (event) =>
+      onWillUninstallEmitter.fire(event)
+    )
   )
-  messenger.onNotification(didUninstallLibrary, (event) =>
-    onDidUninstallEmitter.fire(event)
+  toDispose.push(
+    messengerx.onNotification(messenger, didUninstallLibrary, (event) =>
+      onDidUninstallEmitter.fire(event)
+    )
   )
-  messenger.onNotification(didErrorUninstallLibrary, (event) =>
-    onDidErrorUninstallEmitter.fire(event)
+  toDispose.push(
+    messengerx.onNotification(messenger, didErrorUninstallLibrary, (event) =>
+      onDidErrorUninstallEmitter.fire(event)
+    )
   )
-  messenger.onNotification(didUpdateLibrariesIndex, () =>
-    onDidUpdateIndexEmitter.fire()
+  toDispose.push(
+    messengerx.onNotification(messenger, didUpdateLibrariesIndex, () =>
+      onDidUpdateIndexEmitter.fire()
+    )
   )
   return {
     busyResources() {

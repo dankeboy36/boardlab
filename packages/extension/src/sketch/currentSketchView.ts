@@ -311,6 +311,14 @@ class BuildAndUploadTasksRootItem extends TreeItem {
       ),
       new TaskItem(
         sketch,
+        'Compile with Debug Symbols',
+        'boardlab.compileWithDebugSymbols',
+        'inspect',
+        'Compile the current sketch optimized for debugging.',
+        'task'
+      ),
+      new TaskItem(
+        sketch,
         'Upload',
         'boardlab.upload',
         'arrow-right',
@@ -507,6 +515,8 @@ function toTaskKind(commandId: string): TaskKind | undefined {
       return 'get-board-info'
     case 'boardlab.archiveSketch':
       return 'archive-sketch'
+    case 'boardlab.compileWithDebugSymbols':
+      return 'compile-with-debug-symbols'
     default:
       return undefined
   }

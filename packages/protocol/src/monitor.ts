@@ -55,7 +55,51 @@ export interface HostConnectClientResult extends ConnectClientResult {
   readonly runningMonitors?: ReadonlyArray<{
     readonly port: PortIdentifier
     readonly baudrate?: string
+    readonly monitorSessionId?: string
   }>
+  readonly physicalStates?: ReadonlyArray<MonitorPhysicalState>
+  readonly sessionStates?: ReadonlyArray<MonitorSessionState>
+  readonly transport?: MonitorTransport
+}
+
+export type MonitorTransport = 'http' | 'ws'
+
+export type MonitorSessionStatus =
+  | 'idle'
+  | 'connecting'
+  | 'active'
+  | 'paused'
+  | 'error'
+
+export type MonitorSessionDesired = 'running' | 'stopped'
+
+export type MonitorSessionPauseReason =
+  | 'user'
+  | 'suspend'
+  | 'resource-busy'
+  | 'resource-missing'
+
+export interface MonitorSessionError {
+  readonly code?: string
+  readonly status?: number
+  readonly message?: string
+}
+
+export interface MonitorSessionState {
+  readonly portKey: string
+  readonly port: PortIdentifier
+  readonly status: MonitorSessionStatus
+  readonly desired: MonitorSessionDesired
+  readonly detected: boolean
+  readonly clients: ReadonlyArray<string>
+  readonly openPending: boolean
+  readonly closePending: boolean
+  readonly currentAttemptId: number | null
+  readonly lastCompletedAttemptId: number | null
+  readonly pauseReason?: MonitorSessionPauseReason
+  readonly lastError?: MonitorSessionError
+  readonly monitorSessionId?: string
+  readonly baudrate?: string
 }
 
 export const RequestClientConnect = new JsonRpcRequestType<
@@ -111,6 +155,7 @@ export const NotifyMonitorDidResume =
 export interface DidStartMonitorNotification {
   readonly port: PortIdentifier
   readonly baudrate?: string
+  readonly monitorSessionId?: string
 }
 
 export const NotifyMonitorDidStart =
@@ -120,6 +165,7 @@ export const NotifyMonitorDidStart =
 
 export interface DidStopMonitorNotification {
   readonly port: PortIdentifier
+  readonly monitorSessionId?: string
 }
 
 export const NotifyMonitorDidStop =
@@ -170,6 +216,25 @@ export interface MonitorSelectionNotification {
   readonly baudrate?: string
 }
 
+export type PhysicalSessionState =
+  | 'CREATED'
+  | 'STARTING'
+  | 'STARTED'
+  | 'STOPPING'
+  | 'STOPPED'
+  | 'FAILED'
+
+export interface MonitorPhysicalState {
+  readonly port: PortIdentifier
+  readonly state: PhysicalSessionState
+  readonly monitorSessionId?: string
+  readonly baudrate?: string
+  readonly attemptId?: number
+  readonly reason?: string
+  readonly error?: string
+  readonly updatedAt?: string
+}
+
 export type MonitorEditorStatus =
   | 'idle'
   | 'running'
@@ -213,6 +278,123 @@ export const notifyMonitorBridgeError: MessengerNotificationType<{
 }> = {
   method: 'boardlab/monitor/bridge-error',
 }
+
+export const notifyMonitorPhysicalStateChanged: MessengerNotificationType<MonitorPhysicalState> =
+  {
+    method: 'boardlab/monitor/physical-state-changed',
+  }
+
+export const requestMonitorPhysicalStateSnapshot: MessengerRequestType<
+  void,
+  ReadonlyArray<MonitorPhysicalState>
+> = {
+  method: 'boardlab/monitor/get-physical-state',
+}
+
+export interface MonitorClientAttachParams {
+  readonly clientId: string
+  readonly port: PortIdentifier
+}
+
+export interface MonitorClientDetachParams {
+  readonly clientId: string
+  readonly port: PortIdentifier
+}
+
+export interface MonitorIntentParams {
+  readonly port: PortIdentifier
+  readonly clientId?: string
+}
+
+export interface MonitorOpenErrorNotification {
+  readonly port: PortIdentifier
+  readonly status?: number
+  readonly code?: string
+  readonly message?: string
+}
+
+export const notifyMonitorClientAttached: MessengerNotificationType<MonitorClientAttachParams> =
+  {
+    method: 'boardlab/monitor/client-attached',
+  }
+
+export const notifyMonitorClientDetached: MessengerNotificationType<MonitorClientDetachParams> =
+  {
+    method: 'boardlab/monitor/client-detached',
+  }
+
+export const notifyMonitorIntentStart: MessengerNotificationType<MonitorIntentParams> =
+  {
+    method: 'boardlab/monitor/intent-start',
+  }
+
+export const notifyMonitorIntentStop: MessengerNotificationType<MonitorIntentParams> =
+  {
+    method: 'boardlab/monitor/intent-stop',
+  }
+
+export const notifyMonitorIntentResume: MessengerNotificationType<MonitorIntentParams> =
+  {
+    method: 'boardlab/monitor/intent-resume',
+  }
+
+export const notifyMonitorOpenError: MessengerNotificationType<MonitorOpenErrorNotification> =
+  {
+    method: 'boardlab/monitor/open-error',
+  }
+
+export const notifyMonitorSessionState: MessengerNotificationType<MonitorSessionState> =
+  {
+    method: 'boardlab/monitor/session-state',
+  }
+
+export interface MonitorStreamDataNotification {
+  readonly portKey: string
+  readonly data: Uint8Array
+}
+
+export interface MonitorStreamErrorNotification {
+  readonly portKey: string
+  readonly code?: string
+  readonly status?: number
+  readonly message?: string
+}
+
+export const notifyMonitorStreamData: MessengerNotificationType<MonitorStreamDataNotification> =
+  {
+    method: 'boardlab/monitor/stream-data',
+  }
+
+export const notifyMonitorStreamError: MessengerNotificationType<MonitorStreamErrorNotification> =
+  {
+    method: 'boardlab/monitor/stream-error',
+  }
+
+export const requestMonitorSessionSnapshot: MessengerRequestType<
+  void,
+  ReadonlyArray<MonitorSessionState>
+> = {
+  method: 'boardlab/monitor/get-session-state',
+}
+
+export type MonitorBridgeLogLevel =
+  | 'trace'
+  | 'debug'
+  | 'info'
+  | 'warn'
+  | 'error'
+
+export interface MonitorBridgeLogEntry {
+  readonly level: MonitorBridgeLogLevel
+  readonly message: string
+  readonly timestamp?: string
+  readonly context?: Record<string, unknown>
+}
+
+export const NotifyMonitorBridgeLog =
+  new JsonRpcNotificationType<MonitorBridgeLogEntry>(
+    'boardlab/monitor/bridge-log'
+  )
 
 export const notifyMonitorThemeChanged: MessengerNotificationType<void> = {
   method: 'boardlab/monitor/theme-changed',

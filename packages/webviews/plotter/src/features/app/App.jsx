@@ -1,7 +1,7 @@
 // @ts-check
 import { useEffect, useRef, useState } from 'react'
 
-import { useCodiconStylesheet, vscode } from '@boardlab/base'
+import { messengerx, useCodiconStylesheet, vscode } from '@boardlab/base'
 import { useMonitorClientSync } from '@boardlab/monitor-shared/hooks'
 import {
   MonitorProvider,
@@ -47,35 +47,46 @@ function App() {
   useEffect(() => {
     const messenger = vscode.messenger
     if (!messenger) return
-    messenger.onNotification(notifyPlotterToolbarAction, ({ action }) => {
-      const plotter = plotterPanelRef.current
-      if (!plotter) return
-      try {
-        switch (action) {
-          case 'clear':
-            plotter.clear?.()
-            break
-          case 'resetYScale':
-            plotter.resetYScale?.()
-            break
-          default:
-            break
+    const disposable = messengerx.onNotification(
+      messenger,
+      notifyPlotterToolbarAction,
+      ({ action }) => {
+        const plotter = plotterPanelRef.current
+        if (!plotter) return
+        try {
+          switch (action) {
+            case 'clear':
+              plotter.clear?.()
+              break
+            case 'resetYScale':
+              plotter.resetYScale?.()
+              break
+            default:
+              break
+          }
+        } catch (error) {
+          console.error('Plotter toolbar action failed', action, error)
         }
-      } catch (error) {
-        console.error('Plotter toolbar action failed', action, error)
       }
-    })
+    )
+    return () => {
+      disposable.dispose()
+    }
   }, [])
 
   useEffect(() => {
     const messenger = vscode.messenger
     if (!messenger) return
-    messenger.onNotification(
+    const disposable = messengerx.onNotification(
+      messenger,
       notifyPlotterLineEndingChanged,
       ({ lineEnding: next }) => {
         setLineEnding(next)
       }
     )
+    return () => {
+      disposable.dispose()
+    }
   }, [])
 
   return (

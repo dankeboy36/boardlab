@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useDispatch } from 'react-redux'
 
-import { useCodiconStylesheet, vscode } from '@boardlab/base'
+import { messengerx, useCodiconStylesheet, vscode } from '@boardlab/base'
 import { useMonitorClientSync } from '@boardlab/monitor-shared/hooks'
 import {
   MonitorProvider,
@@ -28,16 +28,23 @@ function MonitorToolbarActionHandler({ terminalRef }) {
   useEffect(() => {
     const messenger = vscode.messenger
     if (!messenger) return
-    messenger.onNotification(notifyMonitorToolbarAction, ({ action }) => {
-      const terminal = terminalRef.current
-      if (action === 'play') {
-        play()
-      } else if (action === 'stop') {
-        stop()
-      } else if (action === 'clear') {
-        terminal?.clear?.()
+    const disposable = messengerx.onNotification(
+      messenger,
+      notifyMonitorToolbarAction,
+      ({ action }) => {
+        const terminal = terminalRef.current
+        if (action === 'play') {
+          play()
+        } else if (action === 'stop') {
+          stop()
+        } else if (action === 'clear') {
+          terminal?.clear?.()
+        }
       }
-    })
+    )
+    return () => {
+      disposable.dispose()
+    }
   }, [play, stop, terminalRef])
 
   return null
@@ -77,31 +84,42 @@ function App() {
   useEffect(() => {
     const messenger = vscode.messenger
     if (!messenger) return
-    messenger.onNotification(
+    const disposable = messengerx.onNotification(
+      messenger,
       notifyMonitorLineEndingChanged,
       ({ lineEnding: next }) => {
         setLineEnding(next)
       }
     )
+    return () => {
+      disposable.dispose()
+    }
   }, [])
 
   useEffect(() => {
     const messenger = vscode.messenger
     if (!messenger) return
-    messenger.onNotification(notifyMonitorThemeChanged, () => {
-      try {
-        terminalPanelRef.current?.refreshTheme?.()
-      } catch (error) {
-        console.error('Failed to refresh terminal theme', error)
+    const disposable = messengerx.onNotification(
+      messenger,
+      notifyMonitorThemeChanged,
+      () => {
+        try {
+          terminalPanelRef.current?.refreshTheme?.()
+        } catch (error) {
+          console.error('Failed to refresh terminal theme', error)
+        }
       }
-    })
+    )
+    return () => {
+      disposable.dispose()
+    }
   }, [])
 
   useEffect(() => {
     const messenger = vscode.messenger
     if (!messenger) return
-
-    messenger.onNotification(
+    const disposable = messengerx.onNotification(
+      messenger,
       notifyMonitorTerminalSettingsChanged,
       (settings) => {
         if (!settings) return
@@ -112,14 +130,24 @@ function App() {
         }
       }
     )
+    return () => {
+      disposable.dispose()
+    }
   }, [dispatch])
 
   useEffect(() => {
     const messenger = vscode.messenger
     if (!messenger) return
-    messenger.onRequest(requestMonitorEditorContent, () => ({
-      text: terminalPanelRef.current?.getText?.() ?? '',
-    }))
+    const disposable = messengerx.onRequest(
+      messenger,
+      requestMonitorEditorContent,
+      () => ({
+        text: terminalPanelRef.current?.getText?.() ?? '',
+      })
+    )
+    return () => {
+      disposable.dispose()
+    }
   }, [])
 
   return (

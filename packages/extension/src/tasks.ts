@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs'
 import path, { dirname } from 'node:path'
 import { basename } from 'node:path/posix'
 
+import type { CompileRequest } from 'ardunno-cli/api'
 import { BoardIdentifier, Port, createPortKey } from 'boards-list'
 import { ClientError, Status } from 'nice-grpc-common'
 import * as vscode from 'vscode'
@@ -17,18 +18,18 @@ import {
   revivePort,
   terminalEOL,
 } from './cli/arduino'
+import {
+  extractPlatformIdFromError,
+  isPlatformNotInstalledError,
+  platformIdFromFqbn,
+} from './platformUtils'
 import { portProtocolIcon, resolvePort } from './ports'
 import { collectCliDiagnostics } from './profile/cliDiagnostics'
 import { validateProfilesYAML } from './profile/validation'
 import { createProgrammerItemDescription } from './sketch/currentSketchView'
 import { Sketch } from './sketch/types'
 import { buildStatusText } from './statusText'
-import type { TaskKind, TaskStatus } from './taskTracker'
-import {
-  extractPlatformIdFromError,
-  isPlatformNotInstalledError,
-  platformIdFromFqbn,
-} from './platformUtils'
+import { type TaskKind, taskKindLiterals, type TaskStatus } from './taskTracker'
 import { onDidChangeTaskStates, tryStopTask } from './taskTracker'
 import { presentTaskStatus } from './taskUiState'
 import { disposeAll } from './utils'
@@ -163,6 +164,20 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
     )
   }
 
+  async compileWithDebugSymbols(params: {
+    sketchPath: string
+    fqbn: string
+  }): Promise<vscode.TaskExecution> {
+    return vscode.tasks.executeTask(
+      this.compileWithDebugSymbolsTask({
+        type: boardlabTaskType,
+        command: 'compile-with-debug-symbols',
+        sketchPath: params.sketchPath,
+        fqbn: params.fqbn,
+      })
+    )
+  }
+
   async uploadUsingProgrammer(params: {
     sketchPath: string
     fqbn: string
@@ -235,6 +250,9 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
     }
     if (isExportBinaryTaskDefinition(task.definition)) {
       return this.exportBinariesTask(task.definition)
+    }
+    if (isCompileWithDebugSymbolsTaskDefinition(task.definition)) {
+      return this.compileWithDebugSymbolsTask(task.definition)
     }
     if (isArchiveSketchTaskDefinition(task.definition)) {
       return this.archiveSketchTask(task.definition)
@@ -443,7 +461,20 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
       vscode.TaskScope.Workspace,
       `${definition.command} ${definition.fqbn}`,
       boardlabTaskType,
-      this.createCompileCustomExecution(true),
+      this.createCompileCustomExecution({ exportBinaries: true }),
+      boardlabProblemMatcher
+    )
+  }
+
+  private compileWithDebugSymbolsTask(
+    definition: CompileWithDebugSymbolsTaskDefinition
+  ): vscode.Task {
+    return new vscode.Task(
+      definition,
+      vscode.TaskScope.Workspace,
+      `${definition.command} ${definition.fqbn}`,
+      boardlabTaskType,
+      this.createCompileCustomExecution({ optimizeForDebug: true }),
       boardlabProblemMatcher
     )
   }
@@ -471,15 +502,34 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
           .programmer
         const compileConfig = vscode.workspace.getConfiguration('upload')
         const verbose = compileConfig.get<boolean>('verbose') ?? false
-        return this.withMonitorSuspended(port, async () =>
-          arduino.uploadUsingProgrammer({
+        const portIdentifier = port
+          ? { protocol: port.protocol, address: port.address }
+          : undefined
+
+        if (!portIdentifier) {
+          const { pty } = arduino.uploadUsingProgrammer({
             sketchPath: resolvedTask.sketchPath,
             fqbn: resolvedTask.fqbn,
             port,
             programmer,
             verbose,
           })
+          return pty
+        }
+
+        const { pty } = await this.boardlabContext.withMonitorSuspended(
+          portIdentifier,
+          async (options) =>
+            arduino.uploadUsingProgrammer({
+              sketchPath: resolvedTask.sketchPath,
+              fqbn: resolvedTask.fqbn,
+              port,
+              programmer,
+              verbose,
+              retry: options?.retry,
+            })
         )
+        return pty
       })
     )
   }
@@ -505,13 +555,30 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
           revivePort(resolvedTask.port)
         const programmer = (resolvedTask as BurnBootloaderTaskDefinition)
           .programmer
-        return this.withMonitorSuspended(port, async () =>
-          arduino.burnBootloader({
+        const portIdentifier = port
+          ? { protocol: port.protocol, address: port.address }
+          : undefined
+
+        if (!portIdentifier) {
+          const { pty } = arduino.burnBootloader({
             fqbn: resolvedTask.fqbn,
             port,
             programmer, // https://github.com/arduino/arduino-cli/issues/3043
           })
+          return pty
+        }
+
+        const { pty } = await this.boardlabContext.withMonitorSuspended(
+          portIdentifier,
+          async (options) =>
+            arduino.burnBootloader({
+              fqbn: resolvedTask.fqbn,
+              port,
+              programmer, // https://github.com/arduino/arduino-cli/issues/3043
+              retry: options?.retry,
+            })
         )
+        return pty
       })
     )
   }
@@ -528,7 +595,7 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
   }
 
   private createCompileCustomExecution(
-    exportBinaries = false
+    overrides: Partial<Omit<CompileRequest, 'instance'>> = {}
   ): vscode.CustomExecution {
     return new vscode.CustomExecution(async (resolvedTask) => {
       const { arduino } = await this.boardlabContext.client
@@ -547,9 +614,9 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
       const { pty, result, progress } = arduino.compile({
         sketchPath: resolvedTask.sketchPath,
         fqbn: resolvedTask.fqbn,
-        exportBinaries,
         verbose,
         warnings,
+        ...overrides,
       })
       const progressDisposable = progress((update) =>
         this.setCompileProgress(resolvedTask.sketchPath, update)
@@ -644,14 +711,32 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
           vscode.workspace.getConfiguration('boardlab.upload')
         const verbose = compileConfig.get<boolean>('verbose') ?? false
 
-        return this.withMonitorSuspended(port, async () =>
-          arduino.upload({
+        const portIdentifier = port
+          ? { protocol: port.protocol, address: port.address }
+          : undefined
+
+        if (!portIdentifier) {
+          const { pty } = arduino.upload({
             sketchPath: resolvedTask.sketchPath,
             fqbn: resolvedTask.fqbn,
             port,
             verbose,
           })
+          return pty
+        }
+
+        const { pty } = await this.boardlabContext.withMonitorSuspended(
+          portIdentifier,
+          async (options) =>
+            arduino.upload({
+              sketchPath: resolvedTask.sketchPath,
+              fqbn: resolvedTask.fqbn,
+              port,
+              verbose,
+              retry: options?.retry,
+            })
         )
+        return pty
       })
     )
   }
@@ -761,6 +846,13 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
       const portKey = port ? createPortKey(port) : pickPort
       const type = boardlabTaskType
       if (command === 'compile') {
+        return {
+          type,
+          command,
+          sketchPath,
+          fqbn,
+        }
+      } else if (command === 'compile-with-debug-symbols') {
         return {
           type,
           command,
@@ -890,6 +982,15 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
             includeProgrammer: false,
           }),
           'compile'
+        ),
+        buildTaskItem(
+          'compile-with-debug-symbols',
+          `${taskCommandIcon('compile-with-debug-symbols')} Compile with Debug Symbols`,
+          this.formatContextLine({
+            includePort: false,
+            includeProgrammer: false,
+          }),
+          'compile-with-debug-symbols'
         ),
         buildTaskItem(
           'upload',
@@ -1269,77 +1370,6 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
     }
     return label
   }
-
-  private async withMonitorSuspended(
-    port: Port | undefined,
-    run: () => Promise<{
-      pty: vscode.Pseudoterminal
-      result: Promise<void>
-    }>
-  ): Promise<vscode.Pseudoterminal> {
-    if (!port) {
-      const { pty, result } = await run()
-      result.catch((error) => {
-        console.error('Upload error', error)
-      })
-      return pty
-    }
-
-    const portIdentifier = { protocol: port.protocol, address: port.address }
-    const paused =
-      await this.boardlabContext.monitorManager.pauseMonitor(portIdentifier)
-
-    const resume = async () => {
-      if (!paused) {
-        return
-      }
-      console.log('[tasks] resume monitor after suspension', {
-        port: portIdentifier,
-        paused,
-      })
-
-      const attemptResume = async (remaining: number): Promise<void> => {
-        try {
-          await this.boardlabContext.monitorManager.resumeMonitor(
-            portIdentifier
-          )
-        } catch (error) {
-          if (remaining <= 0) {
-            console.error('Failed to resume monitor', error)
-            return
-          }
-        }
-
-        const state =
-          this.boardlabContext.monitorManager.getMonitorState(portIdentifier)
-        if (state === 'running' || remaining <= 0) {
-          return
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 500))
-        return attemptResume(remaining - 1)
-      }
-
-      await attemptResume(5)
-    }
-
-    try {
-      const { pty, result } = await run()
-      result
-        .catch((error) => {
-          console.error('Upload error', error)
-        })
-        .finally(() => {
-          resume()
-        })
-      return pty
-    } catch (error) {
-      await resume().catch((resumeError) =>
-        console.error('Failed to resume monitor', resumeError)
-      )
-      throw error
-    }
-  }
 }
 
 class CommandQuickPickItem implements vscode.QuickPickItem {
@@ -1381,6 +1411,8 @@ function taskCommandIcon(taskCommand: string | undefined): string {
   switch (taskCommand) {
     case 'compile':
       return '$(check)'
+    case 'compile-with-debug-symbols':
+      return '$(inspect)'
     case 'upload':
       return '$(arrow-right)'
     case 'upload-using-programmer':
@@ -1400,23 +1432,12 @@ const boardlabTaskType = 'boardlab' as const
 const boardlabProblemMatcher = `$${boardlabTaskType}` as const
 const pickPort = '${' + 'command:boardlab.pickPort' + '}'
 
-const taskCommandLiterals = [
-  'compile',
-  'upload',
-  'burn-bootloader',
-  'export-binary',
-  'archive-sketch',
-  'upload-using-programmer',
-  'get-board-info',
-  'reload-board-data',
-] as const
-type TaskCommand = (typeof taskCommandLiterals)[number]
+type TaskCommand = (typeof taskKindLiterals)[number]
 function isTaskCommand(arg: unknown): arg is TaskCommand {
   return (
-    typeof arg === 'string' && taskCommandLiterals.includes(arg as TaskCommand)
+    typeof arg === 'string' && taskKindLiterals.includes(arg as TaskCommand)
   )
 }
-
 interface CommandTaskDefinition extends vscode.TaskDefinition {
   type: typeof boardlabTaskType
   command: TaskCommand
@@ -1455,6 +1476,24 @@ function isCompileTaskDefinition(arg: unknown): arg is CompileTaskDefinition {
     typeof (<CompileTaskDefinition>arg).sketchPath === 'string' &&
     (<CompileTaskDefinition>arg).fqbn !== undefined &&
     typeof (<CompileTaskDefinition>arg).fqbn === 'string'
+  )
+}
+
+interface CompileWithDebugSymbolsTaskDefinition extends CommandTaskDefinition {
+  command: 'compile-with-debug-symbols'
+  sketchPath: string
+  fqbn: FQBN
+}
+function isCompileWithDebugSymbolsTaskDefinition(
+  arg: unknown
+): arg is CompileWithDebugSymbolsTaskDefinition {
+  return (
+    isCommandTaskDefinition(arg, 'compile-with-debug-symbols') &&
+    (<CompileWithDebugSymbolsTaskDefinition>arg).sketchPath !== undefined &&
+    typeof (<CompileWithDebugSymbolsTaskDefinition>arg).sketchPath ===
+      'string' &&
+    (<CompileWithDebugSymbolsTaskDefinition>arg).fqbn !== undefined &&
+    typeof (<CompileWithDebugSymbolsTaskDefinition>arg).fqbn === 'string'
   )
 }
 

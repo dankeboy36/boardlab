@@ -1,486 +1,394 @@
 // @ts-check
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
+import { createPortKey } from 'boards-list'
 
-import { notifyError, notifyInfo } from '@boardlab/base'
+import { emitWebviewTraceEvent } from './trace.js'
 
-/**
- * @typedef {Object} UseSerialMonitorConnectionOptions
- * @property {boolean} [autoplay]
- * @property {number} [disconnectHoldMs]
- * @property {number} [coldStartMs]
- */
-
-/**
- * @typedef {Object} UseSerialMonitorConnectionResult
- * @property {() => void} play
- * @property {() => void} stop
- */
+const buildPortKey = (
+  /**
+   * @type {Readonly<
+   *       Pick<import('boards-list').PortIdentifier, 'protocol' | 'address'>
+   *     >
+   *   | undefined}
+   */ port
+) => (port ? createPortKey(port) : undefined)
 
 /**
  * @typedef {Object} UseSerialMonitorConnection
  * @property {import('./client.js').MonitorClient} client
  * @property {import('boards-list').PortIdentifier | undefined} selectedPort
- * @property {import('boards-list').DetectedPorts} detectedPorts
  * @property {string | undefined} selectedBaudrate
+ * @property {boolean} [selectedDetected]
  * @property {import('@boardlab/protocol').MonitorSettingsByProtocol} monitorSettingsByProtocol
+ * @property {import('@boardlab/protocol').MonitorSessionState | undefined} session
  * @property {(text: string) => void} onText
  * @property {() => void} onStart
  * @property {() => void} onStop
- * @property {() => void} onBusy // called when server indicates HTTP 423
- * @property {(port: import('boards-list').PortIdentifier) => void} onPause
- * @property {(port: import('boards-list').PortIdentifier) => void} onResume
+ * @property {() => void} onBusy
  * @property {boolean} [enabled=true] Default is `true`
- * @property {boolean} [autoPlay=true] Default is `true`
- * @property {UseSerialMonitorConnectionOptions} [options]
- * @returns {UseSerialMonitorConnectionResult}
- */
-
-/**
- * @param {UseSerialMonitorConnection} params
- * @returns {UseSerialMonitorConnectionResult}
+ * @returns {{ play: () => void; stop: () => void }}
  */
 export function useSerialMonitorConnection({
   client,
   selectedPort,
-  detectedPorts,
   selectedBaudrate,
+  selectedDetected,
   monitorSettingsByProtocol,
+  session,
   onText,
   onStart,
   onStop,
   onBusy,
-  options,
   enabled = true,
-  autoPlay = true,
 }) {
-  const autoplayRef = useRef(options?.autoplay ?? true)
-  const disconnectHoldMsRef = useRef(options?.disconnectHoldMs ?? 1500)
-  const coldStartMsRef = useRef(options?.coldStartMs ?? 1000)
-
-  // Keep options in sync
-  useEffect(() => {
-    autoplayRef.current = options?.autoplay ?? true
-    disconnectHoldMsRef.current = options?.disconnectHoldMs ?? 1500
-    coldStartMsRef.current = options?.coldStartMs ?? 1000
-  }, [options?.autoplay, options?.disconnectHoldMs, options?.coldStartMs])
-
-  useEffect(() => {
-    autoplayRef.current = autoPlay
-    if (!autoPlay) {
-      userStoppedRef.current = true
-    }
-  }, [autoPlay])
-
-  const userStoppedRef = useRef(false)
-  const disconnectHoldRef = useRef(false)
-  const disconnectAtRef = useRef(0)
-  const sawAbsentRef = useRef(false)
-  const wasStreamingRef = useRef(false)
-  const openedAtRef = useRef(0)
-  const awaitingBaudRef = useRef(false)
-  const pendingStartRef = useRef(false)
-  const startTokenRef = useRef(0)
-
   const abortRef = useRef(
     /** @type {AbortController | undefined} */ (undefined)
   )
+  const openingRef = useRef(false)
+  const attachedRef = useRef(false)
+  const lastAttemptRef = useRef(/** @type {number | null} */ (null))
   const seqRef = useRef(0)
-  const [forceReconnect, setForceReconnect] = useState(0)
-
-  const triggerReconnect = useCallback(() => {
-    setForceReconnect((prev) => prev + 1)
-  }, [])
-
-  const selectedDetectedRef = useRef(false)
-  const hasDetectionSnapshotRef = useRef(false)
-  const prevDetectedRef = useRef(false)
-  const forcedAbsentRef = useRef(false)
+  const lastPortKeyRef = useRef(buildPortKey(selectedPort))
+  const lastIntentKeyRef = useRef('')
 
   useEffect(() => {
-    const ports = detectedPorts ?? {}
-    const hasSnapshot = Object.keys(ports).length > 0
-    const key = selectedPort
-      ? `${selectedPort.protocol}:${selectedPort.address}`
-      : undefined
-    const isDetected = key
-      ? Object.values(ports).some(
-          ({ port }) => `${port.protocol}:${port.address}` === key
-        )
-      : false
-
-    hasDetectionSnapshotRef.current = hasSnapshot
-    selectedDetectedRef.current = isDetected
-    if (forcedAbsentRef.current && isDetected) {
-      forcedAbsentRef.current = false
-    }
-
-    if (!selectedPort) {
-      prevDetectedRef.current = false
-      forcedAbsentRef.current = false
+    const portKey = buildPortKey(selectedPort)
+    if (portKey === lastPortKeyRef.current) {
       return
     }
-
-    if (!prevDetectedRef.current && isDetected) {
-      prevDetectedRef.current = isDetected
-    } else if (prevDetectedRef.current && !isDetected) {
-      sawAbsentRef.current = true
-      prevDetectedRef.current = isDetected
-    } else {
-      prevDetectedRef.current = isDetected
-    }
-  }, [detectedPorts, selectedPort, triggerReconnect])
-
-  // Expose play/stop by mutating refs (consumers can call via returned functions if needed later)
-  /** Force immediate reconnect attempt, clearing holds */
-  const playNow = () => {
-    console.info('[monitor] playNow', {
-      hasClient: !!client,
-      selectedPort,
-      autoPlay: autoplayRef.current,
-      userStopped: userStoppedRef.current,
-      aborting: !!abortRef.current,
-    })
-    userStoppedRef.current = false
-    disconnectHoldRef.current = false
-    sawAbsentRef.current = false
-    // Temporarily enable autoplay for immediate connection
-    autoplayRef.current = true
-    // Abort any in-flight stream before triggering a reconnect so callers
-    // don't immediately see an AbortError surfaced from a previous controller.
-    if (abortRef.current) {
-      try {
-        abortRef.current.abort()
-      } catch {}
-      abortRef.current = undefined
-    }
-    // Force effect re-evaluation by updating state
-    triggerReconnect()
-  }
-
-  /** User stop: abort stream and prevent auto-reconnect */
-  const stopNow = () => {
-    console.info('[monitor] stopNow', {
-      hasClient: !!client,
-      selectedPort,
-    })
-    userStoppedRef.current = true
-    disconnectHoldRef.current = false
-    autoplayRef.current = false
+    lastPortKeyRef.current = portKey
+    lastAttemptRef.current = null
+    lastIntentKeyRef.current = ''
+    attachedRef.current = false
+    openingRef.current = false
     if (abortRef.current) {
       abortRef.current.abort()
       abortRef.current = undefined
     }
-  }
+  }, [selectedPort])
 
-  // Core effect: manages stream lifecycle and reconnect policy
   useEffect(() => {
-    // If disabled, abort any current stream and skip
+    const portKey = buildPortKey(selectedPort)
+    if (!enabled || !client || !selectedPort) {
+      lastIntentKeyRef.current = ''
+      return
+    }
+    const detected = Boolean(selectedDetected)
+    if (!detected) {
+      lastIntentKeyRef.current = `${portKey ?? ''}|detected:false`
+      return
+    }
+    if (session && session.portKey === portKey) {
+      if (session.desired !== 'stopped') {
+        lastIntentKeyRef.current = `${portKey ?? ''}|session`
+        return
+      }
+      const signature = `${portKey ?? ''}|detected:true|session-stopped`
+      if (lastIntentKeyRef.current === signature) {
+        return
+      }
+      lastIntentKeyRef.current = signature
+      client.notifyIntentStart(selectedPort)
+      return
+    }
+    const signature = `${portKey ?? ''}|detected:true|missing-session`
+    if (lastIntentKeyRef.current === signature) {
+      return
+    }
+    lastIntentKeyRef.current = signature
+    client.notifyIntentStart(selectedPort)
+  }, [client, enabled, selectedPort, selectedDetected, session])
+
+  const play = useCallback(() => {
+    if (!client || !selectedPort) {
+      return
+    }
+    emitWebviewTraceEvent('webviewMonitorPlay', {
+      portKey: buildPortKey(selectedPort),
+    })
+    client.notifyIntentStart(selectedPort)
+  }, [client, selectedPort])
+
+  const stop = useCallback(() => {
+    if (!client || !selectedPort) {
+      return
+    }
+    emitWebviewTraceEvent('webviewMonitorStop', {
+      portKey: buildPortKey(selectedPort),
+    })
+    client.notifyIntentStop(selectedPort)
+    if (abortRef.current) {
+      abortRef.current.abort()
+      abortRef.current = undefined
+    }
+    attachedRef.current = false
+    openingRef.current = false
+  }, [client, selectedPort])
+
+  useEffect(() => {
+    const portKey = buildPortKey(selectedPort)
     if (!enabled) {
       if (abortRef.current) {
         abortRef.current.abort()
         abortRef.current = undefined
       }
-      console.info('[monitor] effect skipped (disabled)')
+      attachedRef.current = false
+      openingRef.current = false
+      emitWebviewTraceEvent('webviewMonitorEffectSkip', {
+        reason: 'disabled',
+        portKey,
+      })
       return
     }
     if (!client || !selectedPort) {
-      console.info('[monitor] effect skipped (missing client or port)', {
-        hasClient: !!client,
-        selectedPort,
+      if (abortRef.current) {
+        abortRef.current.abort()
+        abortRef.current = undefined
+      }
+      attachedRef.current = false
+      openingRef.current = false
+      emitWebviewTraceEvent('webviewMonitorEffectSkip', {
+        reason: 'missing-client-or-port',
+        portKey,
       })
       return
     }
 
-    // Ensure monitor settings for this protocol are resolved first
-    const proto = selectedPort.protocol
-    const entry = monitorSettingsByProtocol?.protocols?.[proto]
-    if (!entry) {
-      // Not resolved yet: do not attempt to start
-      return
-    }
-    if (entry.error) {
-      // Protocol not supported for monitor
-      return
-    }
-    const hasBaudSetting = Array.isArray(entry.settings)
-      ? !!entry.settings.find((s) => s.settingId === 'baudrate')
+    const selectedProtocol = selectedPort.protocol
+    const protocolEntry = selectedProtocol
+      ? monitorSettingsByProtocol?.protocols?.[selectedProtocol]
+      : undefined
+    const protocolError = protocolEntry?.error
+    const hasProtocolSettings = Boolean(protocolEntry)
+    const requiresBaudrate = Array.isArray(protocolEntry?.settings)
+      ? !!protocolEntry.settings.find((s) => s.settingId === 'baudrate')
       : false
-    if (hasBaudSetting && !selectedBaudrate) {
-      console.info('[monitor] effect waiting for baudrate')
-      awaitingBaudRef.current = true
+
+    if (!hasProtocolSettings) {
+      if (abortRef.current) {
+        abortRef.current.abort()
+        abortRef.current = undefined
+      }
+      attachedRef.current = false
+      openingRef.current = false
+      emitWebviewTraceEvent('webviewMonitorEffectSkip', {
+        reason: 'missing-protocol-settings',
+        portKey,
+      })
       return
     }
-    awaitingBaudRef.current = false
+    if (protocolError) {
+      if (abortRef.current) {
+        abortRef.current.abort()
+        abortRef.current = undefined
+      }
+      attachedRef.current = false
+      openingRef.current = false
+      emitWebviewTraceEvent('webviewMonitorEffectSkip', {
+        reason: 'protocol-error',
+        portKey,
+      })
+      return
+    }
+    if (requiresBaudrate && !selectedBaudrate) {
+      if (abortRef.current) {
+        abortRef.current.abort()
+        abortRef.current = undefined
+      }
+      attachedRef.current = false
+      openingRef.current = false
+      emitWebviewTraceEvent('webviewMonitorEffectSkip', {
+        reason: 'missing-baudrate',
+        portKey,
+      })
+      return
+    }
 
-    const hasDetectionSnapshot = hasDetectionSnapshotRef.current
-    const selectedDetected = selectedDetectedRef.current
-    const detected =
-      hasDetectionSnapshot && selectedDetected && !forcedAbsentRef.current
-    const shouldStart =
-      !userStoppedRef.current &&
-      autoplayRef.current &&
-      detected &&
-      !abortRef.current
+    if (!session || session.portKey !== portKey) {
+      if (abortRef.current) {
+        abortRef.current.abort()
+        abortRef.current = undefined
+      }
+      attachedRef.current = false
+      openingRef.current = false
+      lastAttemptRef.current = null
+      emitWebviewTraceEvent('webviewMonitorEffectSkip', {
+        reason: 'missing-session',
+        portKey,
+      })
+      return
+    }
 
-    console.info('[monitor] effect evaluate', {
-      autoPlay: autoplayRef.current,
-      detected,
-      hasDetectionSnapshot,
-      userStopped: userStoppedRef.current,
-      aborting: !!abortRef.current,
-      shouldStart,
-    })
+    if (session.status === 'paused' || session.status === 'error') {
+      if (abortRef.current) {
+        abortRef.current.abort()
+        abortRef.current = undefined
+      }
+      attachedRef.current = false
+      openingRef.current = false
+      emitWebviewTraceEvent('webviewMonitorEffectSkip', {
+        reason: 'host-paused-or-error',
+        portKey,
+        status: session.status,
+      })
+      return
+    }
 
-    // Manage disconnect hold lifecycle
-    if (disconnectHoldRef.current) {
-      const now = Date.now()
-      const elapsed = now - disconnectAtRef.current
-      const holdExpired = elapsed >= disconnectHoldMsRef.current
-      const reappeared = sawAbsentRef.current && detected
-      if (!holdExpired && !reappeared) {
+    const shouldOpenPending =
+      (session.openPending || session.status === 'connecting') &&
+      session.currentAttemptId !== null
+    const shouldAttachActive = session.status === 'active'
+
+    if (openingRef.current || attachedRef.current) {
+      emitWebviewTraceEvent('webviewMonitorEffectSkip', {
+        reason: 'already-attached-or-opening',
+        portKey,
+      })
+      return
+    }
+
+    if (shouldOpenPending) {
+      if (lastAttemptRef.current === session.currentAttemptId) {
+        emitWebviewTraceEvent('webviewMonitorEffectSkip', {
+          reason: 'attempt-already-opened',
+          portKey,
+          attemptId: session.currentAttemptId,
+        })
         return
       }
-      // Clear hold when conditions satisfied
-      disconnectHoldRef.current = false
-      sawAbsentRef.current = false
-    }
-
-    if (!autoplayRef.current) {
-      console.info('[monitor] autoplay disabled; skipping start')
-      return
-    }
-
-    if (!detected) {
-      // Track that we saw the device absent at least once
-      sawAbsentRef.current = true
-      return
-    }
-
-    // Do not start a second stream if one is already active. This is critical
-    // during baudrate changes: we rely on RequestUpdateBaudrate to adjust the
-    // existing monitor without reconnecting.
-    if (abortRef.current) {
-      console.info('[monitor] abort controller already set, skipping start')
-      return
-    }
-    // Start a new open sequence
-    if (pendingStartRef.current) {
-      console.info('[monitor] start pending; skipping duplicate trigger')
+      lastAttemptRef.current = session.currentAttemptId
+    } else if (!shouldAttachActive) {
+      emitWebviewTraceEvent('webviewMonitorEffectSkip', {
+        reason: 'no-open-required',
+        portKey,
+      })
       return
     }
 
     const mySeq = ++seqRef.current
     const controller = new AbortController()
     abortRef.current = controller
-    const signal = controller.signal
-    pendingStartRef.current = true
-    const startToken = ++startTokenRef.current
-
-    // Reset stream flags
-    wasStreamingRef.current = false
-    openedAtRef.current = Date.now()
+    openingRef.current = true
 
     const startStream = async () => {
-      console.info('[monitor] opening monitor', {
+      emitWebviewTraceEvent('webviewMonitorOpenStart', {
         seq: mySeq,
-        port: selectedPort,
+        portKey,
         baudrate: selectedBaudrate,
       })
       let reader
       try {
         reader = await client.openMonitor(
           { port: selectedPort, baudrate: selectedBaudrate },
-          { signal }
+          { signal: controller.signal }
         )
-        if (
-          mySeq !== seqRef.current ||
-          controller.signal.aborted ||
-          abortRef.current !== controller
-        ) {
-          pendingStartRef.current = false
+        if (controller.signal.aborted || abortRef.current !== controller) {
+          openingRef.current = false
           return
         }
+        emitWebviewTraceEvent('webviewMonitorStreamStarted', {
+          seq: mySeq,
+          portKey,
+        })
+        attachedRef.current = true
+        openingRef.current = false
         onStart()
         const decoder = new TextDecoder()
         while (true) {
           const { value, done } = await reader.read()
           if (done) break
           if (value && value.length) {
-            wasStreamingRef.current = true
             onText(decoder.decode(value, { stream: true }))
           }
         }
-        if (mySeq !== seqRef.current) return
+        emitWebviewTraceEvent('webviewMonitorStreamEnded', {
+          seq: mySeq,
+          portKey,
+          reason: 'done',
+        })
+        attachedRef.current = false
         onStop()
-        if (abortRef.current === controller) {
-          abortRef.current = undefined
-        }
-        if (!userStoppedRef.current) {
-          const elapsed = Date.now() - openedAtRef.current
-          const detectedNow =
-            selectedDetectedRef.current && !forcedAbsentRef.current
-          if (!wasStreamingRef.current && elapsed < coldStartMsRef.current) {
-            disconnectHoldRef.current = false
-            sawAbsentRef.current = false
-            triggerReconnect()
-          } else if (detectedNow) {
-            disconnectHoldRef.current = false
-            sawAbsentRef.current = false
-            triggerReconnect()
-          } else {
-            disconnectHoldRef.current = true
-            disconnectAtRef.current = Date.now()
-            notifyInfo('Device disconnected; waiting for reappear')
-          }
-        }
-        pendingStartRef.current = false
-      } catch (err) {
-        if (mySeq !== seqRef.current) return
+      } catch (error) {
         if (
-          (err instanceof Error && err?.name === 'AbortError') ||
-          controller.signal.aborted
+          controller.signal.aborted ||
+          (error instanceof Error && error.name === 'AbortError')
         ) {
+          emitWebviewTraceEvent('webviewMonitorStreamEnded', {
+            seq: mySeq,
+            portKey,
+            reason: 'aborted',
+          })
+          openingRef.current = false
+          attachedRef.current = false
           onStop()
-          if (abortRef.current === controller) {
-            abortRef.current = undefined
-          }
-          pendingStartRef.current = false
           return
         }
-        onStop()
-        if (abortRef.current === controller) {
-          abortRef.current = undefined
-        }
-        const message = err instanceof Error ? err?.message : String(err)
-        const errorCode = err && typeof err === 'object' ? err.code : undefined
+        const message = error instanceof Error ? error.message : String(error)
+        const errorCode =
+          error instanceof Error && 'code' in error
+            ? String(error.code)
+            : undefined
         const errorStatus =
-          err && typeof err === 'object' ? err.status : undefined
+          error instanceof Error &&
+          'status' in error &&
+          typeof error.status === 'number'
+            ? error.status
+            : undefined
+        emitWebviewTraceEvent('webviewMonitorOpenError', {
+          seq: mySeq,
+          portKey,
+          message,
+          code: errorCode,
+          status: errorStatus,
+        })
+        if (errorCode === 'already-attached') {
+          attachedRef.current = true
+          openingRef.current = false
+          return
+        }
+        client.notifyOpenError({
+          port: selectedPort,
+          status: errorStatus,
+          code: errorCode,
+          message,
+        })
         if (errorCode === 'port-busy' || errorStatus === 423) {
-          notifyError(`${selectedPort.address} port busy`)
-          userStoppedRef.current = true
           onBusy()
-          pendingStartRef.current = false
-          return
         }
-        const isMissingDevice =
-          errorCode === 'port-not-detected' || errorStatus === 404
-        const shouldRefreshDetection =
-          errorCode === 'monitor-open-failed' || errorStatus === 502
-        const resolveDetectedNow = async () => {
-          if (!client || !selectedPort || !client.detectedPorts) {
-            return selectedDetectedRef.current
-          }
-          try {
-            await new Promise((resolve) => setTimeout(resolve, 200))
-            const ports = await client.detectedPorts()
-            const key = `${selectedPort.protocol}:${selectedPort.address}`
-            return Object.values(ports ?? {}).some(
-              ({ port }) => `${port.protocol}:${port.address}` === key
-            )
-          } catch {
-            return selectedDetectedRef.current
-          }
-        }
-        if (isMissingDevice) {
-          forcedAbsentRef.current = true
-          disconnectHoldRef.current = true
-          disconnectAtRef.current = Date.now()
-          sawAbsentRef.current = true
-          if (!userStoppedRef.current) {
-            notifyInfo('Device disconnected; waiting for reappear')
-          }
-          pendingStartRef.current = false
-          return
-        }
-        if (shouldRefreshDetection) {
-          const detectedNow = await resolveDetectedNow()
-          if (!detectedNow) {
-            forcedAbsentRef.current = true
-            disconnectHoldRef.current = true
-            disconnectAtRef.current = Date.now()
-            sawAbsentRef.current = true
-            if (!userStoppedRef.current) {
-              notifyInfo('Device disconnected; waiting for reappear')
-            }
-            pendingStartRef.current = false
-            return
-          }
-        }
-        if (!userStoppedRef.current) {
-          notifyError(message)
-        }
-        userStoppedRef.current = true
-        onBusy()
-        disconnectHoldRef.current = true
-        disconnectAtRef.current = Date.now()
-        pendingStartRef.current = false
-      }
-    }
-
-    const timer = setTimeout(() => {
-      if (controller.signal.aborted || startTokenRef.current !== startToken) {
+        attachedRef.current = false
+        onStop()
+      } finally {
         if (abortRef.current === controller) {
           abortRef.current = undefined
         }
-        pendingStartRef.current = false
-        return
-      }
-      startStream().finally(() => {
-        if (startTokenRef.current === startToken) {
-          pendingStartRef.current = false
-        }
-      })
-    }, 0)
-
-    return () => {
-      clearTimeout(timer)
-      startTokenRef.current += 1
-      controller.abort()
-      pendingStartRef.current = false
-      if (abortRef.current === controller) {
-        abortRef.current = undefined
+        openingRef.current = false
       }
     }
-  }, [
-    client,
-    selectedPort,
-    monitorSettingsByProtocol,
-    forceReconnect,
-    onBusy,
-    onStart,
-    onStop,
-    onText,
-    enabled,
-    triggerReconnect,
-  ])
 
-  // If baudrate becomes available after being undefined (and required by protocol),
-  // trigger a connection attempt without tearing down an existing stream.
-  useEffect(() => {
-    if (!client || !selectedPort) return
-    if (!awaitingBaudRef.current) return
-    const entry = monitorSettingsByProtocol?.protocols?.[selectedPort.protocol]
-    if (!entry || entry.error) return
-    const hasBaudSetting = Array.isArray(entry.settings)
-      ? !!entry.settings.find((s) => s.settingId === 'baudrate')
-      : false
-    if (hasBaudSetting && !selectedBaudrate) return
-    awaitingBaudRef.current = false
-    if (!abortRef.current && !userStoppedRef.current && autoplayRef.current) {
-      triggerReconnect()
-    }
+    startStream()
   }, [
     client,
     selectedPort,
     selectedBaudrate,
+    selectedDetected,
     monitorSettingsByProtocol,
-    triggerReconnect,
+    session,
+    enabled,
+    onStart,
+    onStop,
+    onText,
+    onBusy,
   ])
 
-  // Return imperative controls for future UI buttons
-  return {
-    play: () => playNow(),
-    stop: () => stopNow(),
-  }
+  useEffect(() => {
+    return () => {
+      if (abortRef.current) {
+        abortRef.current.abort()
+        abortRef.current = undefined
+      }
+    }
+  }, [])
+
+  return { play, stop }
 }

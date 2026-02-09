@@ -19,6 +19,7 @@ const basePlotterState = plotterReducer(undefined, { type: '@@INIT' })
 const persistedState = (() => {
   const state = getPersistedState()
   if (state) {
+    const persistedSerial = /** @type {any} */ (state.serialMonitor) ?? {}
     return {
       connection: {
         ...baseConnectionState,
@@ -26,7 +27,14 @@ const persistedState = (() => {
       },
       serialMonitor: {
         ...baseSerialMonitorState,
-        .../** @type {any} */ (state.serialMonitor),
+        selectedPort: persistedSerial.selectedPort,
+        selectedBaudrates:
+          persistedSerial.selectedBaudrates ??
+          baseSerialMonitorState.selectedBaudrates,
+        autoPlay:
+          typeof persistedSerial.autoPlay === 'boolean'
+            ? persistedSerial.autoPlay
+            : baseSerialMonitorState.autoPlay,
       },
       plotter: {
         ...basePlotterState,
@@ -57,9 +65,6 @@ store.subscribe(() => {
     serialMonitor: {
       selectedPort: state.serialMonitor.selectedPort,
       selectedBaudrates: state.serialMonitor.selectedBaudrates,
-      started: state.serialMonitor.started,
-      status: state.serialMonitor.status,
-      suspendedPortKeys: state.serialMonitor.suspendedPortKeys,
       autoPlay: state.serialMonitor.autoPlay,
     },
     plotter: {

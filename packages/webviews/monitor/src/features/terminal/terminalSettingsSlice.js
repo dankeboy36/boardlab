@@ -33,8 +33,9 @@ function save(s) {
       /** @type {Record<string, number | string | boolean | undefined>} */ ({})
     if (s.scrollback != null) compact.scrollback = s.scrollback
     if (s.cursorStyle != null) compact.cursorStyle = s.cursorStyle
-    if (s.cursorInactiveStyle != null)
+    if (s.cursorInactiveStyle != null) {
       compact.cursorInactiveStyle = s.cursorInactiveStyle
+    }
     if (s.cursorBlink != null) compact.cursorBlink = s.cursorBlink
     if (s.fontSize != null) compact.fontSize = s.fontSize
     if (s.fontFamily != null) compact.fontFamily = s.fontFamily

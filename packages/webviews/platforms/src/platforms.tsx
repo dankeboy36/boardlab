@@ -20,6 +20,7 @@ import {
   willInstallPlatform,
   willUninstallPlatform,
 } from '@boardlab/protocol'
+import { messengerx } from '@boardlab/base'
 
 import { createPlatformsMock } from './mocks/platformsMock'
 
@@ -47,26 +48,40 @@ export function createPlatforms(messenger?: Messenger | undefined): Platforms {
     onDidErrorUninstallEmitter,
     onDidUpdateIndexEmitter,
   ]
-  messenger.onNotification(willInstallPlatform, (event) =>
-    onWillInstallEmitter.fire(event)
+  toDispose.push(
+    messengerx.onNotification(messenger, willInstallPlatform, (event) =>
+      onWillInstallEmitter.fire(event)
+    )
   )
-  messenger.onNotification(didInstallPlatform, (event) =>
-    onDidInstallEmitter.fire(event)
+  toDispose.push(
+    messengerx.onNotification(messenger, didInstallPlatform, (event) =>
+      onDidInstallEmitter.fire(event)
+    )
   )
-  messenger.onNotification(didErrorInstallPlatform, (event) =>
-    onDidErrorInstallEmitter.fire(event)
+  toDispose.push(
+    messengerx.onNotification(messenger, didErrorInstallPlatform, (event) =>
+      onDidErrorInstallEmitter.fire(event)
+    )
   )
-  messenger.onNotification(willUninstallPlatform, (event) =>
-    onWillUninstallEmitter.fire(event)
+  toDispose.push(
+    messengerx.onNotification(messenger, willUninstallPlatform, (event) =>
+      onWillUninstallEmitter.fire(event)
+    )
   )
-  messenger.onNotification(didUninstallPlatform, (event) =>
-    onDidUninstallEmitter.fire(event)
+  toDispose.push(
+    messengerx.onNotification(messenger, didUninstallPlatform, (event) =>
+      onDidUninstallEmitter.fire(event)
+    )
   )
-  messenger.onNotification(didErrorUninstallPlatform, (event) =>
-    onDidErrorUninstallEmitter.fire(event)
+  toDispose.push(
+    messengerx.onNotification(messenger, didErrorUninstallPlatform, (event) =>
+      onDidErrorUninstallEmitter.fire(event)
+    )
   )
-  messenger.onNotification(didUpdatePlatformIndex, () =>
-    onDidUpdateIndexEmitter.fire()
+  toDispose.push(
+    messengerx.onNotification(messenger, didUpdatePlatformIndex, () =>
+      onDidUpdateIndexEmitter.fire()
+    )
   )
   return {
     busyResources() {

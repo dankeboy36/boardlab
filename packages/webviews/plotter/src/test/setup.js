@@ -1,5 +1,4 @@
 // @ts-check
-import { indexedDB } from 'fake-indexeddb'
 import { createElement, forwardRef } from 'react'
 import { vi } from 'vitest'
 
@@ -143,11 +142,6 @@ if (!globalThis.ResizeObserver) {
     disconnect() {}
     unobserve() {}
   }
-}
-
-// Polyfill indexedDB for tests
-if (!globalThis.indexedDB) {
-  globalThis.indexedDB = indexedDB
 }
 
 // Polyfill matchMedia for libraries that expect it (e.g., uPlot)

@@ -208,6 +208,9 @@ abstract class MonitorBaseEditorProvider<
     protected readonly resourceStore: MonitorResourceStore,
     protected readonly selectionCoordinator: MonitorSelectionCoordinator,
     private readonly webviewAssetType: 'monitor' | 'plotter',
+    private readonly onPanelDisposed:
+      | ((participant: WebviewIdMessageParticipant) => void)
+      | undefined,
     private readonly stateConfig: {
       readonly titlePrefix: string
       readonly viewType: string
@@ -458,6 +461,7 @@ abstract class MonitorBaseEditorProvider<
     if (!binding) {
       return
     }
+    this.onPanelDisposed?.(binding.participant)
     binding.disposables.forEach((disposable) => {
       try {
         disposable.dispose()
@@ -516,6 +520,9 @@ abstract class MonitorBaseEditorProvider<
     const stateScript = initialState
       ? `window.__INITIAL_VSCODE_STATE__ = ${JSON.stringify(initialState).replace(/</g, '\\u003c')};`
       : ''
+    const webviewInstanceId = `${this.webviewAssetType}-${Date.now().toString(
+      36
+    )}-${Math.random().toString(36).slice(2, 8)}`
 
     return /* html */ `
       <!DOCTYPE html>
@@ -539,6 +546,7 @@ abstract class MonitorBaseEditorProvider<
           <div id="root"></div>
           <script nonce="${nonce}">
             window.__CSP_NONCE__ = '${nonce}';
+            window.__BOARDLAB_WEBVIEW_ID__ = '${webviewInstanceId}';
             window.__BOARDLAB_WEBVIEW_TYPE__ = '${this.webviewAssetType}';
             ${stateScript}
           </script>
@@ -558,7 +566,7 @@ abstract class MonitorBaseEditorProvider<
       binding.editorStatus ??
       this.mapMonitorStateToEditorStatus(document, state)
     const stateLabel = resolved.charAt(0).toUpperCase() + resolved.slice(1)
-    panel.title = `${this.stateConfig.titlePrefix}: ${document.title} — ${stateLabel}`
+    panel.title = `${document.title} — ${stateLabel}`
   }
 
   private mapMonitorStateToEditorStatus(
@@ -588,7 +596,8 @@ export class MonitorEditors extends MonitorBaseEditorProvider<
     extensionMode: vscode.ExtensionMode,
     messenger: Messenger,
     resourceStore: MonitorResourceStore,
-    selectionCoordinator: MonitorSelectionCoordinator
+    selectionCoordinator: MonitorSelectionCoordinator,
+    onPanelDisposed?: (participant: WebviewIdMessageParticipant) => void
   ) {
     super(
       extensionUri,
@@ -597,6 +606,7 @@ export class MonitorEditors extends MonitorBaseEditorProvider<
       resourceStore,
       selectionCoordinator,
       'monitor',
+      onPanelDisposed,
       {
         titlePrefix: 'Monitor',
         viewType: 'boardlab.monitorEditor',
@@ -664,7 +674,8 @@ export class PlotterEditors extends MonitorBaseEditorProvider<
     extensionMode: vscode.ExtensionMode,
     messenger: Messenger,
     resourceStore: MonitorResourceStore,
-    selectionCoordinator: MonitorSelectionCoordinator
+    selectionCoordinator: MonitorSelectionCoordinator,
+    onPanelDisposed?: (participant: WebviewIdMessageParticipant) => void
   ) {
     super(
       extensionUri,
@@ -673,6 +684,7 @@ export class PlotterEditors extends MonitorBaseEditorProvider<
       resourceStore,
       selectionCoordinator,
       'plotter',
+      onPanelDisposed,
       {
         titlePrefix: 'Plotter',
         viewType: 'boardlab.plotterEditor',

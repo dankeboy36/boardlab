@@ -2,7 +2,7 @@
 import path from 'node:path'
 
 import { EnumerateMonitorPortSettingsRequest, Port } from 'ardunno-cli'
-import { createPortKey } from 'boards-list'
+import { createPortKey, parsePortKey } from 'boards-list'
 import defer from 'p-defer'
 
 import { watchBoardListState } from './boardListWatch.js'
@@ -113,6 +113,20 @@ import { startDaemon } from './startDaemon.js'
  */
 
 /**
+ * @typedef {Object} MonitorSummary
+ * @property {string} portKey
+ * @property {import('boards-list').PortIdentifier} port
+ * @property {number} refs
+ * @property {string | undefined} baudrate
+ * @property {boolean} paused
+ */
+
+/**
+ * @typedef {Object} MonitorSummariesProps
+ * @property {() => MonitorSummary[]} getMonitorSummaries
+ */
+
+/**
  * @typedef {Object} ReleaseMonitorProps
  * @property {ReleaseMonitorCallback} releaseMonitor
  */
@@ -147,6 +161,7 @@ import { startDaemon } from './startDaemon.js'
  *   UpdateBaudrateProps &
  *   SelectedBaudratesProps &
  *   SuspendedPortKeysProps &
+ *   MonitorSummariesProps &
  *   ReleaseMonitorProps &
  *   PauseResumeMonitorProps &
  *   DisposeProps} CliBridge
@@ -388,9 +403,13 @@ export class DaemonCliBridge {
     const baudrates = []
     for (const portIdentifierKey in this._monitors) {
       const monitorRef = this._monitors[portIdentifierKey]
-      const port = parsePort(portIdentifierKey)
+      const port = parsePortKey(portIdentifierKey)
       if (!port) {
-        throw new Error(`Invalid port identifier key: ${portIdentifierKey}`)
+        console.warn(
+          '[portino][cliBridge] skipping invalid port identifier key',
+          portIdentifierKey
+        )
+        continue
       }
       if (typeof monitorRef.baudrate === 'string') {
         baudrates.push([
@@ -400,6 +419,26 @@ export class DaemonCliBridge {
       }
     }
     return baudrates
+  }
+
+  getMonitorSummaries() {
+    /** @type {MonitorSummary[]} */
+    const summaries = []
+    for (const portIdentifierKey in this._monitors) {
+      const monitorRef = this._monitors[portIdentifierKey]
+      const port = parsePortKey(portIdentifierKey)
+      if (!port) {
+        continue
+      }
+      summaries.push({
+        portKey: portIdentifierKey,
+        port,
+        refs: monitorRef.refs,
+        baudrate: monitorRef.baudrate,
+        paused: monitorRef.monitor.isPaused(),
+      })
+    }
+    return summaries
   }
 
   /** @type {string[]} */
@@ -514,19 +553,4 @@ export class DaemonCliBridge {
 
     await this._releaseAllMonitors()
   }
-}
-
-// TODO: move to boards-list
-/** @param {string} portIdentifierKey */
-function parsePort(portIdentifierKey) {
-  const [protocolPart, address] = portIdentifierKey.split('://')
-  if (!protocolPart || !address) {
-    return undefined
-  }
-  const [, protocol] = protocolPart.split('arduino+')
-  if (!protocol) {
-    return undefined
-  }
-
-  return { protocol, address }
 }

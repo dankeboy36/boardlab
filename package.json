@@ -60,7 +60,8 @@
     "prereset": "npm run reset --workspaces",
     "reset": "rimraf schemas out node_modules .vscode-test",
     "test": "vitest run --config ./packages/extension/vitest.config.ts",
-    "test:ci": "npm run test:ci --workspaces --if-present && npm test && npm run test:vsix",
+    "test:ci": "npm --workspaces --if-present --fail-fast run test:ci && npm --workspaces --if-present --fail-fast run test:e2e && npm test && npm run test:vsix",
+    "test:e2e": "npm --workspaces --if-present --fail-fast run test:e2e",
     "pretest:vsix": "npm run compile",
     "test:vsix": "node ./out/test/runTest.js",
     "watch": "tsc -watch -p ./"
@@ -125,6 +126,12 @@
         "category": "BoardLab"
       },
       {
+        "command": "boardlab.compileWithDebugSymbols",
+        "title": "Compile with Debug Symbols",
+        "icon": "$(inspect)",
+        "category": "BoardLab"
+      },
+      {
         "command": "boardlab.openMonitor",
         "title": "Open Monitor",
         "icon": "$(terminal)",
@@ -170,12 +177,6 @@
         "command": "boardlab.task.stopFromTree",
         "title": "Stop Sketch Task",
         "icon": "$(debug-stop)",
-        "category": "BoardLab"
-      },
-      {
-        "command": "boardlab.tool.runFromTree",
-        "title": "Open Resource",
-        "icon": "$(go-to-file)",
         "category": "BoardLab"
       },
       {
@@ -266,6 +267,26 @@
         "icon": "$(clear-all)"
       },
       {
+        "command": "boardlab.monitorBridge.listLogs",
+        "title": "List Monitor Bridge Logs",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.monitorBridge.listTraceLogs",
+        "title": "List Monitor Bridge Trace Logs",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.monitorBridge.tailLatestLog",
+        "title": "Tail Latest Monitor Bridge Log",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.monitorBridge.tailLatestTraceLog",
+        "title": "Tail Latest Monitor Bridge Trace Log",
+        "category": "BoardLab"
+      },
+      {
         "command": "boardlab.monitor.configureLineEnding",
         "title": "Select Line Ending",
         "category": "BoardLab",
@@ -276,6 +297,16 @@
         "title": "Configure Baudrate",
         "category": "BoardLab",
         "icon": "$(pulse)"
+      },
+      {
+        "command": "boardlab.monitor.developer.logBridgeMetrics",
+        "title": "Log Monitor Bridge Metrics",
+        "category": "BoardLab"
+      },
+      {
+        "command": "boardlab.monitor.developer.logDetectedPorts",
+        "title": "Log Monitor Detected Ports",
+        "category": "BoardLab"
       },
       {
         "command": "boardlab.plotter.focus",
@@ -696,6 +727,44 @@
           ],
           "default": "external-process",
           "markdownDescription": "Controls how the BoardLab monitor bridge server is started. Use 'in-process' to run it inside the Visual Studio Code extension host for easier debugging. Changing this setting requires reloading the window.",
+          "tags": [
+            "advanced"
+          ]
+        },
+        "boardlab.monitor.bridgeHeartbeatIntervalMs": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 0,
+          "markdownDescription": "Interval in milliseconds for the extension to ping the monitor bridge. Set to 0 to disable heartbeats and stale attachment pruning.",
+          "tags": [
+            "advanced"
+          ]
+        },
+        "boardlab.monitor.bridgeHeartbeatTimeoutMs": {
+          "type": "number",
+          "default": 20000,
+          "minimum": 0,
+          "markdownDescription": "Time in milliseconds after the last heartbeat before the monitor bridge prunes an attachment. Set to 0 to disable heartbeats and stale attachment pruning.",
+          "tags": [
+            "advanced"
+          ]
+        },
+        "boardlab.monitor.bridgeLogHeartbeat": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Log monitor bridge heartbeat pings. Enable for debugging only.",
+          "tags": [
+            "advanced"
+          ]
+        },
+        "boardlab.monitor.transport": {
+          "type": "string",
+          "enum": [
+            "http",
+            "ws"
+          ],
+          "default": "http",
+          "markdownDescription": "Selects the transport used for monitor data streaming. Use 'ws' to enable the WebSocket data channel; keep 'http' for the legacy fetch-based stream.",
           "tags": [
             "advanced"
           ]
@@ -1397,7 +1466,7 @@
         "properties": {
           "command": {
             "type": "string",
-            "description": "The BoardLab command to execute. Supported commands are 'compile', 'upload', 'burn-bootloader', 'export-binary', 'archive-sketch', 'upload-using-programmer', 'get-board-info', and 'reload-board-data'."
+            "description": "The BoardLab command to execute. Supported commands are 'compile', 'compile-with-debug-symbols', 'upload', 'upload-using-programmer', 'burn-bootloader', 'export-binary', 'archive-sketch', and 'get-board-info'."
           },
           "sketchPath": {
             "type": "string",
@@ -1574,6 +1643,7 @@
     "prettier-plugin-packagejson": "^2.5.18",
     "rimraf": "^6.0.1",
     "semantic-release": "^25.0.2",
+    "semantic-release-next-version": "^0.1.2",
     "semantic-release-vsce": "^6.0.20",
     "temp": "^0.9.4",
     "ts-loader": "^9.5.4",

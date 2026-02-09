@@ -1,21 +1,69 @@
 // @ts-check
 import { EventEmitter } from '@c4312/evt'
+import { createPortKey } from 'boards-list'
 import { nanoid } from 'nanoid'
 import defer from 'p-defer'
 import { CancellationTokenImpl, HOST_EXTENSION } from 'vscode-messenger-common'
 
+import { messengerx } from '@boardlab/base'
 import {
   connectMonitorClient,
   disconnectMonitorClient,
+  notifyMonitorClientAttached,
+  notifyMonitorClientDetached,
+  notifyMonitorIntentResume,
+  notifyMonitorIntentStart,
+  notifyMonitorIntentStop,
+  notifyMonitorOpenError,
+  notifyMonitorSessionState,
+  notifyMonitorStreamData,
+  notifyMonitorStreamError,
   notifyMonitorViewDidChangeBaudrate,
   notifyMonitorViewDidChangeDetectedPorts,
   notifyMonitorViewDidChangeMonitorSettings,
-  notifyMonitorViewDidPause,
-  notifyMonitorViewDidResume,
   requestMonitorDetectedPorts,
   requestMonitorSendMessage,
+  requestMonitorSessionSnapshot,
   requestMonitorUpdateBaudrate,
+  notifyMonitorPhysicalStateChanged,
+  requestMonitorPhysicalStateSnapshot,
 } from '@boardlab/protocol'
+
+/** @typedef {import('@boardlab/protocol').MonitorPhysicalState} MonitorPhysicalState */
+
+const CLIENT_KEY_STORAGE = 'boardlab.monitor.clientKey'
+
+const resolveWebviewId = () => {
+  try {
+    if (typeof window !== 'undefined') {
+      return (
+        window.__BOARDLAB_WEBVIEW_ID__ ||
+        window.__BOARDLAB_WEBVIEW_TYPE__ ||
+        undefined
+      )
+    }
+  } catch {}
+  return undefined
+}
+
+const resolveClientKey = () => {
+  try {
+    const webviewId = resolveWebviewId()
+    const storageKey = webviewId
+      ? `${CLIENT_KEY_STORAGE}:${webviewId}`
+      : CLIENT_KEY_STORAGE
+    if (typeof window.sessionStorage !== 'undefined') {
+      const existing = window.sessionStorage.getItem(storageKey)
+      if (existing) {
+        return existing
+      }
+      const next = nanoid()
+      window.sessionStorage.setItem(storageKey, next)
+      return next
+    }
+  } catch {}
+  return nanoid()
+}
 
 class MessengerControlTransport {
   /** @param {import('vscode-messenger-webview').Messenger} messenger */
@@ -24,34 +72,45 @@ class MessengerControlTransport {
     this._didChangeDetectedPorts = new EventEmitter()
     this._didChangeMonitorSettings = new EventEmitter()
     this._didChangeBaudrate = new EventEmitter()
-    this._didPauseMonitor = new EventEmitter()
-    this._didResumeMonitor = new EventEmitter()
+    this._didChangePhysicalState = new EventEmitter()
+    this._didChangeSessionState = new EventEmitter()
 
-    this._messenger.onNotification(
-      notifyMonitorViewDidChangeDetectedPorts,
-      (ports) => this._didChangeDetectedPorts.fire(ports)
-    )
-    this._messenger.onNotification(
-      notifyMonitorViewDidChangeMonitorSettings,
-      (payload) => this._didChangeMonitorSettings.fire(payload)
-    )
-    this._messenger.onNotification(
-      notifyMonitorViewDidChangeBaudrate,
-      (payload) => this._didChangeBaudrate.fire(payload)
-    )
-    this._messenger.onNotification(notifyMonitorViewDidPause, (payload) =>
-      this._didPauseMonitor.fire(payload)
-    )
-    this._messenger.onNotification(notifyMonitorViewDidResume, (payload) =>
-      this._didResumeMonitor.fire(payload)
-    )
+    const messengerRef = this._messenger
+    const messengerDisposables = [
+      messengerx.onNotification(
+        messengerRef,
+        notifyMonitorViewDidChangeDetectedPorts,
+        (ports) => this._didChangeDetectedPorts.fire(ports)
+      ),
+      messengerx.onNotification(
+        messengerRef,
+        notifyMonitorViewDidChangeMonitorSettings,
+        (payload) => this._didChangeMonitorSettings.fire(payload)
+      ),
+      messengerx.onNotification(
+        messengerRef,
+        notifyMonitorViewDidChangeBaudrate,
+        (payload) => this._didChangeBaudrate.fire(payload)
+      ),
+      messengerx.onNotification(
+        messengerRef,
+        notifyMonitorPhysicalStateChanged,
+        (payload) => this._didChangePhysicalState.fire(payload)
+      ),
+      messengerx.onNotification(
+        messengerRef,
+        notifyMonitorSessionState,
+        (payload) => this._didChangeSessionState.fire(payload)
+      ),
+    ]
 
     this._disposables = [
       this._didChangeDetectedPorts,
       this._didChangeMonitorSettings,
       this._didChangeBaudrate,
-      this._didPauseMonitor,
-      this._didResumeMonitor,
+      this._didChangePhysicalState,
+      this._didChangeSessionState,
+      ...messengerDisposables,
     ]
   }
 
@@ -69,6 +128,20 @@ class MessengerControlTransport {
     return this._didChangeMonitorSettings.event
   }
 
+  /** @returns {import('@c4312/evt').Event<MonitorPhysicalState>} */
+  get onDidChangePhysicalState() {
+    return this._didChangePhysicalState.event
+  }
+
+  /**
+   * @returns {import('@c4312/evt').Event<
+   *   import('@boardlab/protocol').MonitorSessionState
+   * >}
+   */
+  get onDidChangeSessionState() {
+    return this._didChangeSessionState.event
+  }
+
   /**
    * @returns {import('@c4312/evt').Event<
    *   import('@boardlab/protocol').DidChangeBaudrateNotification
@@ -79,28 +152,11 @@ class MessengerControlTransport {
   }
 
   /**
-   * @returns {import('@c4312/evt').Event<
-   *   import('@boardlab/protocol').DidPauseMonitorNotification
-   * >}
-   */
-  get onDidPauseMonitor() {
-    return this._didPauseMonitor.event
-  }
-
-  /**
-   * @returns {import('@c4312/evt').Event<
-   *   import('@boardlab/protocol').DidResumeMonitorNotification
-   * >}
-   */
-  get onDidResumeMonitor() {
-    return this._didResumeMonitor.event
-  }
-
-  /**
    * @param {string} clientId
    * @param {{ signal?: AbortSignal }} [options]
    */
   async connect(clientId, options = {}) {
+    console.info('[monitor client] connect', { clientId })
     const token = new CancellationTokenImpl()
     const { signal } = options
     if (signal) {
@@ -135,6 +191,46 @@ class MessengerControlTransport {
 
     return this._messenger.sendRequest(
       requestMonitorDetectedPorts,
+      HOST_EXTENSION,
+      /** @type {unknown} */ (undefined),
+      token
+    )
+  }
+
+  /** @param {{ signal?: AbortSignal }} [options] */
+  async physicalStates(options = {}) {
+    const token = new CancellationTokenImpl()
+    const { signal } = options
+    if (signal) {
+      const abortHandler = () => {
+        token.cancel()
+        signal.removeEventListener('abort', abortHandler)
+      }
+      signal.addEventListener('abort', abortHandler)
+    }
+
+    return this._messenger.sendRequest(
+      requestMonitorPhysicalStateSnapshot,
+      HOST_EXTENSION,
+      /** @type {unknown} */ (undefined),
+      token
+    )
+  }
+
+  /** @param {{ signal?: AbortSignal }} [options] */
+  async sessionStates(options = {}) {
+    const token = new CancellationTokenImpl()
+    const { signal } = options
+    if (signal) {
+      const abortHandler = () => {
+        token.cancel()
+        signal.removeEventListener('abort', abortHandler)
+      }
+      signal.addEventListener('abort', abortHandler)
+    }
+
+    return this._messenger.sendRequest(
+      requestMonitorSessionSnapshot,
       HOST_EXTENSION,
       /** @type {unknown} */ (undefined),
       token
@@ -209,15 +305,17 @@ export class MonitorClient {
    */
   constructor({ messenger, httpBaseUrl }) {
     this._messenger = messenger
-    this._clientId = nanoid()
+    this._clientId = resolveClientKey()
     this._transport = new MessengerControlTransport(messenger)
     this._httpBaseUrl = new URL(httpBaseUrl)
+    this._transportMode = 'http'
+    this._streamControllers = new Map()
 
     this._didChangeDetectedPorts = new EventEmitter()
     this._didChangeMonitorSettings = new EventEmitter()
     this._didChangeBaudrate = new EventEmitter()
-    this._didPauseMonitor = new EventEmitter()
-    this._didResumeMonitor = new EventEmitter()
+    this._didChangePhysicalState = new EventEmitter()
+    this._didChangeSessionState = new EventEmitter()
 
     this._transportDisposables = [
       this._didChangeDetectedPorts,
@@ -232,13 +330,21 @@ export class MonitorClient {
       this._transport.onDidChangeBaudrate((payload) =>
         this._fireDidChangeBaudrate(payload)
       ),
-      this._didPauseMonitor,
-      this._transport.onDidPauseMonitor((payload) =>
-        this._fireDidPauseMonitor(payload)
+      this._didChangePhysicalState,
+      this._transport.onDidChangePhysicalState((payload) =>
+        this._fireDidChangePhysicalState(payload)
       ),
-      this._didResumeMonitor,
-      this._transport.onDidResumeMonitor((payload) =>
-        this._fireDidResumeMonitor(payload)
+      this._didChangeSessionState,
+      this._transport.onDidChangeSessionState((payload) =>
+        this._fireDidChangeSessionState(payload)
+      ),
+      messengerx.onNotification(messenger, notifyMonitorStreamData, (payload) =>
+        this._handleStreamData(payload)
+      ),
+      messengerx.onNotification(
+        messenger,
+        notifyMonitorStreamError,
+        (payload) => this._handleStreamError(payload)
       ),
     ]
 
@@ -255,12 +361,21 @@ export class MonitorClient {
     if (!this._deferredConnect) {
       const deferred = defer()
       const signal = AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined
-      this._transport
-        .connect(this._clientId, { signal })
-        .then(deferred.resolve, deferred.reject)
+      this._transport.connect(this._clientId, { signal }).then((result) => {
+        this._transportMode = result?.transport ?? 'http'
+        deferred.resolve(result)
+      }, deferred.reject)
       this._deferredConnect = deferred
     }
     return this._deferredConnect.promise
+  }
+
+  get id() {
+    return this._clientId
+  }
+
+  get transport() {
+    return this._transportMode
   }
 
   /** @returns {import('@c4312/evt').Event<import('boards-list').DetectedPorts>} */
@@ -268,22 +383,18 @@ export class MonitorClient {
     return this._didChangeDetectedPorts.event
   }
 
-  /**
-   * @returns {import('@c4312/evt').Event<
-   *   import('@boardlab/protocol').DidPauseMonitorNotification
-   * >}
-   */
-  get onDidPauseMonitor() {
-    return this._didPauseMonitor.event
+  /** @returns {import('@c4312/evt').Event<MonitorPhysicalState>} */
+  get onDidChangePhysicalState() {
+    return this._didChangePhysicalState.event
   }
 
   /**
    * @returns {import('@c4312/evt').Event<
-   *   import('@boardlab/protocol').DidResumeMonitorNotification
+   *   import('@boardlab/protocol').MonitorSessionState
    * >}
    */
-  get onDidResumeMonitor() {
-    return this._didResumeMonitor.event
+  get onDidChangeSessionState() {
+    return this._didChangeSessionState.event
   }
 
   /**
@@ -298,6 +409,16 @@ export class MonitorClient {
   /** @param {{ signal?: AbortSignal }} [options] */
   async detectedPorts(options = {}) {
     return this._transport.detectedPorts(options)
+  }
+
+  /** @param {{ signal?: AbortSignal }} [options] */
+  async physicalStates(options = {}) {
+    return this._transport.physicalStates(options)
+  }
+
+  /** @param {{ signal?: AbortSignal }} [options] */
+  async sessionStates(options = {}) {
+    return this._transport.sessionStates(options)
   }
 
   /**
@@ -345,7 +466,88 @@ export class MonitorClient {
         console.error('Failed to dispose monitor client listener', error)
       }
     }
+    for (const portKey of this._streamControllers.keys()) {
+      this._closeStream(portKey)
+    }
     this._transport.dispose()
+  }
+
+  /** @param {import('boards-list').PortIdentifier} port */
+  notifyClientAttached(port) {
+    try {
+      this._messenger.sendNotification(
+        notifyMonitorClientAttached,
+        HOST_EXTENSION,
+        { clientId: this._clientId, port }
+      )
+    } catch (error) {
+      console.error('Failed to notify monitor client attached', error)
+    }
+  }
+
+  /** @param {import('boards-list').PortIdentifier} port */
+  notifyClientDetached(port) {
+    try {
+      this._messenger.sendNotification(
+        notifyMonitorClientDetached,
+        HOST_EXTENSION,
+        { clientId: this._clientId, port }
+      )
+    } catch (error) {
+      console.error('Failed to notify monitor client detached', error)
+    }
+  }
+
+  /** @param {import('boards-list').PortIdentifier} port */
+  notifyIntentStart(port) {
+    try {
+      this._messenger.sendNotification(
+        notifyMonitorIntentStart,
+        HOST_EXTENSION,
+        { port, clientId: this._clientId }
+      )
+    } catch (error) {
+      console.error('Failed to notify monitor intent start', error)
+    }
+  }
+
+  /** @param {import('boards-list').PortIdentifier} port */
+  notifyIntentStop(port) {
+    try {
+      this._messenger.sendNotification(
+        notifyMonitorIntentStop,
+        HOST_EXTENSION,
+        { port, clientId: this._clientId }
+      )
+    } catch (error) {
+      console.error('Failed to notify monitor intent stop', error)
+    }
+  }
+
+  /** @param {import('boards-list').PortIdentifier} port */
+  notifyIntentResume(port) {
+    try {
+      this._messenger.sendNotification(
+        notifyMonitorIntentResume,
+        HOST_EXTENSION,
+        { port, clientId: this._clientId }
+      )
+    } catch (error) {
+      console.error('Failed to notify monitor intent resume', error)
+    }
+  }
+
+  /** @param {import('@boardlab/protocol').MonitorOpenErrorNotification} payload */
+  notifyOpenError(payload) {
+    try {
+      this._messenger.sendNotification(
+        notifyMonitorOpenError,
+        HOST_EXTENSION,
+        payload
+      )
+    } catch (error) {
+      console.error('Failed to notify monitor open error', error)
+    }
   }
 
   /**
@@ -362,7 +564,16 @@ export class MonitorClient {
    *   ReadableStreamDefaultReader<Uint8Array<ArrayBufferLike>>
    * >}
    */
-  async openMonitor({ port: { address, protocol }, baudrate }, options = {}) {
+  async openMonitor({ port, baudrate }, options = {}) {
+    const { address, protocol } = port
+    console.info('[monitor client] openMonitor', {
+      address,
+      protocol,
+      baudrate,
+    })
+    if (this._transportMode === 'ws') {
+      return this._openWsMonitor(port, options)
+    }
     const dataUrl = this._createHttpUrl('/monitor')
     dataUrl.searchParams.set('protocol', protocol)
     dataUrl.searchParams.set('address', address)
@@ -386,11 +597,55 @@ export class MonitorClient {
       throw Object.assign(error, { code: payload?.code, status })
     }
 
+    const contentType = res.headers.get('content-type')?.toLowerCase() ?? ''
+    if (!contentType.includes('application/octet-stream')) {
+      const bodyText = (await res.text().catch(() => '')) || ''
+      const normalized = bodyText.trim().toLowerCase()
+      const error = new Error(
+        normalized || 'Unexpected response while opening monitor'
+      )
+      const code = normalized.includes('already attached')
+        ? 'already-attached'
+        : 'no-stream'
+      throw Object.assign(error, { code, status: res.status })
+    }
+
     const reader = res.body?.getReader()
     if (!reader) {
       throw new Error('No reader available for response body')
     }
 
+    return reader
+  }
+
+  /**
+   * @param {import('boards-list').PortIdentifier} port
+   * @param {{ signal?: AbortSignal }} [options]
+   */
+  _openWsMonitor(port, options = {}) {
+    const portKey = createPortKey(port)
+    this._closeStream(portKey)
+    const stream = new ReadableStream({
+      start: (controller) => {
+        this._streamControllers.set(portKey, controller)
+      },
+      cancel: () => {
+        this._streamControllers.delete(portKey)
+      },
+    })
+    const reader = stream.getReader()
+    const { signal } = options
+    if (signal) {
+      const abortHandler = () => {
+        this._closeStream(portKey)
+        signal.removeEventListener('abort', abortHandler)
+      }
+      if (signal.aborted) {
+        abortHandler()
+      } else {
+        signal.addEventListener('abort', abortHandler)
+      }
+    }
     return reader
   }
 
@@ -478,13 +733,75 @@ export class MonitorClient {
     this._didChangeBaudrate.fire(payload)
   }
 
-  /** @param {import('@boardlab/protocol').DidPauseMonitorNotification} payload */
-  _fireDidPauseMonitor(payload) {
-    this._didPauseMonitor.fire(payload)
+  /** @param {MonitorPhysicalState} payload */
+  _fireDidChangePhysicalState(payload) {
+    this._didChangePhysicalState.fire(payload)
   }
 
-  /** @param {import('@boardlab/protocol').DidResumeMonitorNotification} payload */
-  _fireDidResumeMonitor(payload) {
-    this._didResumeMonitor.fire(payload)
+  /** @param {import('@boardlab/protocol').MonitorSessionState} payload */
+  _fireDidChangeSessionState(payload) {
+    this._didChangeSessionState.fire(payload)
+  }
+
+  _closeStream(portKey, error) {
+    const controller = this._streamControllers.get(portKey)
+    if (!controller) {
+      return
+    }
+    this._streamControllers.delete(portKey)
+    try {
+      if (error) {
+        controller.error(error)
+      } else {
+        controller.close()
+      }
+    } catch (err) {
+      console.warn('[MonitorClient] Failed to close stream', err)
+    }
+  }
+
+  _handleStreamData(payload) {
+    if (!payload || typeof payload.portKey !== 'string') {
+      return
+    }
+    const controller = this._streamControllers.get(payload.portKey)
+    if (!controller) {
+      return
+    }
+    const data = payload.data
+    let chunk
+    if (data instanceof Uint8Array) {
+      chunk = data
+    } else if (data instanceof ArrayBuffer) {
+      chunk = new Uint8Array(data)
+    } else if (ArrayBuffer.isView(data)) {
+      chunk = new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+    } else if (Array.isArray(data)) {
+      chunk = new Uint8Array(data)
+    }
+    if (!chunk) {
+      return
+    }
+    try {
+      controller.enqueue(chunk)
+    } catch (error) {
+      console.warn('[MonitorClient] Failed to enqueue monitor data', error)
+    }
+  }
+
+  _handleStreamError(payload) {
+    if (!payload || typeof payload.portKey !== 'string') {
+      return
+    }
+    const message =
+      typeof payload.message === 'string'
+        ? payload.message
+        : 'Monitor stream error'
+    const error = Object.assign(new Error(message), {
+      code: payload.code,
+      status: payload.status,
+      source: 'bridge',
+    })
+    this._closeStream(payload.portKey, error)
   }
 }

@@ -19,6 +19,7 @@ import {
 import {
   createVscodeDataContext,
   dispatchContextMenuEvent,
+  messengerx,
   preventDefaultContextMenuItems,
   Tree,
   useCodiconStylesheet,
@@ -380,27 +381,31 @@ export function App(): JSX.Element {
       return
     }
 
-    messenger.onNotification(notifyProfilesChanged, (payload) => {
-      if (payload) {
-        setState(payload)
-        // refresh diagnostics for current selection
-        const name =
-          selectedProfileKey && selectedProfileKey !== DRAFT_PROFILE_KEY
-            ? selectedProfileKey
-            : undefined
-        if (name) {
-          try {
-            messenger
-              .sendRequest(profilesListDiagnostics, HOST_EXTENSION, {
-                uri: documentUri,
-                profile: name,
-              })
-              .then((list) => setProfileDiagnostics(list || []))
-              .catch(() => setProfileDiagnostics([]))
-          } catch {}
+    const disposable = messengerx.onNotification(
+      messenger,
+      notifyProfilesChanged,
+      (payload) => {
+        if (payload) {
+          setState(payload)
+          // refresh diagnostics for current selection
+          const name =
+            selectedProfileKey && selectedProfileKey !== DRAFT_PROFILE_KEY
+              ? selectedProfileKey
+              : undefined
+          if (name) {
+            try {
+              messenger
+                .sendRequest(profilesListDiagnostics, HOST_EXTENSION, {
+                  uri: documentUri,
+                  profile: name,
+                })
+                .then((list) => setProfileDiagnostics(list || []))
+                .catch(() => setProfileDiagnostics([]))
+            } catch {}
+          }
         }
       }
-    })
+    )
 
     messenger
       .sendRequest(listProfiles, HOST_EXTENSION, { uri: documentUri })
@@ -413,14 +418,19 @@ export function App(): JSX.Element {
         console.error('Failed to load profiles', err)
         setError(err instanceof Error ? err.message : String(err))
       })
-  }, [documentUri])
+
+    return () => {
+      disposable.dispose()
+    }
+  }, [documentUri, selectedProfileKey])
 
   // Subscribe to active profile updates for this document and fetch initial value
   useEffect(() => {
     const messenger = vscode.messenger as Messenger | undefined
     if (!messenger || !documentUri) return
 
-    messenger.onNotification(
+    const disposable = messengerx.onNotification(
+      messenger,
       notifyProfilesActiveProfileChanged,
       ({ uri, name }) => {
         if (uri === documentUri) setActiveProfileName(name)
@@ -432,14 +442,20 @@ export function App(): JSX.Element {
       })
       .then((name) => setActiveProfileName(name))
       .catch((err) => console.warn('Failed to get active profile', err))
+
+    return () => {
+      disposable.dispose()
+    }
   }, [documentUri])
 
   // Subscribe to detected ports updates and fetch initial snapshot via BoardLabContext (no monitor connection)
   useEffect(() => {
     const messenger = vscode.messenger as Messenger | undefined
     if (!messenger) return
-    messenger.onNotification(notifyProfilesDetectedPortsChanged, (ports) =>
-      setDetectedPorts(ports)
+    const disposable = messengerx.onNotification(
+      messenger,
+      notifyProfilesDetectedPortsChanged,
+      (ports) => setDetectedPorts(ports)
     )
     messenger
       .sendRequest(profilesRequestDetectedPorts, HOST_EXTENSION, undefined)
@@ -447,6 +463,10 @@ export function App(): JSX.Element {
       .catch((err) =>
         console.warn('Profiles: request detected ports failed', err)
       )
+
+    return () => {
+      disposable.dispose()
+    }
   }, [])
 
   useEffect(() => {
@@ -775,7 +795,7 @@ export function App(): JSX.Element {
     return () => {
       disposed = true
     }
-  }, [selectedProfile?.name, selectedProfile?.fqbn, documentUri])
+  }, [selectedProfile, boardDetails, documentUri])
 
   const buildMasterTreeItems = useCallback((): ReadonlyArray<TreeNode> => {
     const items: TreeNode[] = []

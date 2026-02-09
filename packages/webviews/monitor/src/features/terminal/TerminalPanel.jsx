@@ -13,7 +13,7 @@ import PerfectScrollbar from 'perfect-scrollbar'
 import 'perfect-scrollbar/css/perfect-scrollbar.css'
 
 import { useMonitorStream } from '@boardlab/monitor-shared/serial-monitor'
-import { vscode } from '@boardlab/base'
+import { messengerx, vscode } from '@boardlab/base'
 import { notifyMonitorThemeChanged } from '@boardlab/protocol'
 
 import {
@@ -55,16 +55,23 @@ const readEditorFontFamily = () => {
  */
 const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
   const settings = useSelector(selectTerminalSettings)
-  const persistedTerminal = useRef(() => {
-    const state = getPersistedState()
-    const terminalState = state?.terminal
-    if (terminalState && typeof terminalState === 'object') {
-      return {
-        text: typeof terminalState.text === 'string' ? terminalState.text : '',
+  const persistedTerminal = useRef(
+    (() => {
+      const state = getPersistedState()
+      const terminalState = state?.terminal
+      if (
+        terminalState &&
+        typeof terminalState === 'object' &&
+        'text' in terminalState
+      ) {
+        return {
+          text:
+            typeof terminalState.text === 'string' ? terminalState.text : '',
+        }
       }
-    }
-    return { text: '' }
-  })
+      return { text: '' }
+    })()
+  )
   const xtermRef = useRef(
     /** @type {import('./XtermView.jsx').XtermViewHandle | null} */ (null)
   )
@@ -93,6 +100,12 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
     /** @type {ReturnType<typeof setTimeout> | null} */ (null)
   )
 
+  const refreshScrollbar = useCallback(() => {
+    try {
+      psRef.current?.update()
+    } catch {}
+  }, [])
+
   useEffect(() => {
     const refreshFontFamily = () => {
       setCssFontFamily(readEditorFontFamily())
@@ -100,16 +113,17 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
     refreshFontFamily()
 
     const messenger = vscode.messenger
+    /** @type {import('vscode-messenger-common').Disposable[]} */
     const disposables = []
 
     if (messenger) {
-      const disposable = messenger.onNotification(
-        notifyMonitorThemeChanged,
-        refreshFontFamily
+      disposables.push(
+        messengerx.onNotification(
+          messenger,
+          notifyMonitorThemeChanged,
+          refreshFontFamily
+        )
       )
-      if (disposable) {
-        disposables.push(disposable)
-      }
     }
 
     if (typeof document !== 'undefined') {
@@ -189,12 +203,6 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
     }, 500)
   }, [persistNow])
 
-  const refreshScrollbar = useCallback(() => {
-    try {
-      psRef.current?.update()
-    } catch {}
-  }, [])
-
   useEffect(() => {
     try {
       xtermRef.current?.fit?.()
@@ -235,7 +243,8 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
 
   useEffect(() => {
     let disposed = false
-    let disposable = null
+    /** @type {import('vscode-messenger-common').Disposable | undefined} */
+    let disposable
 
     const attach = () => {
       if (disposed) return
@@ -403,7 +412,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
         rafIdRef.current = null
       }
     }
-  }, [])
+  }, [refreshScrollbar])
 
   useImperativeHandle(
     ref,
@@ -464,7 +473,7 @@ const TerminalPanel = forwardRef(function TerminalPanel(_props, ref) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [refreshScrollbar])
 
   useEffect(() => {
     return () => {

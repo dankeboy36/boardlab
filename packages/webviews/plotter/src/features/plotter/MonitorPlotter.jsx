@@ -1253,38 +1253,25 @@ const MonitorPlotter = forwardRef(function MonitorPlotter(
     } catch {}
   }
 
-  useImperativeHandle(
-    ref,
-    () => ({
-      appendColumns,
-      render,
-      clear,
-      pause,
-      resume,
-      setAutoscale,
-      refresh,
-      ensureSize,
-      setSize,
-      getSize,
-      resetVisibility,
-      resetPlot,
-      resetYScale,
-      // Expose raw uPlot instance for diagnostics
-      get uplot() {
-        return plotRef.current
-      },
-    }),
-    [
-      isAutoscale,
-      maxPoints,
-      clear,
-      appendColumns,
-      pause,
-      resume,
-      setAutoscale,
-      resetYScale,
-    ]
-  )
+  useImperativeHandle(ref, () => ({
+    appendColumns,
+    render,
+    clear,
+    pause,
+    resume,
+    setAutoscale,
+    refresh,
+    ensureSize,
+    setSize,
+    getSize,
+    resetVisibility,
+    resetPlot,
+    resetYScale,
+    // Expose raw uPlot instance for diagnostics
+    get uplot() {
+      return plotRef.current
+    },
+  }))
 
   // Build dynamic context menu items for current legend row
   const menuItems = (() => {

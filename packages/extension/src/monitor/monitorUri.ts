@@ -58,5 +58,5 @@ export function formatMonitorUri(components: MonitorUriComponents): vscode.Uri {
 }
 
 export function getMonitorDisplayName(port: PortIdentifier): string {
-  return `${port.protocol}: ${port.address}`
+  return port.address
 }

@@ -14,10 +14,17 @@
         // "--disable-extensions",
         "${workspaceFolder}/test_workspace"
       ],
-      "outFiles": ["${workspaceFolder}/out/**/*.js"],
+      "outFiles": [
+        "${workspaceFolder}/out/**/*.js",
+        "${workspaceFolder}/packages/servers/portino-bridge/out/**/*.js"
+      ],
+      "sourceMaps": true,
       "preLaunchTask": "npm: compile",
       "env": {
         "NODE_ENV": "development"
+      },
+      "sourceMapPathOverrides": {
+        "${workspaceFolder}/out/portino-bridge/out/*": "${workspaceFolder}/packages/servers/portino-bridge/src/*"
       }
     },
     {
@@ -29,10 +36,17 @@
         // "--disable-extensions",
         "${workspaceFolder}/test_workspace"
       ],
-      "outFiles": ["${workspaceFolder}/out/**/*.js"],
+      "outFiles": [
+        "${workspaceFolder}/out/**/*.js",
+        "${workspaceFolder}/packages/servers/portino-bridge/out/**/*.js"
+      ],
+      "sourceMaps": true,
       "preLaunchTask": "npm: compile extension",
       "env": {
         "NODE_ENV": "development"
+      },
+      "sourceMapPathOverrides": {
+        "${workspaceFolder}/out/portino-bridge/out/*": "${workspaceFolder}/packages/servers/portino-bridge/src/*"
       }
     },
     {

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import * as path from 'node:path'
 
 import {
@@ -14,6 +15,7 @@ import {
   Defined,
   PortIdentifier,
   boardIdentifierEquals,
+  createPortKey,
   isBoardIdentifier,
   isBoardsListItem,
   isPortIdentifier,
@@ -64,8 +66,11 @@ import { CliContext } from './cli/context'
 import { DaemonAddress } from './cli/daemon'
 import { toCompileSummary } from './compile'
 import { computeConfigOverrides } from './configOptions'
-import { MonitorManager } from './monitor/monitorManager'
-import { getPlatformRequirement, PlatformInfo } from './platformMissing'
+import {
+  MonitorManager,
+  type MonitorRuntimeState,
+} from './monitor/monitorManager'
+import { PlatformInfo, getPlatformRequirement } from './platformMissing'
 import {
   collectHistoryUpdates,
   matchesPlatformId,
@@ -138,6 +143,95 @@ export interface BoardLabContext extends ArduinoContext {
   readonly monitorsRegistry: MonitorsRegistry
   readonly extensionUri: vscode.Uri
   readonly outputChannel: vscode.OutputChannel
+  createMonitorClient(
+    port: PortIdentifier,
+    options?: { autoStart?: boolean; baudrate?: string }
+  ): Promise<MonitorClient>
+  withMonitorSuspended<T extends MonitorSuspensionResult>(
+    port: PortIdentifier,
+    run: (options?: MonitorSuspensionOptions) => Promise<T>,
+    options?: MonitorSuspensionOptions
+  ): Promise<T>
+}
+
+export interface MonitorClient {
+  readonly port: PortIdentifier
+  readonly state: MonitorRuntimeState
+  readonly onDidReceiveData: vscode.Event<Uint8Array>
+  readonly onDidChangeState: vscode.Event<MonitorRuntimeState>
+  send(message: string | Uint8Array): Promise<void>
+  dispose(): void
+}
+
+class BoardLabMonitorClientImpl implements MonitorClient {
+  readonly port: PortIdentifier
+  private stateValue: MonitorRuntimeState
+  private readonly disposables: vscode.Disposable[] = []
+  private readonly clientId = randomUUID()
+  private readonly onDidReceiveDataEmitter =
+    new vscode.EventEmitter<Uint8Array>()
+
+  private readonly onDidChangeStateEmitter =
+    new vscode.EventEmitter<MonitorRuntimeState>()
+
+  readonly onDidReceiveData = this.onDidReceiveDataEmitter.event
+  readonly onDidChangeState = this.onDidChangeStateEmitter.event
+
+  constructor(
+    private readonly monitorManager: MonitorManager,
+    port: PortIdentifier,
+    options?: { autoStart?: boolean; baudrate?: string }
+  ) {
+    this.port = port
+    this.stateValue = monitorManager.getMonitorState(port)
+    const portKey = createPortKey(port)
+    this.disposables.push(
+      this.onDidReceiveDataEmitter,
+      this.onDidChangeStateEmitter,
+      monitorManager.onDidReceiveMonitorData((event) => {
+        if (createPortKey(event.port) !== portKey) {
+          return
+        }
+        this.onDidReceiveDataEmitter.fire(event.data)
+      }),
+      monitorManager.onDidChangeMonitorState((event) => {
+        if (createPortKey(event.port) !== portKey) {
+          return
+        }
+        this.stateValue = event.state
+        this.onDidChangeStateEmitter.fire(event.state)
+      })
+    )
+    this.monitorManager.registerExternalMonitorClient(
+      this.clientId,
+      port,
+      options
+    )
+  }
+
+  get state(): MonitorRuntimeState {
+    return this.stateValue
+  }
+
+  async send(message: string | Uint8Array): Promise<void> {
+    await this.monitorManager.sendMonitorMessage(this.port, message)
+  }
+
+  dispose(): void {
+    this.monitorManager.unregisterExternalMonitorClient(
+      this.clientId,
+      this.port
+    )
+    disposeAll(...this.disposables)
+  }
+}
+
+export interface MonitorSuspensionOptions {
+  retry?: number
+}
+
+export interface MonitorSuspensionResult {
+  result: Promise<PortIdentifier | undefined>
 }
 
 type SketchPort = SketchFolder['port']
@@ -304,8 +398,8 @@ export class BoardLabContextImpl implements BoardLabContext {
       outputChannel
     )
     this.monitorsRegistry = new InMemoryMonitorsRegistry()
-    this.boardsListWatcher = new BoardsListWatcher(() =>
-      this.monitorManager.getBridgeInfo()
+    this.boardsListWatcher = new BoardsListWatcher(
+      this.monitorManager.getBridgeClient()
     )
     this.boardsListWatcher.start()
     // Load active profiles from global state
@@ -1621,6 +1715,71 @@ export class BoardLabContextImpl implements BoardLabContext {
       id: platformId,
       name: quick?.label,
       version,
+    }
+  }
+
+  async createMonitorClient(
+    port: PortIdentifier,
+    options?: { autoStart?: boolean; baudrate?: string }
+  ): Promise<MonitorClient> {
+    return new BoardLabMonitorClientImpl(this.monitorManager, port, options)
+  }
+
+  async withMonitorSuspended<T extends MonitorSuspensionResult>(
+    port: PortIdentifier,
+    run: (options?: MonitorSuspensionOptions) => Promise<T>,
+    options?: MonitorSuspensionOptions
+  ): Promise<T> {
+    const paused = await this.monitorManager.pauseMonitor(port)
+    const retry = paused && options?.retry === undefined ? 5 : options?.retry
+    const runOptions = retry === undefined ? options : { ...options, retry }
+
+    const resume = async (target: PortIdentifier) => {
+      if (!paused) {
+        return
+      }
+      console.log('[monitor] resume after suspension', {
+        port: target,
+        paused,
+      })
+
+      const attemptResume = async (remaining: number): Promise<void> => {
+        try {
+          await this.monitorManager.resumeMonitor(target)
+        } catch (error) {
+          if (remaining <= 0) {
+            console.error('Failed to resume monitor', error)
+            return
+          }
+        }
+
+        const state = this.monitorManager.getMonitorState(target)
+        if (state === 'running' || remaining <= 0) {
+          return
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        return attemptResume(remaining - 1)
+      }
+
+      await attemptResume(5)
+    }
+
+    try {
+      // TODO: use p-retry?
+      const result = await run(runOptions)
+      result.result
+        .then((updatedPort) => resume(updatedPort ?? port))
+        .catch((error) => {
+          console.error('Monitor task error', error)
+          return resume(port)
+        })
+      return result
+    } catch (error) {
+      await resume(port).catch((resumeError) =>
+        console.error('Failed to resume monitor', resumeError)
+      )
+      throw error
     }
   }
 

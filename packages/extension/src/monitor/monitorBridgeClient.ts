@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 
 import type { DetectedPorts, PortIdentifier } from 'boards-list'
 import { createPortKey } from 'boards-list'
+import deepEqual from 'fast-deep-equal'
 import * as vscode from 'vscode'
 import type { Disposable, MessageConnection } from 'vscode-jsonrpc'
 import { ConsoleLogger, createWebSocketConnection } from 'vscode-ws-jsonrpc'
@@ -16,6 +17,8 @@ import {
   NotifyDidChangeBaudrate,
   NotifyDidChangeDetectedPorts,
   NotifyDidChangeMonitorSettings,
+  NotifyTraceEvent,
+  NotifyMonitorBridgeLog,
   NotifyMonitorDidPause,
   NotifyMonitorDidResume,
   NotifyMonitorDidStart,
@@ -33,12 +36,14 @@ import {
   type DidStopMonitorNotification,
   type HostConnectClientResult,
   type MonitorBridgeInfo,
+  type MonitorBridgeLogEntry,
   type MonitorSettingsByProtocol,
+  type TraceEventNotification,
 } from '@boardlab/protocol'
 
 import { createNodeSocketAdapter } from './wsAdapters'
 
-interface BridgeClientOptions {
+export interface MonitorBridgeClientOptions {
   readonly resolveBridgeInfo: () => Promise<MonitorBridgeInfo>
 }
 
@@ -66,16 +71,22 @@ export class MonitorBridgeClient implements vscode.Disposable {
   private currentSuspendedPortKeys: string[] = []
   private readonly runningMonitorKeys = new Map<
     string,
-    { port: PortIdentifier; baudrate?: string }
+    { port: PortIdentifier; baudrate?: string; monitorSessionId?: string }
   >()
 
   private readonly onDidStartMonitorEmitter = new vscode.EventEmitter<{
     port: PortIdentifier
     baudrate?: string
+    monitorSessionId?: string
   }>()
 
-  private readonly onDidStopMonitorEmitter =
-    new vscode.EventEmitter<PortIdentifier>()
+  private readonly onDidStopMonitorEmitter = new vscode.EventEmitter<{
+    port: PortIdentifier
+    monitorSessionId?: string
+  }>()
+
+  private readonly onBridgeLogEmitter =
+    new vscode.EventEmitter<MonitorBridgeLogEntry>()
 
   private readonly onDidChangeDetectedPortsEmitter =
     new vscode.EventEmitter<DetectedPorts>()
@@ -92,7 +103,7 @@ export class MonitorBridgeClient implements vscode.Disposable {
   private readonly onDidResumeMonitorEmitter =
     new vscode.EventEmitter<DidResumeMonitorNotification>()
 
-  constructor(private readonly options: BridgeClientOptions) {}
+  constructor(private readonly options: MonitorBridgeClientOptions) {}
 
   get onDidChangeDetectedPorts(): vscode.Event<DetectedPorts> {
     return this.onDidChangeDetectedPortsEmitter.event
@@ -117,17 +128,26 @@ export class MonitorBridgeClient implements vscode.Disposable {
   get onDidStartMonitor(): vscode.Event<{
     port: PortIdentifier
     baudrate?: string
+    monitorSessionId?: string
   }> {
     return this.onDidStartMonitorEmitter.event
   }
 
-  get onDidStopMonitor(): vscode.Event<PortIdentifier> {
+  get onDidStopMonitor(): vscode.Event<{
+    port: PortIdentifier
+    monitorSessionId?: string
+  }> {
     return this.onDidStopMonitorEmitter.event
+  }
+
+  get onBridgeLog(): vscode.Event<MonitorBridgeLogEntry> {
+    return this.onBridgeLogEmitter.event
   }
 
   async connectClient(
     _params: ConnectClientParams
   ): Promise<HostConnectClientResult> {
+    this.log('connectClient invoked')
     await this.ensureConnection()
     if (!this.lastConnectResult) {
       throw new Error('BoardLab monitor bridge snapshot unavailable')
@@ -142,19 +162,29 @@ export class MonitorBridgeClient implements vscode.Disposable {
   }
 
   async requestDetectedPorts(): Promise<DetectedPorts> {
+    this.log('requestDetectedPorts invoked')
     const connection = await this.ensureConnection()
     const ports = await connection.sendRequest<DetectedPorts>(
       RequestDetectedPorts.method
     )
-    this.currentDetectedPorts = ports
-    this.onDidChangeDetectedPortsEmitter.fire(ports)
+    this.updateDetectedPortsIfNotEqual(ports)
     return ports
   }
 
   async updateBaudrate(params: RequestUpdateBaudrateParams): Promise<void> {
+    this.log('updateBaudrate', params)
     const connection = await this.ensureConnection()
     await connection.sendRequest(RequestUpdateBaudrate.method, params)
     this.updateSelectedBaudrate(params.port, params.baudrate)
+    this.onDidChangeBaudrateEmitter.fire({
+      port: params.port,
+      baudrate: params.baudrate,
+    })
+  }
+
+  async sendTraceEvent(event: TraceEventNotification): Promise<void> {
+    const connection = await this.ensureConnection()
+    connection.sendNotification(NotifyTraceEvent, event)
   }
 
   async sendMonitorMessage(
@@ -167,6 +197,7 @@ export class MonitorBridgeClient implements vscode.Disposable {
   async pauseMonitor(
     params: RequestPauseResumeMonitorParams
   ): Promise<boolean> {
+    this.log('pauseMonitor', params)
     const connection = await this.ensureConnection()
     return connection.sendRequest(RequestPauseMonitor.method, params)
   }
@@ -174,6 +205,7 @@ export class MonitorBridgeClient implements vscode.Disposable {
   async resumeMonitor(
     params: RequestPauseResumeMonitorParams
   ): Promise<boolean> {
+    this.log('resumeMonitor', params)
     const connection = await this.ensureConnection()
     return connection.sendRequest(RequestResumeMonitor.method, params)
   }
@@ -191,12 +223,18 @@ export class MonitorBridgeClient implements vscode.Disposable {
     this.onDidResumeMonitorEmitter.dispose()
     this.onDidStartMonitorEmitter.dispose()
     this.onDidStopMonitorEmitter.dispose()
+    this.onBridgeLogEmitter.dispose()
+  }
+
+  private log(message: string, data?: unknown): void {
+    try {
+      console.log('[MonitorBridgeClient]', message, data ?? '')
+    } catch {
+      // ignore
+    }
   }
 
   private async ensureConnection(): Promise<MessageConnection> {
-    if (this.connection) {
-      return this.connection
-    }
     if (this.connectionPromise) {
       await this.connectionPromise
       if (!this.connection) {
@@ -204,6 +242,9 @@ export class MonitorBridgeClient implements vscode.Disposable {
           'Failed to establish BoardLab monitor bridge connection'
         )
       }
+      return this.connection
+    }
+    if (this.connection) {
       return this.connection
     }
 
@@ -224,6 +265,21 @@ export class MonitorBridgeClient implements vscode.Disposable {
 
     const socket = new WebSocket(info.wsUrl, {
       perMessageDeflate: false,
+    })
+    socket.on('close', (code, reasonBuffer) => {
+      let reason = ''
+      if (typeof reasonBuffer === 'string') {
+        reason = reasonBuffer
+      } else if (reasonBuffer instanceof Buffer) {
+        reason = reasonBuffer.toString('utf8')
+      }
+      this.log('socket closed', {
+        code,
+        reason: reason || undefined,
+      })
+    })
+    socket.on('error', (error) => {
+      this.log('socket error', error)
     })
 
     await new Promise<void>((resolve, reject) => {
@@ -256,8 +312,7 @@ export class MonitorBridgeClient implements vscode.Disposable {
       connection.onClose(() => this.handleConnectionLost()),
       connection.onError((error) => this.handleConnectionLost(error)),
       connection.onNotification(NotifyDidChangeDetectedPorts, (ports) => {
-        this.currentDetectedPorts = ports
-        this.onDidChangeDetectedPortsEmitter.fire(ports)
+        this.updateDetectedPortsIfNotEqual(ports)
       }),
       connection.onNotification(NotifyDidChangeMonitorSettings, (payload) => {
         this.currentMonitorSettings = payload
@@ -285,10 +340,12 @@ export class MonitorBridgeClient implements vscode.Disposable {
           this.runningMonitorKeys.set(key, {
             port: payload.port,
             baudrate: payload.baudrate,
+            monitorSessionId: payload.monitorSessionId,
           })
           this.onDidStartMonitorEmitter.fire({
             port: payload.port,
             baudrate: payload.baudrate,
+            monitorSessionId: payload.monitorSessionId,
           })
         }
       ),
@@ -298,7 +355,16 @@ export class MonitorBridgeClient implements vscode.Disposable {
           const key = createPortKey(payload.port)
           this.runningMonitorKeys.delete(key)
           this.toggleSuspended(payload.port, false)
-          this.onDidStopMonitorEmitter.fire(payload.port)
+          this.onDidStopMonitorEmitter.fire({
+            port: payload.port,
+            monitorSessionId: payload.monitorSessionId,
+          })
+        }
+      ),
+      connection.onNotification(
+        NotifyMonitorBridgeLog,
+        (payload: MonitorBridgeLogEntry) => {
+          this.onBridgeLogEmitter.fire(payload)
         }
       )
     )
@@ -356,7 +422,7 @@ export class MonitorBridgeClient implements vscode.Disposable {
 
   private applyInitialSnapshot(snapshot: HostConnectClientResult) {
     this.lastConnectResult = snapshot
-    this.currentDetectedPorts = snapshot.detectedPorts
+    this.updateDetectedPortsIfNotEqual(snapshot.detectedPorts)
     this.currentMonitorSettings = snapshot.monitorSettingsByProtocol
     this.currentSelectedBaudrates = snapshot.selectedBaudrates ?? []
     this.runningMonitorKeys.clear()
@@ -372,6 +438,15 @@ export class MonitorBridgeClient implements vscode.Disposable {
     } else {
       this.currentSuspendedPortKeys = []
     }
+    this.onDidChangeMonitorSettingsEmitter.fire(this.currentMonitorSettings)
+  }
+
+  private updateDetectedPortsIfNotEqual(ports: DetectedPorts): void {
+    if (deepEqual(this.currentDetectedPorts, ports)) {
+      return
+    }
+    this.currentDetectedPorts = ports
+    this.onDidChangeDetectedPortsEmitter.fire(ports)
   }
 
   private updateSelectedBaudrate(port: PortIdentifier, baudrate: string) {

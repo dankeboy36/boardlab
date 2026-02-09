@@ -30,6 +30,7 @@ import {
 import {
   createVscodeDataContext,
   dispatchContextMenuEvent,
+  messengerx,
   preventDefaultContextMenuItems,
   useCodiconStylesheet,
   vscode,
@@ -402,42 +403,48 @@ function Search(props: SearchProps) {
 
   // React to filter changes coming from the extension-side (menu commands)
   useEffect(() => {
+    const messenger = vscode.messenger
+    if (!messenger) return
     const webviewType = (window as any).__BOARDLAB_WEBVIEW_TYPE__ as
       | 'libraries'
       | 'platforms'
       | string
-    if (webviewType === 'platforms') {
-      vscode.messenger?.onNotification(
-        notifyPlatformsFilterChanged,
-        (params) => {
-          setFilter((prev) => {
-            const next: Record<string, string> = { ...prev }
-            if (params.type !== undefined) {
-              if (params.type === '') delete next['type']
-              else next['type'] = params.type
+    const disposable =
+      webviewType === 'platforms'
+        ? messengerx.onNotification(
+            messenger,
+            notifyPlatformsFilterChanged,
+            (params) => {
+              setFilter((prev) => {
+                const next: Record<string, string> = { ...prev }
+                if (params.type !== undefined) {
+                  if (params.type === '') delete next['type']
+                  else next['type'] = params.type
+                }
+                return next
+              })
             }
-            return next
-          })
-        }
-      )
-    } else {
-      vscode.messenger?.onNotification(
-        notifyLibrariesFilterChanged,
-        (params: any) => {
-          setFilter((prev) => {
-            const next: Record<string, string> = { ...prev }
-            if (params.type !== undefined) {
-              if (params.type === '') delete next['type']
-              else next['type'] = params.type
+          )
+        : messengerx.onNotification(
+            messenger,
+            notifyLibrariesFilterChanged,
+            (params: any) => {
+              setFilter((prev) => {
+                const next: Record<string, string> = { ...prev }
+                if (params.type !== undefined) {
+                  if (params.type === '') delete next['type']
+                  else next['type'] = params.type
+                }
+                if (params.topic !== undefined) {
+                  if (params.topic === '') delete next['topic']
+                  else next['topic'] = params.topic
+                }
+                return next
+              })
             }
-            if (params.topic !== undefined) {
-              if (params.topic === '') delete next['topic']
-              else next['topic'] = params.topic
-            }
-            return next
-          })
-        }
-      )
+          )
+    return () => {
+      disposable.dispose()
     }
   }, [])
 

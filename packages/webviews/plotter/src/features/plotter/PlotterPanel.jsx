@@ -181,7 +181,7 @@ const PlotterPanel = forwardRef(function PlotterPanel(
         }
       } catch {}
     }, 120)
-  }, [active])
+  }, [active, recreatePlot])
 
   // Keep size in sync with window resizes (throttled via rAF)
   useEffect(() => {
@@ -208,7 +208,7 @@ const PlotterPanel = forwardRef(function PlotterPanel(
     }
     // @ts-ignore
     plotRef.current?.render?.(plotData.x, plotData.ys, opts)
-  }, [active, plotData.version])
+  }, [active, plotData.version, plotData.x, plotData.ys])
 
   const handleStreamStart = useCallback(() => {
     try {
@@ -223,7 +223,7 @@ const PlotterPanel = forwardRef(function PlotterPanel(
     } catch {}
     streamingRef.current = true
     forceAutoscaleOnceRef.current = true
-  }, [clearPlot, dispatch])
+  }, [clearPlot])
 
   const handleStreamStop = useCallback(() => {
     try {
@@ -440,7 +440,7 @@ const PlotterPanel = forwardRef(function PlotterPanel(
       // 4) Clear text buffer (no more line parsing after stop)
       textBufRef.current = ''
     } catch {}
-  }, [])
+  }, [flush])
 
   const handleStreamText = useCallback(
     (text) => {

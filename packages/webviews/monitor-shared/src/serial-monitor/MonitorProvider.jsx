@@ -7,34 +7,38 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { HOST_EXTENSION } from 'vscode-messenger-common'
 
 import { vscode } from '@boardlab/base'
 import {
-  getMonitorSelection,
   notifyMonitorEditorStatus,
-  notifyMonitorSelectionChanged,
   notifyPlotterEditorStatus,
 } from '@boardlab/protocol'
 
-import { selectSerialMonitor } from './serialMonitorSelectors.js'
+import { createExtensionClient } from './extensionClient.js'
+import {
+  selectMonitorView,
+  selectSerialMonitor,
+} from './serialMonitorSelectors.js'
 import {
   connect as connectAction,
   disconnect,
   mergeSelectedBaudrate,
-  pauseMonitor,
-  resumeMonitor,
+  upsertPhysicalState,
   setAutoPlay,
   setMonitorSettingsByProtocol,
   setSelectedBaudrate,
   setSelectedPort,
-  startMonitor,
-  stopMonitor,
   updateDetectedPorts,
+  upsertSessionState,
 } from './serialMonitorSlice.js'
 import { useSerialMonitorConnection } from './useSerialMonitorConnection.js'
+import { emitWebviewTraceEvent } from './trace.js'
+
+/** @typedef {import('@boardlab/protocol').ExtensionClient} ExtensionClient */
 
 /**
  * @typedef {{
@@ -66,11 +70,17 @@ const MonitorContext = createContext(
  * @param {{
  *   client: import('./client.js').MonitorClient
  *   children: import('react').ReactNode
+ *   extensionClient?: ExtensionClient
  * }} props
  */
-export function MonitorProvider({ client, children }) {
+export function MonitorProvider({ client, children, extensionClient }) {
   const dispatch = useDispatch()
   const serialState = useSelector(selectSerialMonitor)
+  const monitorView = useSelector(selectMonitorView)
+  const [ownedService] = useState(
+    () => extensionClient ?? createExtensionClient()
+  )
+  const service = extensionClient ?? ownedService
 
   const selectedBaudrate = useMemo(() => {
     const selectedPort = serialState.selectedPort
@@ -82,53 +92,93 @@ export function MonitorProvider({ client, children }) {
   }, [serialState.selectedPort, serialState.selectedBaudrates])
 
   // Track listeners for stream events; kept outside state to avoid rerenders
-  const listenersRef = useRef(new Set())
+  const listenersRef = useRef(
+    /** @type {Set<MonitorStreamListener>} */ (new Set())
+  )
 
-  const notify = useCallback((type, payload) => {
-    for (const listener of listenersRef.current) {
-      try {
-        if (type === 'start') listener.onStart?.()
-        else if (type === 'stop') listener.onStop?.()
-        else if (type === 'text') listener.onText?.(payload)
-      } catch (err) {
-        console.error('Monitor listener error:', err)
+  const getSelectedPortKey = useCallback(() => {
+    const port = selectedPortRef.current
+    return port ? createPortKey(port) : undefined
+  }, [])
+
+  const notify = useCallback(
+    (/** @type {string} */ type, /** @type {string} */ payload = '') => {
+      for (const listener of listenersRef.current) {
+        try {
+          if (type === 'start') listener.onStart?.()
+          else if (type === 'stop') listener.onStop?.()
+          else if (type === 'text') listener.onText?.(payload)
+        } catch (err) {
+          console.error('Monitor listener error:', err)
+        }
       }
-    }
-  }, [])
+      const eventMap = {
+        start: 'webviewMonitorDidStart',
+        stop: 'webviewMonitorDidStop',
+      }
+      if (type === 'start' || type === 'stop') {
+        emitWebviewTraceEvent(eventMap[type], {
+          portKey: getSelectedPortKey(),
+          autoPlay: autoPlayRef.current,
+        })
+      }
+    },
+    [getSelectedPortKey]
+  )
 
-  const registerListener = useCallback((listener) => {
-    listenersRef.current.add(listener)
-    return () => {
-      listenersRef.current.delete(listener)
-    }
-  }, [])
+  const registerListener = useCallback(
+    (/** @type {MonitorStreamListener} */ listener) => {
+      listenersRef.current.add(listener)
+      return () => {
+        listenersRef.current.delete(listener)
+      }
+    },
+    []
+  )
 
   const onStreamStart = useCallback(() => {
-    dispatch(startMonitor())
     notify('start')
-  }, [dispatch, notify])
+  }, [notify])
 
   const onStreamStop = useCallback(() => {
-    dispatch(stopMonitor())
     notify('stop')
-  }, [dispatch, notify])
+  }, [notify])
 
   const onStreamText = useCallback(
-    (text) => {
+    (/** @type {string} */ text) => {
       notify('text', text)
     },
     [notify]
   )
 
+  const playRef = useRef(() => {})
+  const stopRef = useRef(() => {})
+
   const onStreamBusy = useCallback(() => {
     dispatch(setAutoPlay(false))
-    dispatch(stopMonitor())
+    stopRef.current()
   }, [dispatch])
 
-  const monitorOptions = useMemo(
-    () => ({ disconnectHoldMs: 1500, coldStartMs: 1000 }),
-    []
+  const applyPhysicalState = useCallback(
+    (payload) => {
+      if (!payload || !payload.port) return
+      dispatch(upsertPhysicalState(payload))
+    },
+    [dispatch]
   )
+
+  useEffect(() => {
+    if (extensionClient) {
+      return undefined
+    }
+    return () => {
+      try {
+        ownedService?.dispose?.()
+      } catch (error) {
+        console.error('Failed to dispose extension client', error)
+      }
+    }
+  }, [extensionClient, ownedService])
 
   const selectedPortRef = useRef(serialState.selectedPort)
   useEffect(() => {
@@ -140,12 +190,7 @@ export function MonitorProvider({ client, children }) {
     autoPlayRef.current = serialState.autoPlay
   }, [serialState.autoPlay])
 
-  const startedRef = useRef(serialState.started)
-  useEffect(() => {
-    startedRef.current = serialState.started
-  }, [serialState.started])
-
-  const lastEditorStatusRef = useRef()
+  const lastEditorStatusRef = useRef('')
 
   useEffect(() => {
     const messenger = vscode.messenger
@@ -154,29 +199,25 @@ export function MonitorProvider({ client, children }) {
     }
     const webviewType =
       typeof window !== 'undefined'
-        ? window.__BOARDLAB_WEBVIEW_TYPE__
+        ? /** @type {Window & { __BOARDLAB_WEBVIEW_TYPE__?: string }} */ (
+            window
+          ).__BOARDLAB_WEBVIEW_TYPE__
         : undefined
     const editorStatusNotification =
       webviewType === 'plotter'
         ? notifyPlotterEditorStatus
         : notifyMonitorEditorStatus
 
-    const detectedPorts = serialState.detectedPorts ?? {}
-    const hasDetectionSnapshot = Object.keys(detectedPorts).length > 0
-    const selectedPort = serialState.selectedPort
-    const selectedKey = selectedPort ? createPortKey(selectedPort) : undefined
-    const selectedDetected = selectedKey
-      ? Object.values(detectedPorts).some(
-          ({ port }) => createPortKey(port) === selectedKey
-        )
-      : false
+    const hasDetectionSnapshot = monitorView.hasDetectionSnapshot
+    const selectedPort = monitorView.selectedPort
+    const selectedDetected = monitorView.selectedDetected
 
     let editorStatus = 'idle'
     if (selectedPort && hasDetectionSnapshot && !selectedDetected) {
       editorStatus = 'disconnected'
-    } else if (serialState.started) {
+    } else if (monitorView.started) {
       editorStatus =
-        serialState.status === 'suspended' ? 'suspended' : 'running'
+        monitorView.status === 'suspended' ? 'suspended' : 'running'
     }
 
     if (lastEditorStatusRef.current === editorStatus) {
@@ -191,61 +232,106 @@ export function MonitorProvider({ client, children }) {
       console.error('Failed to notify editor status', error)
     }
   }, [
-    serialState.detectedPorts,
-    serialState.selectedPort,
-    serialState.started,
-    serialState.status,
+    monitorView.hasDetectionSnapshot,
+    monitorView.selectedPort,
+    monitorView.selectedDetected,
+    monitorView.started,
+    monitorView.status,
   ])
 
   const { play, stop } = useSerialMonitorConnection({
     client,
     selectedPort: serialState.selectedPort,
-    detectedPorts: serialState.detectedPorts,
     selectedBaudrate,
+    selectedDetected: monitorView.selectedDetected,
     monitorSettingsByProtocol: serialState.monitorSettingsByProtocol,
+    session: monitorView.session,
     onText: onStreamText,
     onStart: onStreamStart,
     onStop: onStreamStop,
     onBusy: onStreamBusy,
-    options: monitorOptions,
-    enabled: true,
-    autoPlay: serialState.autoPlay,
+    enabled: serialState.autoPlay,
   })
 
-  const playRef = useRef(play)
   useEffect(() => {
     playRef.current = play
   }, [play])
 
-  const stopRef = useRef(stop)
   useEffect(() => {
     stopRef.current = stop
   }, [stop])
 
   const readyToControl = Boolean(client)
 
+  useEffect(() => {
+    if (!client || !serialState.selectedPort) {
+      return undefined
+    }
+    const port = serialState.selectedPort
+    client.notifyClientAttached(port)
+    return () => {
+      client.notifyClientDetached(port)
+    }
+  }, [client, serialState.selectedPort])
+
+  const lastIntentRef = useRef('')
+  useEffect(() => {
+    if (!client || !serialState.selectedPort) {
+      lastIntentRef.current = ''
+      return
+    }
+    const portKey = createPortKey(serialState.selectedPort)
+    if (serialState.autoPlay) {
+      const signature = `${portKey}|start`
+      if (lastIntentRef.current === signature) {
+        return
+      }
+      lastIntentRef.current = signature
+      client.notifyIntentStart(serialState.selectedPort)
+      return
+    }
+    const signature = `${portKey}|stop`
+    if (lastIntentRef.current === signature) {
+      return
+    }
+    lastIntentRef.current = signature
+    client.notifyIntentStop(serialState.selectedPort)
+  }, [client, serialState.selectedPort, serialState.autoPlay])
+
   const requestedInitialSelectionRef = useRef(false)
+  const lastSelectionSignatureRef = useRef('')
 
   const applySelection = useCallback(
+    /**
+     * @param {{
+     *   port?: import('boards-list').PortIdentifier
+     *   baudrate?: string
+     * }} params
+     */
     ({ port, baudrate }) => {
+      const incomingKey = port ? createPortKey(port) : undefined
+      const selectionSignature = `${incomingKey ?? ''}|${baudrate ?? ''}`
+      if (lastSelectionSignatureRef.current === selectionSignature) {
+        return
+      }
+      lastSelectionSignatureRef.current = selectionSignature
+
       const current = selectedPortRef.current
       const currentKey = current ? createPortKey(current) : undefined
-      const incomingKey = port ? createPortKey(port) : undefined
+      const selectionChanged = incomingKey !== currentKey
       const wantsAutoPlay = autoPlayRef.current
       console.debug('[monitor-shared] applySelection', {
         incomingKey,
         currentKey,
         wantsAutoPlay,
-        started: startedRef.current,
       })
 
       if (!port) {
         if (currentKey) {
-          dispatch(setSelectedPort(undefined))
+          // Avoid dropping the current selection when unrelated events push an empty selection.
+          return
         }
-        if (startedRef.current && readyToControl) {
-          stopRef.current()
-        }
+        dispatch(setSelectedPort(undefined))
         return
       }
 
@@ -257,50 +343,41 @@ export function MonitorProvider({ client, children }) {
         dispatch(mergeSelectedBaudrate({ port, baudrate }))
       }
 
-      if (readyToControl) {
-        if (wantsAutoPlay) {
-          playRef.current()
-        } else if (startedRef.current) {
-          stopRef.current()
-        }
+      if (readyToControl && selectionChanged && wantsAutoPlay) {
+        playRef.current()
       }
+
+      emitWebviewTraceEvent('webviewDidUpdateSelection', {
+        portKey: incomingKey,
+        baudrate,
+        selectionChanged,
+        autoPlay: wantsAutoPlay,
+      })
     },
     [dispatch, readyToControl]
   )
 
   useEffect(() => {
-    const messenger = vscode.messenger
-    if (!messenger) {
-      return
+    if (!service) {
+      return undefined
     }
-    const disposable = messenger.onNotification(
-      notifyMonitorSelectionChanged,
-      applySelection
-    )
-    return () => {
-      try {
-        disposable?.dispose?.()
-      } catch (error) {
-        console.error('Failed to dispose selection listener', error)
-      }
-    }
-  }, [applySelection])
+    return service.onSelectionChanged(applySelection)
+  }, [applySelection, service])
 
   useEffect(() => {
-    const messenger = vscode.messenger
-    if (!messenger) {
-      return
+    if (!service) {
+      return undefined
     }
     if (!client) {
       requestedInitialSelectionRef.current = false
-      return
+      return undefined
     }
     if (requestedInitialSelectionRef.current) {
-      return
+      return undefined
     }
     requestedInitialSelectionRef.current = true
-    messenger
-      .sendRequest(getMonitorSelection, HOST_EXTENSION)
+    service
+      .getMonitorSelection()
       .then((selection) => {
         if (selection) {
           applySelection(selection)
@@ -310,19 +387,7 @@ export function MonitorProvider({ client, children }) {
         console.error('Failed to resolve monitor selection', error)
         requestedInitialSelectionRef.current = false
       })
-  }, [applySelection, client])
-
-  const previousStatusRef = useRef(serialState.status)
-  useEffect(() => {
-    const previous = previousStatusRef.current
-    previousStatusRef.current = serialState.status
-    if (!client) return
-    if (!serialState.started) return
-    if (serialState.status !== 'connected') return
-    if (previous !== 'suspended') return
-    if (!readyToControl) return
-    playRef.current()
-  }, [client, serialState.status, serialState.started, readyToControl])
+  }, [applySelection, client, service])
 
   // Establish client connection and subscriptions once
   useEffect(() => {
@@ -338,6 +403,9 @@ export function MonitorProvider({ client, children }) {
         const result = await client.connect()
         if (!disposed) {
           dispatch(connectAction(result))
+          if (Array.isArray(result.physicalStates)) {
+            result.physicalStates.forEach((state) => applyPhysicalState(state))
+          }
           if (result.selectedPort) {
             dispatch(setSelectedPort(result.selectedPort))
             if (result.selectedBaudrate) {
@@ -369,8 +437,10 @@ export function MonitorProvider({ client, children }) {
           setSelectedBaudrate({ port: event.port, baudrate: event.baudrate })
         )
       ),
-      client.onDidPauseMonitor((event) => dispatch(pauseMonitor(event))),
-      client.onDidResumeMonitor((event) => dispatch(resumeMonitor(event))),
+      client.onDidChangePhysicalState((state) => applyPhysicalState(state)),
+      client.onDidChangeSessionState((state) =>
+        dispatch(upsertSessionState(state))
+      ),
     ]
 
     async function fetchDetectedPorts() {
@@ -394,19 +464,19 @@ export function MonitorProvider({ client, children }) {
         } catch {}
       }
     }
-  }, [client, dispatch])
+  }, [applyPhysicalState, client, dispatch])
 
   // When streaming and baudrate changes, update server-side monitor
   useEffect(() => {
     if (!client) return
     if (!serialState.selectedPort) return
     if (!selectedBaudrate) return
-    if (!serialState.started) return
+    if (monitorView.status !== 'connected') return
     client.updateBaudrate({
       port: serialState.selectedPort,
       baudrate: selectedBaudrate,
     })
-  }, [client, serialState.selectedPort, selectedBaudrate, serialState.started])
+  }, [client, monitorView.status, serialState.selectedPort, selectedBaudrate])
 
   const contextValue = useMemo(
     () => ({

@@ -32,8 +32,13 @@
     "out"
   ],
   "scripts": {
+    "prebuild": "npm --prefix ../../protocol run build",
     "build": "tsc -p ./",
-    "clean": "rimraf out"
+    "clean": "rimraf out",
+    "pretest": "npm run build",
+    "test": "vitest --config ./vitest.config.js",
+    "pretest:ci": "npm run build",
+    "test:ci": "vitest run --config ./vitest.config.js"
   },
   "dependencies": {
     "@boardlab/protocol": "file:../../protocol",
@@ -49,6 +54,7 @@
   },
   "devDependencies": {
     "rimraf": "^6.0.1",
-    "typescript": "^5.1.x"
+    "typescript": "^5.1.x",
+    "vitest": "^4.0.16"
   }
 }

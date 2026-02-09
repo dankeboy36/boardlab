@@ -72,6 +72,16 @@
       "label": "webviews: profiles dev",
       "type": "shell",
       "command": "npm run dev --workspace @vscode/profiles"
+    },
+    {
+      "label": "Check Portino Health",
+      "type": "shell",
+      "command": "curl -s -X POST http://127.0.0.1:55888/control/health | jq ."
+    },
+    {
+      "label": "Check Portino Metrics",
+      "type": "shell",
+      "command": "curl -s http://127.0.0.1:55888/metrics | jq ."
     }
   ]
 }

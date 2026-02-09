@@ -190,7 +190,6 @@ const XtermView = forwardRef(function XtermView(props, ref) {
     }
   }, [])
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   // Refit xterm when the container resizes or window size changes
   useEffect(() => {
     const el = containerRef.current
@@ -434,11 +433,18 @@ const XtermView = forwardRef(function XtermView(props, ref) {
       convertEol: true,
       scrollOnUserInput: false,
     }
-    if (typeof scrollback === 'number') baseOpts.scrollback = scrollback
-    if (cursorStyle !== undefined) baseOpts.cursorStyle = cursorStyle
-    if (cursorInactiveStyle !== undefined)
+    if (typeof scrollback === 'number') {
+      baseOpts.scrollback = scrollback
+    }
+    if (cursorStyle !== undefined) {
+      baseOpts.cursorStyle = cursorStyle
+    }
+    if (cursorInactiveStyle !== undefined) {
       baseOpts.cursorInactiveStyle = cursorInactiveStyle
-    if (typeof cursorBlink === 'boolean') baseOpts.cursorBlink = cursorBlink
+    }
+    if (typeof cursorBlink === 'boolean') {
+      baseOpts.cursorBlink = cursorBlink
+    }
     const term = new Terminal(baseOpts)
 
     // remember defaults so that clearing a setting can revert properly
@@ -584,7 +590,16 @@ const XtermView = forwardRef(function XtermView(props, ref) {
         restoreCreateElement?.()
       } catch {}
     }
-  }, [focusSearchField, closeSearch])
+  }, [
+    focusSearchField,
+    closeSearch,
+    fontFamily,
+    fontSize,
+    scrollback,
+    cursorStyle,
+    cursorInactiveStyle,
+    cursorBlink,
+  ])
 
   // When the search bar opens/changes, fire an incremental search to update decorations/results
   useEffect(() => {
