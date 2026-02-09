@@ -120,6 +120,23 @@ export class MonitorBridgeWsClient implements vscode.Disposable {
     return this.onErrorEmitter.event
   }
 
+  async resetMonitor(portKey: string): Promise<void> {
+    try {
+      await this.closeMonitor(portKey)
+    } finally {
+      this.forgetMonitor(portKey)
+    }
+  }
+
+  forgetMonitor(portKey: string): void {
+    const monitorId = this.monitorIdsByPortKey.get(portKey)
+    if (!monitorId) {
+      return
+    }
+    this.monitorIdsByPortKey.delete(portKey)
+    this.monitorIdToPortKey.delete(monitorId)
+  }
+
   async subscribe(params: MonitorBridgeWsSubscription): Promise<void> {
     const { basePortKey, portKey } = buildPortKeys(
       params.port,
@@ -129,6 +146,10 @@ export class MonitorBridgeWsClient implements vscode.Disposable {
     const existing = this.subscriptions.get(basePortKey)
     if (existing) {
       existing.count += 1
+      if (!this.monitorIdsByPortKey.get(basePortKey)) {
+        await this.ensureConnection()
+        await this.openAndSubscribe(basePortKey)
+      }
       return
     }
     this.subscriptions.set(basePortKey, {
@@ -189,9 +210,19 @@ export class MonitorBridgeWsClient implements vscode.Disposable {
     if (!entry) {
       return
     }
+    console.log('[MonitorBridgeWsClient] openAndSubscribe', {
+      basePortKey,
+      portKey: entry.portKey,
+      baudrate: entry.baudrate,
+    })
     const monitorId = await this.openMonitor(basePortKey, entry.portKey)
     const connection = await this.ensureConnection()
     try {
+      console.log('[MonitorBridgeWsClient] subscribe', {
+        basePortKey,
+        monitorId,
+        tailBytes: entry.tailBytes,
+      })
       await connection.sendRequest(RequestMonitorSubscribe, {
         monitorId,
         tailBytes: entry.tailBytes,
@@ -212,8 +243,16 @@ export class MonitorBridgeWsClient implements vscode.Disposable {
     }
     const connection = await this.ensureConnection()
     try {
+      console.log('[MonitorBridgeWsClient] openMonitor', {
+        basePortKey,
+        portKey,
+      })
       const result = await connection.sendRequest(RequestMonitorOpen, {
         portKey,
+      })
+      console.log('[MonitorBridgeWsClient] openMonitor result', {
+        basePortKey,
+        monitorId: result.monitorId,
       })
       this.monitorIdsByPortKey.set(basePortKey, result.monitorId)
       this.monitorIdToPortKey.set(result.monitorId, basePortKey)
@@ -340,7 +379,9 @@ export class MonitorBridgeWsClient implements vscode.Disposable {
     this.dataSocket = dataSocket
     this.controlConnection = connection
 
-    await this.resubscribeAll()
+    this.resubscribeAll().catch((error) => {
+      console.error('[MonitorBridgeWsClient] resubscribe failed', error)
+    })
   }
 
   private async resubscribeAll(): Promise<void> {
@@ -410,6 +451,9 @@ export class MonitorBridgeWsClient implements vscode.Disposable {
     }
     const portKey = this.monitorIdToPortKey.get(monitorId)
     if (!portKey) {
+      console.warn('[MonitorBridgeWsClient] data with unknown monitorId', {
+        monitorId,
+      })
       return
     }
     const payload = new Uint8Array(
@@ -417,6 +461,11 @@ export class MonitorBridgeWsClient implements vscode.Disposable {
       buf.byteOffset + 5,
       buf.length - 5
     )
+    console.log('[MonitorBridgeWsClient] data', {
+      portKey,
+      monitorId,
+      bytes: payload.length,
+    })
     this.onDataEmitter.fire({
       portKey,
       monitorId,

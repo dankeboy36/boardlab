@@ -234,13 +234,19 @@ export class MonitorPortSession {
   private resetForNoClients(): void {
     this.runningClients.clear()
     this.recomputeDesired()
-    this.status = 'idle'
+    const shouldCloseActive =
+      this.status === 'active' || this.status === 'connecting'
+    if (!shouldCloseActive) {
+      this.status = 'idle'
+    }
     this.openPending = false
     this.closePending = false
     this.pauseReason = undefined
     this.lastError = undefined
     this.currentAttemptId = null
-    this.monitorSessionId = undefined
+    if (!shouldCloseActive) {
+      this.monitorSessionId = undefined
+    }
   }
 
   private recomputeDesired(): void {

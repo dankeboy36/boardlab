@@ -81,6 +81,13 @@ export function MonitorProvider({ client, children, extensionClient }) {
     () => extensionClient ?? createExtensionClient()
   )
   const service = extensionClient ?? ownedService
+  const [isConnected, setIsConnected] = useState(false)
+  const renderCounterRef = useRef(0)
+  renderCounterRef.current += 1
+  console.log('[monitor-webview] render', {
+    render: renderCounterRef.current,
+    isConnected,
+  })
 
   const selectedBaudrate = useMemo(() => {
     const selectedPort = serialState.selectedPort
@@ -250,7 +257,7 @@ export function MonitorProvider({ client, children, extensionClient }) {
     onStart: onStreamStart,
     onStop: onStreamStop,
     onBusy: onStreamBusy,
-    enabled: serialState.autoPlay,
+    enabled: serialState.autoPlay && isConnected,
   })
 
   useEffect(() => {
@@ -261,22 +268,40 @@ export function MonitorProvider({ client, children, extensionClient }) {
     stopRef.current = stop
   }, [stop])
 
-  const readyToControl = Boolean(client)
+  const readyToControl = Boolean(client && isConnected)
 
   useEffect(() => {
-    if (!client || !serialState.selectedPort) {
+    if (!client || !isConnected || !serialState.selectedPort) {
       return undefined
     }
     const port = serialState.selectedPort
+    console.log('[monitor-webview] notifyClientAttached', port)
     client.notifyClientAttached(port)
+    let disposed = false
+    client
+      .sessionStates()
+      .then((sessions) => {
+        if (disposed || !Array.isArray(sessions)) return
+        console.log('[monitor-webview] sessionStates after attach', sessions)
+        sessions.forEach((state) => dispatch(upsertSessionState(state)))
+      })
+      .catch((error) => {
+        console.error('Error fetching session states after attach:', error)
+      })
     return () => {
+      disposed = true
+      console.log('[monitor-webview] notifyClientDetached', port)
       client.notifyClientDetached(port)
     }
-  }, [client, serialState.selectedPort])
+  }, [client, dispatch, isConnected, serialState.selectedPort])
 
   const lastIntentRef = useRef('')
   useEffect(() => {
-    if (!client || !serialState.selectedPort) {
+    if (!client || !isConnected || !serialState.selectedPort) {
+      lastIntentRef.current = ''
+      return
+    }
+    if (!monitorView.selectedDetected) {
       lastIntentRef.current = ''
       return
     }
@@ -287,6 +312,10 @@ export function MonitorProvider({ client, children, extensionClient }) {
         return
       }
       lastIntentRef.current = signature
+      console.log(
+        '[monitor-webview] notifyIntentStart',
+        serialState.selectedPort
+      )
       client.notifyIntentStart(serialState.selectedPort)
       return
     }
@@ -295,8 +324,15 @@ export function MonitorProvider({ client, children, extensionClient }) {
       return
     }
     lastIntentRef.current = signature
+    console.log('[monitor-webview] notifyIntentStop', serialState.selectedPort)
     client.notifyIntentStop(serialState.selectedPort)
-  }, [client, serialState.selectedPort, serialState.autoPlay])
+  }, [
+    client,
+    isConnected,
+    serialState.selectedPort,
+    serialState.autoPlay,
+    monitorView.selectedDetected,
+  ])
 
   const requestedInitialSelectionRef = useRef(false)
   const lastSelectionSignatureRef = useRef('')
@@ -344,6 +380,10 @@ export function MonitorProvider({ client, children, extensionClient }) {
       }
 
       if (readyToControl && selectionChanged && wantsAutoPlay) {
+        console.log('[monitor-webview] applySelection autoplay', {
+          portKey: incomingKey,
+          baudrate,
+        })
         playRef.current()
       }
 
@@ -380,6 +420,7 @@ export function MonitorProvider({ client, children, extensionClient }) {
       .getMonitorSelection()
       .then((selection) => {
         if (selection) {
+          console.log('[monitor-webview] initial selection', selection)
           applySelection(selection)
         }
       })
@@ -393,6 +434,8 @@ export function MonitorProvider({ client, children, extensionClient }) {
   useEffect(() => {
     if (!client) {
       dispatch(disconnect())
+      setIsConnected(false)
+      console.log('[monitor-webview] no client, disconnect')
       return
     }
 
@@ -400,9 +443,12 @@ export function MonitorProvider({ client, children, extensionClient }) {
 
     async function connectClient() {
       try {
+        console.log('[monitor-webview] connect start', { clientId: client.id })
         const result = await client.connect()
         if (!disposed) {
+          console.log('[monitor-webview] connect resolved', result)
           dispatch(connectAction(result))
+          setIsConnected(true)
           if (Array.isArray(result.physicalStates)) {
             result.physicalStates.forEach((state) => applyPhysicalState(state))
           }
@@ -416,6 +462,27 @@ export function MonitorProvider({ client, children, extensionClient }) {
                 })
               )
             }
+          }
+          if (
+            !Array.isArray(result.sessionStates) ||
+            !result.sessionStates.length
+          ) {
+            console.log(
+              '[monitor-webview] sessionStates empty, requesting snapshot'
+            )
+            client
+              .sessionStates()
+              .then((sessions) => {
+                if (disposed || !Array.isArray(sessions)) return
+                console.log(
+                  '[monitor-webview] sessionStates snapshot',
+                  sessions
+                )
+                sessions.forEach((state) => dispatch(upsertSessionState(state)))
+              })
+              .catch((error) => {
+                console.error('Error fetching session states:', error)
+              })
           }
         }
       } catch (error) {
@@ -438,8 +505,11 @@ export function MonitorProvider({ client, children, extensionClient }) {
         )
       ),
       client.onDidChangePhysicalState((state) => applyPhysicalState(state)),
-      client.onDidChangeSessionState((state) =>
-        dispatch(upsertSessionState(state))
+      client.onDidChangeSessionState(
+        (state) => (
+          console.log('[monitor-webview] session state update', state),
+          dispatch(upsertSessionState(state))
+        )
       ),
     ]
 
@@ -458,6 +528,8 @@ export function MonitorProvider({ client, children, extensionClient }) {
 
     return () => {
       disposed = true
+      setIsConnected(false)
+      console.log('[monitor-webview] connect cleanup')
       for (const disposable of disposables) {
         try {
           disposable.dispose()

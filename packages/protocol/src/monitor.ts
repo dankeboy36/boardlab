@@ -59,10 +59,7 @@ export interface HostConnectClientResult extends ConnectClientResult {
   }>
   readonly physicalStates?: ReadonlyArray<MonitorPhysicalState>
   readonly sessionStates?: ReadonlyArray<MonitorSessionState>
-  readonly transport?: MonitorTransport
 }
-
-export type MonitorTransport = 'http' | 'ws'
 
 export type MonitorSessionStatus =
   | 'idle'

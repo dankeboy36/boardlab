@@ -100,7 +100,10 @@ class MessengerControlTransport {
       messengerx.onNotification(
         messengerRef,
         notifyMonitorSessionState,
-        (payload) => this._didChangeSessionState.fire(payload)
+        (payload) => {
+          console.log('[monitor-webview] notifyMonitorSessionState', payload)
+          this._didChangeSessionState.fire(payload)
+        }
       ),
     ]
 
@@ -300,15 +303,12 @@ export class MonitorClient {
   /**
    * @param {{
    *   messenger: import('vscode-messenger-webview').Messenger
-   *   httpBaseUrl: string
    * }} options
    */
-  constructor({ messenger, httpBaseUrl }) {
+  constructor({ messenger }) {
     this._messenger = messenger
     this._clientId = resolveClientKey()
     this._transport = new MessengerControlTransport(messenger)
-    this._httpBaseUrl = new URL(httpBaseUrl)
-    this._transportMode = 'http'
     this._streamControllers = new Map()
 
     this._didChangeDetectedPorts = new EventEmitter()
@@ -361,10 +361,9 @@ export class MonitorClient {
     if (!this._deferredConnect) {
       const deferred = defer()
       const signal = AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined
-      this._transport.connect(this._clientId, { signal }).then((result) => {
-        this._transportMode = result?.transport ?? 'http'
-        deferred.resolve(result)
-      }, deferred.reject)
+      this._transport
+        .connect(this._clientId, { signal })
+        .then((result) => deferred.resolve(result), deferred.reject)
       this._deferredConnect = deferred
     }
     return this._deferredConnect.promise
@@ -372,10 +371,6 @@ export class MonitorClient {
 
   get id() {
     return this._clientId
-  }
-
-  get transport() {
-    return this._transportMode
   }
 
   /** @returns {import('@c4312/evt').Event<import('boards-list').DetectedPorts>} */
@@ -571,51 +566,7 @@ export class MonitorClient {
       protocol,
       baudrate,
     })
-    if (this._transportMode === 'ws') {
-      return this._openWsMonitor(port, options)
-    }
-    const dataUrl = this._createHttpUrl('/monitor')
-    dataUrl.searchParams.set('protocol', protocol)
-    dataUrl.searchParams.set('address', address)
-    if (baudrate) {
-      dataUrl.searchParams.set('baudrate', baudrate)
-    }
-    dataUrl.searchParams.set('clientid', this._clientId)
-
-    const res = await fetch(dataUrl.toString(), { signal: options.signal })
-    if (!res.ok) {
-      const status = res.status
-      const bodyText = await res.text().catch(() => '')
-      let payload
-      try {
-        payload = bodyText ? JSON.parse(bodyText) : undefined
-      } catch {}
-      const message = payload?.message || bodyText || res.statusText
-      const error = new Error(
-        `Failed to open monitor on ${address}: ${message}`
-      )
-      throw Object.assign(error, { code: payload?.code, status })
-    }
-
-    const contentType = res.headers.get('content-type')?.toLowerCase() ?? ''
-    if (!contentType.includes('application/octet-stream')) {
-      const bodyText = (await res.text().catch(() => '')) || ''
-      const normalized = bodyText.trim().toLowerCase()
-      const error = new Error(
-        normalized || 'Unexpected response while opening monitor'
-      )
-      const code = normalized.includes('already attached')
-        ? 'already-attached'
-        : 'no-stream'
-      throw Object.assign(error, { code, status: res.status })
-    }
-
-    const reader = res.body?.getReader()
-    if (!reader) {
-      throw new Error('No reader available for response body')
-    }
-
-    return reader
+    return this._openWsMonitor(port, options)
   }
 
   /**
@@ -647,75 +598,6 @@ export class MonitorClient {
       }
     }
     return reader
-  }
-
-  /**
-   * @typedef {Object} CompileParams
-   * @property {import('fqbn').FQBN} fqbn
-   * @property {string} sketchFolderPath
-   */
-
-  /**
-   * @param {CompileParams} params
-   * @param {{ signal?: AbortSignal }} [options]
-   */
-  async compile({ fqbn, sketchFolderPath }, options = {}) {
-    const dataUrl = this._createHttpUrl('/compile')
-    dataUrl.searchParams.set('fqbn', fqbn.toString())
-    dataUrl.searchParams.set('sketch', encodeURIComponent(sketchFolderPath))
-
-    const res = await fetch(dataUrl.toString(), {
-      method: 'POST',
-      signal: options.signal,
-    })
-    if (!res.ok) {
-      const text = await res.text().catch(() => res.statusText)
-      throw new Error(
-        `Failed to compile sketch ${sketchFolderPath} for board ${fqbn}: ${text}`
-      )
-    }
-  }
-
-  /**
-   * @typedef {Object} UploadParams
-   * @property {import('fqbn').FQBN} fqbn
-   * @property {string} sketchFolderPath
-   * @property {import('boards-list').PortIdentifier} port
-   */
-
-  /**
-   * @param {UploadParams} params
-   * @param {{ signal?: AbortSignal }} [options]
-   */
-  async upload(
-    { fqbn, sketchFolderPath, port: { protocol, address } },
-    options = {}
-  ) {
-    const dataUrl = this._createHttpUrl('/upload')
-    dataUrl.searchParams.set('fqbn', encodeURIComponent(fqbn.toString()))
-    dataUrl.searchParams.set('sketch', encodeURIComponent(sketchFolderPath))
-    dataUrl.searchParams.set('protocol', protocol)
-    dataUrl.searchParams.set('address', encodeURIComponent(address))
-
-    const res = await fetch(dataUrl.toString(), {
-      method: 'POST',
-      signal: options.signal,
-    })
-    if (!res.ok) {
-      const text = await res.text().catch(() => res.statusText)
-      throw new Error(
-        `Failed to compile sketch ${sketchFolderPath} for board ${fqbn}: ${text}`
-      )
-    }
-  }
-
-  /** @param {string} pathname */
-  _createHttpUrl(pathname) {
-    const base = new URL(this._httpBaseUrl.toString())
-    base.pathname = pathname
-    base.search = ''
-    base.hash = ''
-    return base
   }
 
   /** @param {import('boards-list').DetectedPorts} detectedPorts */
@@ -766,6 +648,9 @@ export class MonitorClient {
     }
     const controller = this._streamControllers.get(payload.portKey)
     if (!controller) {
+      console.log('[monitor-webview] stream data with no controller', {
+        portKey: payload.portKey,
+      })
       return
     }
     const data = payload.data
@@ -780,9 +665,17 @@ export class MonitorClient {
       chunk = new Uint8Array(data)
     }
     if (!chunk) {
+      console.log('[monitor-webview] stream data unrecognized payload', {
+        portKey: payload.portKey,
+        dataType: typeof data,
+      })
       return
     }
     try {
+      console.log('[monitor-webview] stream data enqueue', {
+        portKey: payload.portKey,
+        bytes: chunk.length,
+      })
       controller.enqueue(chunk)
     } catch (error) {
       console.warn('[MonitorClient] Failed to enqueue monitor data', error)
@@ -793,6 +686,7 @@ export class MonitorClient {
     if (!payload || typeof payload.portKey !== 'string') {
       return
     }
+    console.log('[monitor-webview] stream error', payload)
     const message =
       typeof payload.message === 'string'
         ? payload.message

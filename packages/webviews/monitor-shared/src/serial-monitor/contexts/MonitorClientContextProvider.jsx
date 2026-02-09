@@ -13,10 +13,6 @@ export function MonitorClientContextProvider({ children }) {
   const [wsUrl, setWsUrl] = useState(
     /** @type {string | undefined} */ (undefined)
   )
-  const [httpBaseUrl, setHttpBaseUrl] = useState(
-    /** @type {string | undefined} */ (undefined)
-  )
-
   const [client, setClient] = useState(
     /** @type {MonitorClient | undefined} */ (undefined)
   )
@@ -40,17 +36,8 @@ export function MonitorClientContextProvider({ children }) {
       .sendRequest(getMonitorBridgeInfo, HOST_EXTENSION)
       .then((info) => {
         if (disposed) return
-        if (!info?.httpBaseUrl) {
-          console.error('Monitor bridge info missing httpBaseUrl')
-          setConnectionStatus('disconnected')
-          return
-        }
-        setHttpBaseUrl(info.httpBaseUrl)
         setWsUrl(info.wsUrl)
-        const monitorClient = new MonitorClient({
-          messenger,
-          httpBaseUrl: info.httpBaseUrl,
-        })
+        const monitorClient = new MonitorClient({ messenger })
         setClient(monitorClient)
         setConnectionStatus('connected')
       })
@@ -80,7 +67,6 @@ export function MonitorClientContextProvider({ children }) {
         client,
         connectionStatus,
         wsUrl,
-        httpBaseUrl,
       }}
     >
       {children}

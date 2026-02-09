@@ -11,7 +11,6 @@ import { createContext } from 'react'
  *   | 'disconnecting'
  *   | 'error'} connectionStatus
  * @property {string} [wsUrl]
- * @property {string} [httpBaseUrl]
  */
 
 export const MonitorClientContext = createContext(

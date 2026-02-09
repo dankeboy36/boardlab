@@ -15,6 +15,11 @@ import { createServer } from '@boardlab/portino-bridge'
 import { MockCliBridge } from '@boardlab/portino-bridge/mockCliBridge'
 import {
   connectMonitorClient,
+  notifyMonitorClientAttached,
+  notifyMonitorClientDetached,
+  notifyMonitorIntentStart,
+  notifyMonitorIntentStop,
+  notifyMonitorStreamData,
   type ConnectClientParams,
 } from '@boardlab/protocol'
 
@@ -232,6 +237,16 @@ describe('MonitorManager (in-process bridge)', function () {
       managerOptions
     )
 
+    const targetPort: PortIdentifier = {
+      protocol: 'serial',
+      address: '/dev/tty.usbmock-1',
+    }
+
+    monitorManager.setSelectionResolver(() => ({
+      port: targetPort,
+      baudrate: '9600',
+    }))
+
     const runningEvents: PortIdentifier[][] = []
     const onRunning = monitorManager.onDidChangeRunningMonitors((monitors) => {
       runningEvents.push(monitors.map((entry) => entry.port))
@@ -248,31 +263,27 @@ describe('MonitorManager (in-process bridge)', function () {
     assert.ok(info.httpBaseUrl)
     assert.ok(info.wsUrl)
 
-    const targetPort: PortIdentifier = {
-      protocol: 'serial',
-      address: '/dev/tty.usbmock-1',
-    }
-
-    const url = new URL(`${info.httpBaseUrl}/monitor`)
-    url.searchParams.set('protocol', targetPort.protocol)
-    url.searchParams.set('address', targetPort.address)
-    url.searchParams.set('baudrate', '9600')
-    url.searchParams.set('clientid', connectParams.clientId)
-
-    const controller = new AbortController()
-    const response = await fetch(url, { signal: controller.signal })
-    assert.strictEqual(response.ok, true)
-    const reader = response.body?.getReader()
-    assert.ok(reader)
-
-    const firstChunk = await reader.read()
-    assert.strictEqual(firstChunk.done, false)
-    assert.ok(firstChunk.value)
+    messenger.triggerNotification(
+      notifyMonitorClientAttached,
+      { clientId: connectParams.clientId, port: targetPort },
+      sender
+    )
+    messenger.triggerNotification(
+      notifyMonitorIntentStart,
+      { clientId: connectParams.clientId, port: targetPort },
+      sender
+    )
 
     await waitFor(
       () => monitorManager.getMonitorState(targetPort) === 'running'
     )
     assert.strictEqual(monitorManager.getMonitorState(targetPort), 'running')
+
+    await waitFor(() =>
+      messenger.sentNotifications.some(
+        (entry) => entry.method === notifyMonitorStreamData.method
+      )
+    )
 
     const paused = await monitorManager.pauseMonitor(targetPort)
     assert.strictEqual(paused, true)
@@ -286,10 +297,16 @@ describe('MonitorManager (in-process bridge)', function () {
       () => monitorManager.getMonitorState(targetPort) === 'running'
     )
 
-    controller.abort()
-    try {
-      await reader.cancel()
-    } catch {}
+    messenger.triggerNotification(
+      notifyMonitorIntentStop,
+      { clientId: connectParams.clientId, port: targetPort },
+      sender
+    )
+    messenger.triggerNotification(
+      notifyMonitorClientDetached,
+      { clientId: connectParams.clientId, port: targetPort },
+      sender
+    )
 
     await waitFor(
       () => monitorManager.getMonitorState(targetPort) === 'disconnected'

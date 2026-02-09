@@ -71,16 +71,36 @@ export function useSerialMonitorConnection({
   useEffect(() => {
     const portKey = buildPortKey(selectedPort)
     if (!enabled || !client || !selectedPort) {
+      console.log('[monitor-webview] useSerialMonitorConnection disabled', {
+        enabled,
+        hasClient: Boolean(client),
+        portKey,
+      })
       lastIntentKeyRef.current = ''
       return
     }
     const detected = Boolean(selectedDetected)
     if (!detected) {
+      console.log('[monitor-webview] useSerialMonitorConnection undetected', {
+        portKey,
+      })
       lastIntentKeyRef.current = `${portKey ?? ''}|detected:false`
       return
     }
     if (session && session.portKey === portKey) {
-      if (session.desired !== 'stopped') {
+      if (
+        session.desired !== 'stopped' &&
+        session.status !== 'paused' &&
+        session.status !== 'error'
+      ) {
+        console.log(
+          '[monitor-webview] useSerialMonitorConnection session running',
+          {
+            portKey,
+            desired: session.desired,
+            status: session.status,
+          }
+        )
         lastIntentKeyRef.current = `${portKey ?? ''}|session`
         return
       }
@@ -89,6 +109,12 @@ export function useSerialMonitorConnection({
         return
       }
       lastIntentKeyRef.current = signature
+      console.log(
+        '[monitor-webview] useSerialMonitorConnection notifyIntentStart (session stopped)',
+        {
+          portKey,
+        }
+      )
       client.notifyIntentStart(selectedPort)
       return
     }
@@ -97,6 +123,12 @@ export function useSerialMonitorConnection({
       return
     }
     lastIntentKeyRef.current = signature
+    console.log(
+      '[monitor-webview] useSerialMonitorConnection notifyIntentStart (missing session)',
+      {
+        portKey,
+      }
+    )
     client.notifyIntentStart(selectedPort)
   }, [client, enabled, selectedPort, selectedDetected, session])
 
@@ -139,6 +171,7 @@ export function useSerialMonitorConnection({
         reason: 'disabled',
         portKey,
       })
+      console.log('[monitor-webview] effect skip disabled', { portKey })
       return
     }
     if (!client || !selectedPort) {
@@ -150,6 +183,9 @@ export function useSerialMonitorConnection({
       openingRef.current = false
       emitWebviewTraceEvent('webviewMonitorEffectSkip', {
         reason: 'missing-client-or-port',
+        portKey,
+      })
+      console.log('[monitor-webview] effect skip missing client/port', {
         portKey,
       })
       return
@@ -176,6 +212,9 @@ export function useSerialMonitorConnection({
         reason: 'missing-protocol-settings',
         portKey,
       })
+      console.log('[monitor-webview] effect skip missing protocol settings', {
+        portKey,
+      })
       return
     }
     if (protocolError) {
@@ -188,6 +227,10 @@ export function useSerialMonitorConnection({
       emitWebviewTraceEvent('webviewMonitorEffectSkip', {
         reason: 'protocol-error',
         portKey,
+      })
+      console.log('[monitor-webview] effect skip protocol error', {
+        portKey,
+        protocolError,
       })
       return
     }
@@ -202,6 +245,7 @@ export function useSerialMonitorConnection({
         reason: 'missing-baudrate',
         portKey,
       })
+      console.log('[monitor-webview] effect skip missing baudrate', { portKey })
       return
     }
 
@@ -216,6 +260,10 @@ export function useSerialMonitorConnection({
       emitWebviewTraceEvent('webviewMonitorEffectSkip', {
         reason: 'missing-session',
         portKey,
+      })
+      console.log('[monitor-webview] effect skip missing session', {
+        portKey,
+        hasSession: Boolean(session),
       })
       return
     }
@@ -232,6 +280,10 @@ export function useSerialMonitorConnection({
         portKey,
         status: session.status,
       })
+      console.log('[monitor-webview] effect skip paused/error', {
+        portKey,
+        status: session.status,
+      })
       return
     }
 
@@ -245,6 +297,9 @@ export function useSerialMonitorConnection({
         reason: 'already-attached-or-opening',
         portKey,
       })
+      console.log('[monitor-webview] effect skip already attached/opening', {
+        portKey,
+      })
       return
     }
 
@@ -252,6 +307,10 @@ export function useSerialMonitorConnection({
       if (lastAttemptRef.current === session.currentAttemptId) {
         emitWebviewTraceEvent('webviewMonitorEffectSkip', {
           reason: 'attempt-already-opened',
+          portKey,
+          attemptId: session.currentAttemptId,
+        })
+        console.log('[monitor-webview] effect skip attempt already opened', {
           portKey,
           attemptId: session.currentAttemptId,
         })
@@ -263,6 +322,7 @@ export function useSerialMonitorConnection({
         reason: 'no-open-required',
         portKey,
       })
+      console.log('[monitor-webview] effect skip no open required', { portKey })
       return
     }
 
@@ -273,6 +333,11 @@ export function useSerialMonitorConnection({
 
     const startStream = async () => {
       emitWebviewTraceEvent('webviewMonitorOpenStart', {
+        seq: mySeq,
+        portKey,
+        baudrate: selectedBaudrate,
+      })
+      console.log('[monitor-webview] open start', {
         seq: mySeq,
         portKey,
         baudrate: selectedBaudrate,
@@ -291,6 +356,10 @@ export function useSerialMonitorConnection({
           seq: mySeq,
           portKey,
         })
+        console.log('[monitor-webview] stream started', {
+          seq: mySeq,
+          portKey,
+        })
         attachedRef.current = true
         openingRef.current = false
         onStart()
@@ -299,6 +368,10 @@ export function useSerialMonitorConnection({
           const { value, done } = await reader.read()
           if (done) break
           if (value && value.length) {
+            console.log('[monitor-webview] stream chunk', {
+              portKey,
+              bytes: value.length,
+            })
             onText(decoder.decode(value, { stream: true }))
           }
         }
@@ -306,6 +379,10 @@ export function useSerialMonitorConnection({
           seq: mySeq,
           portKey,
           reason: 'done',
+        })
+        console.log('[monitor-webview] stream ended (done)', {
+          seq: mySeq,
+          portKey,
         })
         attachedRef.current = false
         onStop()
@@ -318,6 +395,10 @@ export function useSerialMonitorConnection({
             seq: mySeq,
             portKey,
             reason: 'aborted',
+          })
+          console.log('[monitor-webview] stream ended (aborted)', {
+            seq: mySeq,
+            portKey,
           })
           openingRef.current = false
           attachedRef.current = false
@@ -335,6 +416,13 @@ export function useSerialMonitorConnection({
           typeof error.status === 'number'
             ? error.status
             : undefined
+        console.log('[monitor-webview] open error', {
+          seq: mySeq,
+          portKey,
+          message,
+          code: errorCode,
+          status: errorStatus,
+        })
         emitWebviewTraceEvent('webviewMonitorOpenError', {
           seq: mySeq,
           portKey,
