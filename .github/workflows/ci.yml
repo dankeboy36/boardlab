@@ -53,10 +53,6 @@ jobs:
         env:
           DEBUG: semantic-release-next-version,semantic-release:*
 
-      - name: Get Short SHA
-        id: get_sha
-        run: echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-
   test:
     name: Test (${{ matrix.os }}, node-${{ matrix.node }})
     strategy:
@@ -118,7 +114,7 @@ jobs:
         run: npm run download:builtins
 
       - name: Set Version
-        run: npm pkg set version="${{ needs.determine-version.outputs.version }}-preview-${{ needs.determine-version.outputs.short_sha }}"
+        run: npm pkg set version="${{ needs.determine-version.outputs.version }}"
 
       - name: Package
         run: npm run package
