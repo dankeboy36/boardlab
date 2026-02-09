@@ -180,12 +180,6 @@
         "category": "BoardLab"
       },
       {
-        "command": "boardlab.tool.runFromTree",
-        "title": "Open Resource",
-        "icon": "$(go-to-file)",
-        "category": "BoardLab"
-      },
-      {
         "command": "boardlab.cloneSketch",
         "title": "Clone Sketch",
         "icon": "$(repo-clone)",
