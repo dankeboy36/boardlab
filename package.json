@@ -126,6 +126,12 @@
         "category": "BoardLab"
       },
       {
+        "command": "boardlab.compileWithDebugSymbols",
+        "title": "Compile with Debug Symbols",
+        "icon": "$(inspect)",
+        "category": "BoardLab"
+      },
+      {
         "command": "boardlab.openMonitor",
         "title": "Open Monitor",
         "icon": "$(terminal)",
@@ -1466,7 +1472,7 @@
         "properties": {
           "command": {
             "type": "string",
-            "description": "The BoardLab command to execute. Supported commands are 'compile', 'upload', 'burn-bootloader', 'export-binary', 'archive-sketch', 'upload-using-programmer', 'get-board-info', and 'reload-board-data'."
+            "description": "The BoardLab command to execute. Supported commands are 'compile', 'compile-with-debug-symbols', 'upload', 'upload-using-programmer', 'burn-bootloader', 'export-binary', 'archive-sketch', and 'get-board-info'."
           },
           "sketchPath": {
             "type": "string",
