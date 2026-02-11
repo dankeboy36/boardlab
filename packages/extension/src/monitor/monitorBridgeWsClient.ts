@@ -103,6 +103,7 @@ export class MonitorBridgeWsClient implements vscode.Disposable {
   private readonly subscriptions = new Map<string, SubscriptionState>()
   private readonly monitorIdsByPortKey = new Map<string, number>()
   private readonly monitorIdToPortKey = new Map<number, string>()
+  private readonly openPromisesByPortKey = new Map<string, Promise<void>>()
 
   private readonly onDataEmitter =
     new vscode.EventEmitter<MonitorBridgeWsDataEvent>()
@@ -129,6 +130,10 @@ export class MonitorBridgeWsClient implements vscode.Disposable {
     const existing = this.subscriptions.get(basePortKey)
     if (existing) {
       existing.count += 1
+      if (!this.monitorIdsByPortKey.has(basePortKey)) {
+        await this.ensureConnection()
+        await this.openAndSubscribe(basePortKey)
+      }
       return
     }
     this.subscriptions.set(basePortKey, {
@@ -139,8 +144,13 @@ export class MonitorBridgeWsClient implements vscode.Disposable {
       count: 1,
       portKey,
     })
-    await this.ensureConnection()
-    await this.openAndSubscribe(basePortKey)
+    try {
+      await this.ensureConnection()
+      await this.openAndSubscribe(basePortKey)
+    } catch (error) {
+      this.subscriptions.delete(basePortKey)
+      throw error
+    }
   }
 
   async unsubscribe(portKey: string): Promise<void> {
@@ -185,6 +195,21 @@ export class MonitorBridgeWsClient implements vscode.Disposable {
   }
 
   private async openAndSubscribe(basePortKey: string): Promise<void> {
+    const existingOpen = this.openPromisesByPortKey.get(basePortKey)
+    if (existingOpen) {
+      await existingOpen
+      return
+    }
+    const work = this.performOpenAndSubscribe(basePortKey).finally(() => {
+      if (this.openPromisesByPortKey.get(basePortKey) === work) {
+        this.openPromisesByPortKey.delete(basePortKey)
+      }
+    })
+    this.openPromisesByPortKey.set(basePortKey, work)
+    await work
+  }
+
+  private async performOpenAndSubscribe(basePortKey: string): Promise<void> {
     const entry = this.subscriptions.get(basePortKey)
     if (!entry) {
       return
@@ -225,6 +250,12 @@ export class MonitorBridgeWsClient implements vscode.Disposable {
   }
 
   private async closeMonitor(basePortKey: string): Promise<void> {
+    const pendingOpen = this.openPromisesByPortKey.get(basePortKey)
+    if (pendingOpen) {
+      try {
+        await pendingOpen
+      } catch {}
+    }
     const monitorId = this.monitorIdsByPortKey.get(basePortKey)
     if (!monitorId) {
       return
