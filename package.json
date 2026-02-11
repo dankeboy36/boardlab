@@ -757,18 +757,6 @@
             "advanced"
           ]
         },
-        "boardlab.monitor.transport": {
-          "type": "string",
-          "enum": [
-            "http",
-            "ws"
-          ],
-          "default": "http",
-          "markdownDescription": "Selects the transport used for monitor data streaming. Use 'ws' to enable the WebSocket data channel; keep 'http' for the legacy fetch-based stream.",
-          "tags": [
-            "advanced"
-          ]
-        },
         "boardlab.cli.daemonDebug": {
           "type": "boolean",
           "default": false,

@@ -1,6 +1,5 @@
 // @ts-check
 import { EventEmitter } from '@c4312/evt'
-import { createPortKey } from 'boards-list'
 import { nanoid } from 'nanoid'
 import defer from 'p-defer'
 import { CancellationTokenImpl, HOST_EXTENSION } from 'vscode-messenger-common'
@@ -16,8 +15,6 @@ import {
   notifyMonitorIntentStop,
   notifyMonitorOpenError,
   notifyMonitorSessionState,
-  notifyMonitorStreamData,
-  notifyMonitorStreamError,
   notifyMonitorViewDidChangeBaudrate,
   notifyMonitorViewDidChangeDetectedPorts,
   notifyMonitorViewDidChangeMonitorSettings,
@@ -309,7 +306,6 @@ export class MonitorClient {
     this._transport = new MessengerControlTransport(messenger)
     this._httpBaseUrl = new URL(httpBaseUrl)
     this._transportMode = 'http'
-    this._streamControllers = new Map()
 
     this._didChangeDetectedPorts = new EventEmitter()
     this._didChangeMonitorSettings = new EventEmitter()
@@ -337,14 +333,6 @@ export class MonitorClient {
       this._didChangeSessionState,
       this._transport.onDidChangeSessionState((payload) =>
         this._fireDidChangeSessionState(payload)
-      ),
-      messengerx.onNotification(messenger, notifyMonitorStreamData, (payload) =>
-        this._handleStreamData(payload)
-      ),
-      messengerx.onNotification(
-        messenger,
-        notifyMonitorStreamError,
-        (payload) => this._handleStreamError(payload)
       ),
     ]
 
@@ -466,9 +454,6 @@ export class MonitorClient {
         console.error('Failed to dispose monitor client listener', error)
       }
     }
-    for (const portKey of this._streamControllers.keys()) {
-      this._closeStream(portKey)
-    }
     this._transport.dispose()
   }
 
@@ -571,9 +556,6 @@ export class MonitorClient {
       protocol,
       baudrate,
     })
-    if (this._transportMode === 'ws') {
-      return this._openWsMonitor(port, options)
-    }
     const dataUrl = this._createHttpUrl('/monitor')
     dataUrl.searchParams.set('protocol', protocol)
     dataUrl.searchParams.set('address', address)
@@ -615,37 +597,6 @@ export class MonitorClient {
       throw new Error('No reader available for response body')
     }
 
-    return reader
-  }
-
-  /**
-   * @param {import('boards-list').PortIdentifier} port
-   * @param {{ signal?: AbortSignal }} [options]
-   */
-  _openWsMonitor(port, options = {}) {
-    const portKey = createPortKey(port)
-    this._closeStream(portKey)
-    const stream = new ReadableStream({
-      start: (controller) => {
-        this._streamControllers.set(portKey, controller)
-      },
-      cancel: () => {
-        this._streamControllers.delete(portKey)
-      },
-    })
-    const reader = stream.getReader()
-    const { signal } = options
-    if (signal) {
-      const abortHandler = () => {
-        this._closeStream(portKey)
-        signal.removeEventListener('abort', abortHandler)
-      }
-      if (signal.aborted) {
-        abortHandler()
-      } else {
-        signal.addEventListener('abort', abortHandler)
-      }
-    }
     return reader
   }
 
@@ -741,67 +692,5 @@ export class MonitorClient {
   /** @param {import('@boardlab/protocol').MonitorSessionState} payload */
   _fireDidChangeSessionState(payload) {
     this._didChangeSessionState.fire(payload)
-  }
-
-  _closeStream(portKey, error) {
-    const controller = this._streamControllers.get(portKey)
-    if (!controller) {
-      return
-    }
-    this._streamControllers.delete(portKey)
-    try {
-      if (error) {
-        controller.error(error)
-      } else {
-        controller.close()
-      }
-    } catch (err) {
-      console.warn('[MonitorClient] Failed to close stream', err)
-    }
-  }
-
-  _handleStreamData(payload) {
-    if (!payload || typeof payload.portKey !== 'string') {
-      return
-    }
-    const controller = this._streamControllers.get(payload.portKey)
-    if (!controller) {
-      return
-    }
-    const data = payload.data
-    let chunk
-    if (data instanceof Uint8Array) {
-      chunk = data
-    } else if (data instanceof ArrayBuffer) {
-      chunk = new Uint8Array(data)
-    } else if (ArrayBuffer.isView(data)) {
-      chunk = new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
-    } else if (Array.isArray(data)) {
-      chunk = new Uint8Array(data)
-    }
-    if (!chunk) {
-      return
-    }
-    try {
-      controller.enqueue(chunk)
-    } catch (error) {
-      console.warn('[MonitorClient] Failed to enqueue monitor data', error)
-    }
-  }
-
-  _handleStreamError(payload) {
-    if (!payload || typeof payload.portKey !== 'string') {
-      return
-    }
-    const message =
-      typeof payload.message === 'string'
-        ? payload.message
-        : 'Monitor stream error'
-    const error = Object.assign(new Error(message), {
-      code: payload.code,
-      status: payload.status,
-      source: 'bridge',
-    })
-    this._closeStream(payload.portKey, error)
   }
 }
