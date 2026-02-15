@@ -431,4 +431,94 @@ describe('MonitorManager (in-process bridge)', function () {
       await mockBridge.dispose()
     }
   })
+
+  it('auto-resolves baudrate for extension-host monitor clients', async () => {
+    const mockBridge = new MockCliBridge()
+    const messenger = new TestMessenger()
+    const extensionPath = path.resolve(__dirname, '..', '..', '..', '..')
+    const context: vscode.ExtensionContext = {
+      extensionPath,
+      subscriptions: [],
+      workspaceState: new TestMemento(),
+      globalState: new TestMemento(),
+    } as unknown as vscode.ExtensionContext
+    const cliContext: CliContext = {
+      resolveExecutablePath: async () => '/tmp/mock-cli',
+    } as unknown as CliContext
+    const outputChannel: vscode.OutputChannel = {
+      name: 'BoardLab',
+      append: () => undefined,
+      appendLine: () => undefined,
+      replace: () => undefined,
+      clear: () => undefined,
+      show: () => undefined,
+      hide: () => undefined,
+      dispose: () => undefined,
+    } as unknown as vscode.OutputChannel
+
+    const managerOptions: MonitorManagerOptions = {
+      serviceClientOptions: {
+        mode: 'in-process',
+        preferredPort: 0,
+        inProcessServerFactory: async ({ port }) =>
+          createServer({
+            port,
+            cliBridgeFactory: () => mockBridge as any,
+            debug: false,
+            testIntrospection: true,
+          } as any),
+      },
+    }
+
+    const monitorManager = new MonitorManager(
+      context,
+      cliContext,
+      messenger as unknown as Messenger,
+      outputChannel,
+      managerOptions
+    )
+
+    try {
+      const targetPort: PortIdentifier = {
+        protocol: 'serial',
+        address: '/dev/tty.usbmock-1',
+      }
+      let seenData = 0
+      const dataDisposable = monitorManager.onDidReceiveMonitorData((event) => {
+        if (
+          event.port.protocol === targetPort.protocol &&
+          event.port.address === targetPort.address
+        ) {
+          seenData += 1
+        }
+      })
+
+      monitorManager.registerExternalMonitorClient(
+        'ext-client-default-baud',
+        targetPort
+      )
+
+      await waitFor(
+        () => monitorManager.getMonitorState(targetPort) === 'running'
+      )
+      await waitFor(() => seenData > 0)
+      assert.strictEqual(
+        monitorManager.getCachedBaudrate(targetPort),
+        '9600'
+      )
+
+      monitorManager.unregisterExternalMonitorClient(
+        'ext-client-default-baud',
+        targetPort
+      )
+      await waitFor(
+        () => monitorManager.getMonitorState(targetPort) === 'disconnected'
+      )
+
+      dataDisposable.dispose()
+    } finally {
+      monitorManager.dispose()
+      await mockBridge.dispose()
+    }
+  })
 })

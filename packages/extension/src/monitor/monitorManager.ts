@@ -1269,9 +1269,11 @@ export class MonitorManager implements vscode.Disposable {
         this.pruneSessionIfIdle(previousPortKey, previousSession)
       }
     }
-    if (options?.baudrate) {
-      this.selectedBaudrateCache.set(portKey, options.baudrate)
-      session.setBaudrate(options.baudrate)
+    const resolvedBaudrate =
+      options?.baudrate ?? this.resolveDefaultBaudrateForPort(port)
+    if (resolvedBaudrate) {
+      this.selectedBaudrateCache.set(portKey, resolvedBaudrate)
+      session.setBaudrate(resolvedBaudrate)
     }
     this.clientPorts.set(clientId, portKey)
     if (options?.autoStart !== false) {
@@ -1702,8 +1704,12 @@ export class MonitorManager implements vscode.Disposable {
         const url = new URL(`${info.httpBaseUrl}/monitor`)
         url.searchParams.set('protocol', streamPort.protocol)
         url.searchParams.set('address', streamPort.address)
-        const baudrate = this.selectedBaudrateCache.get(portKey)
+        const baudrate =
+          this.selectedBaudrateCache.get(portKey) ??
+          this.resolveDefaultBaudrateForPort(streamPort)
         if (baudrate) {
+          this.selectedBaudrateCache.set(portKey, baudrate)
+          this.portSessions.get(portKey)?.setBaudrate(baudrate)
           url.searchParams.set('baudrate', baudrate)
         }
         url.searchParams.set('clientid', clientId)
@@ -2207,6 +2213,25 @@ export class MonitorManager implements vscode.Disposable {
       return
     }
     this.selectedBaudrateCache.set(createPortKey(port), baudrate)
+  }
+
+  private resolveDefaultBaudrateForPort(
+    port: PortIdentifier
+  ): string | undefined {
+    const portKey = createPortKey(port)
+    const cached = this.selectedBaudrateCache.get(portKey)
+    if (cached) {
+      return cached
+    }
+    const settings = this.monitorSettingsByProtocol.protocols[port.protocol]
+    if (!settings || settings.error || !Array.isArray(settings.settings)) {
+      return undefined
+    }
+    const descriptor = settings.settings.find(
+      (setting: { settingId?: string; value?: string }) =>
+        setting.settingId === 'baudrate' && typeof setting.value === 'string'
+    )
+    return descriptor?.value
   }
 
   private log(message: string, data?: unknown): void {
