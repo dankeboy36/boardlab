@@ -1479,7 +1479,7 @@
       }
     ],
     "views": {
-      "boardlabSketches": [
+      "boardlabPanel": [
         {
           "id": "boardlab.currentSketch",
           "name": "Current Sketch",
@@ -1498,18 +1498,14 @@
           "contextualTitle": "Examples",
           "icon": "$(book)",
           "type": "webview"
-        }
-      ],
-      "boardlabPlatforms": [
+        },
         {
           "id": "boardlab.platformsManager",
           "type": "webview",
           "name": "Boards Manager",
           "contextualTitle": "Boards Manager",
           "icon": "$(package)"
-        }
-      ],
-      "boardlabLibraries": [
+        },
         {
           "id": "boardlab.librariesManager",
           "type": "webview",
@@ -1522,19 +1518,9 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "title": "Sketches",
-          "id": "boardlabSketches",
+          "title": "BoardLab",
+          "id": "boardlabPanel",
           "icon": "$(file-submodule)"
-        },
-        {
-          "title": "Boards",
-          "id": "boardlabPlatforms",
-          "icon": "$(package)"
-        },
-        {
-          "title": "Libraries",
-          "id": "boardlabLibraries",
-          "icon": "$(library)"
         }
       ]
     },
