@@ -502,10 +502,7 @@ describe('MonitorManager (in-process bridge)', function () {
         () => monitorManager.getMonitorState(targetPort) === 'running'
       )
       await waitFor(() => seenData > 0)
-      assert.strictEqual(
-        monitorManager.getCachedBaudrate(targetPort),
-        '9600'
-      )
+      assert.strictEqual(monitorManager.getCachedBaudrate(targetPort), '9600')
 
       monitorManager.unregisterExternalMonitorClient(
         'ext-client-default-baud',
