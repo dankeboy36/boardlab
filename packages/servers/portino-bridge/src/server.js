@@ -26,15 +26,15 @@ import {
   NotifyMonitorDidStart,
   NotifyMonitorDidStop,
   NotifyTraceEvent,
+  RequestClientConnect,
+  RequestDetectedPorts,
   RequestMonitorClose,
   RequestMonitorOpen,
   RequestMonitorSubscribe,
   RequestMonitorUnsubscribe,
   RequestMonitorWrite,
-  RequestPortinoHello,
-  RequestClientConnect,
-  RequestDetectedPorts,
   RequestPauseMonitor,
+  RequestPortinoHello,
   RequestResumeMonitor,
   RequestSendMonitorMessage,
   RequestUpdateBaudrate,
@@ -438,6 +438,29 @@ class BridgeWebSocketLogger {
   log(...args) {
     this.baseConsole.log(...args)
   }
+}
+
+/**
+ * @param {unknown} error
+ * @returns {string}
+ */
+function toClientRpcErrorMessage(error) {
+  const raw = String(error instanceof Error ? error?.message : (error ?? ''))
+  return raw
+    .replace(/reason\s*=\s*,,+/gi, 'reason = (none)')
+    .replace(/,+\s*$/g, '')
+    .trim()
+}
+
+/**
+ * Treat socket reconnect failures with close-code 1005/1006 as expected
+ * teardown noise (for example when the extension host/debug session exits).
+ *
+ * @param {string} message
+ * @returns {boolean}
+ */
+function isExpectedClientRpcDisconnect(message) {
+  return /Error during socket reconnect:\s*code\s*=\s*100[56]\b/i.test(message)
 }
 
 // TODO: create .d.ts from these, import them in the extension code
@@ -2743,9 +2766,16 @@ export async function createServer(options = {}) {
     ]
     disposables.push(
       messageConnection.onError((error) => {
+        const message = toClientRpcErrorMessage(error)
+        if (
+          portinoConnection.closed ||
+          isExpectedClientRpcDisconnect(message)
+        ) {
+          return
+        }
         bridgeLog('warn', 'Client rpc error', {
           clientId: portinoConnection.clientId,
-          message: String(error instanceof Error ? error?.message : error),
+          message,
         })
       })
     )
