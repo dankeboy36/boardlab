@@ -49,7 +49,7 @@ describe('toBoardQuickPickItems (history + search interaction)', () => {
     const pinned: BoardIdentifier[] = [uno]
     const recent: BoardIdentifier[] = [uno]
 
-    const items = toBoardQuickPickItems(
+    const items = await toBoardQuickPickItems(
       boardsList,
       searchResults.slice(),
       pinned,
@@ -71,7 +71,7 @@ describe('toBoardQuickPickItems (history + search interaction)', () => {
     const pinned: BoardIdentifier[] = [uno]
     const recent: BoardIdentifier[] = [uno]
 
-    const items = toBoardQuickPickItems(
+    const items = await toBoardQuickPickItems(
       boardsList,
       searchResults.slice(),
       pinned,
@@ -81,5 +81,20 @@ describe('toBoardQuickPickItems (history + search interaction)', () => {
     const labels = labelsOf(items)
     const unoCount = labels.filter((label) => label === 'Arduino Uno').length
     expect(unoCount).toBe(1)
+  })
+
+  it('hides attached section when attached boards are filtered out', async () => {
+    const { toBoardQuickPickItems } = await loadBoardsModule()
+
+    const uno = createBoardIdentifier('Arduino Uno', 'arduino:avr:uno')
+    const boardsList = createBoardsList([uno])
+
+    const items = await toBoardQuickPickItems(boardsList, undefined, [], [], {
+      filters: [({ board }) => !!board.fqbn && board.fqbn.includes(':esp32:')],
+    })
+
+    const labels = labelsOf(items)
+    expect(labels).not.toContain('attached boards')
+    expect(labels).toContain('No matching results')
   })
 })

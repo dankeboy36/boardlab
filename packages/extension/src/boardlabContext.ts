@@ -11,7 +11,6 @@ import {
 import {
   BoardIdentifier,
   BoardsConfig,
-  BoardsListItemWithBoard,
   Defined,
   PortIdentifier,
   boardIdentifierEquals,
@@ -47,6 +46,8 @@ import {
 
 import { findBoardHistoryMatches, matchBoardByName } from './boardNameMatch'
 import {
+  BoardPickOptions,
+  PickBoardResult,
   PlatformNotInstalledError,
   ensureBoardDetails,
   getBoardDetails,
@@ -76,7 +77,7 @@ import {
   matchesPlatformId,
   toUnresolvedBoard,
 } from './platformUtils'
-import { pickPort } from './ports'
+import { PortPickOptions, pickPort } from './ports'
 import { readProfiles } from './profile/profiles'
 import { LibrariesManager, PlatformsManager } from './resourcesManager'
 import { ConfigOptionItem } from './sketch/currentSketchView'
@@ -88,7 +89,7 @@ import {
   hasSketchFolder,
   sketchPathEquals,
 } from './sketch/sketchbooks'
-import { pickSketch } from './sketch/sketches'
+import { SketchPickOptions, pickSketch } from './sketch/sketches'
 import { Sketch } from './sketch/types'
 import { BaseRecentItems, RecentItems, disposeAll, mementoKey } from './utils'
 
@@ -143,6 +144,36 @@ export interface BoardLabContext extends ArduinoContext {
   readonly monitorsRegistry: MonitorsRegistry
   readonly extensionUri: vscode.Uri
   readonly outputChannel: vscode.OutputChannel
+  pickSketch(options?: SketchPickOptions): Promise<SketchFolder | undefined>
+  selectSketch(options?: SketchPickOptions): Promise<SketchFolder | undefined>
+  pickBoard(
+    currentSketchOrOptions?: SketchFolder | BoardPickOptions | undefined,
+    options?: BoardPickOptions
+  ): Promise<PickBoardResult | undefined>
+  selectBoard(
+    currentSketchOrOptions?:
+      | SketchFolder
+      | Promise<SketchFolder | undefined>
+      | BoardPickOptions
+      | undefined,
+    options?: BoardPickOptions
+  ): Promise<PickBoardResult | undefined>
+  setBoardByFqbn(
+    fqbn: string | FQBN,
+    currentSketch?: SketchFolder | Promise<SketchFolder | undefined> | undefined
+  ): Promise<ApiBoardDetails | undefined>
+  pickPort(
+    currentSketchOrOptions?: SketchFolder | PortPickOptions | undefined,
+    options?: PortPickOptions
+  ): Promise<SketchPort>
+  selectPort(
+    currentSketchOrOptions?:
+      | SketchFolder
+      | Promise<SketchFolder | undefined>
+      | PortPickOptions
+      | undefined,
+    options?: PortPickOptions
+  ): Promise<SketchPort>
   createMonitorClient(
     port: PortIdentifier,
     options?: { autoStart?: boolean; baudrate?: string }
@@ -236,6 +267,32 @@ export interface MonitorSuspensionResult {
 
 type SketchPort = SketchFolder['port']
 type SelectedPort = NonNullable<SketchPort>
+
+function isPromiseLike<T = unknown>(arg: unknown): arg is PromiseLike<T> {
+  return (
+    (typeof arg === 'object' || typeof arg === 'function') &&
+    arg !== null &&
+    typeof (arg as PromiseLike<T>).then === 'function'
+  )
+}
+
+function isBoardPickOptions(arg: unknown): arg is BoardPickOptions {
+  return (
+    typeof arg === 'object' &&
+    arg !== null &&
+    !(arg instanceof SketchFolderImpl) &&
+    !isPromiseLike(arg)
+  )
+}
+
+function isPortPickOptions(arg: unknown): arg is PortPickOptions {
+  return (
+    typeof arg === 'object' &&
+    arg !== null &&
+    !(arg instanceof SketchFolderImpl) &&
+    !isPromiseLike(arg)
+  )
+}
 
 export function createBoardLabContext(
   context: vscode.ExtensionContext,
@@ -1044,17 +1101,31 @@ export class BoardLabContextImpl implements BoardLabContext {
     return false
   }
 
-  async selectSketch(): Promise<SketchFolder | undefined> {
-    const sketch = await pickSketch(
+  async pickSketch(
+    options?: SketchPickOptions
+  ): Promise<SketchFolder | undefined> {
+    const selected = await pickSketch(
       this.sketchbooks,
       this.pinnedSketches,
-      this.recentSketches
+      this.recentSketches,
+      options
     )
-    if (sketch) {
-      await this.updateCurrentSketch(sketch)
-      return this.currentSketch
+    if (!selected) {
+      return undefined
     }
-    return undefined
+    const { arduino } = await this.client
+    return this.sketchbooks.resolve(selected, arduino)
+  }
+
+  async selectSketch(
+    options?: SketchPickOptions
+  ): Promise<SketchFolder | undefined> {
+    const sketch = await this.pickSketch(options)
+    if (!sketch) {
+      return undefined
+    }
+    await this.updateCurrentSketch(sketch.sketchPath)
+    return this.currentSketch
   }
 
   async updateCompileSummary(
@@ -1145,8 +1216,16 @@ export class BoardLabContextImpl implements BoardLabContext {
   }
 
   async pickPort(
-    currentSketch: SketchFolder | undefined = this.currentSketch
+    currentSketchOrOptions: SketchFolder | PortPickOptions | undefined = this
+      .currentSketch,
+    maybeOptions?: PortPickOptions
   ): Promise<SketchPort> {
+    const currentSketch = isPortPickOptions(currentSketchOrOptions)
+      ? this.currentSketch
+      : currentSketchOrOptions
+    const options = isPortPickOptions(currentSketchOrOptions)
+      ? currentSketchOrOptions
+      : maybeOptions
     if (!currentSketch) {
       return undefined
     }
@@ -1154,22 +1233,30 @@ export class BoardLabContextImpl implements BoardLabContext {
       () => this.boardsListWatcher.detectedPorts,
       this.boardsListWatcher.onDidChangeDetectedPorts,
       this.pinnedPorts,
-      this.recentPorts
+      this.recentPorts,
+      options
     )
     return port
   }
 
   async selectPort(
-    currentSketch:
+    currentSketchOrOptions:
       | SketchFolder
       | Promise<SketchFolder | undefined>
-      | undefined = this.currentSketch ?? this.selectSketch()
+      | PortPickOptions
+      | undefined = this.currentSketch ?? this.selectSketch(),
+    maybeOptions?: PortPickOptions
   ): Promise<SketchPort> {
-    const sketch = await currentSketch
+    const sketch = await (isPortPickOptions(currentSketchOrOptions)
+      ? (this.currentSketch ?? this.selectSketch())
+      : currentSketchOrOptions)
     if (!(sketch instanceof SketchFolderImpl)) {
       return undefined
     }
-    const port = await this.pickPort(sketch)
+    const options = isPortPickOptions(currentSketchOrOptions)
+      ? currentSketchOrOptions
+      : maybeOptions
+    const port = await this.pickPort(sketch, options)
     if (!port) {
       return undefined
     }
@@ -1179,14 +1266,22 @@ export class BoardLabContextImpl implements BoardLabContext {
   }
 
   async pickBoard(
-    currentSketch: SketchFolder | undefined = this.currentSketch
-  ): Promise<BoardsListItemWithBoard | BoardIdentifier | undefined> {
+    currentSketchOrOptions: SketchFolder | BoardPickOptions | undefined = this
+      .currentSketch,
+    maybeOptions?: BoardPickOptions
+  ): Promise<PickBoardResult | undefined> {
+    const currentSketch = isBoardPickOptions(currentSketchOrOptions)
+      ? this.currentSketch
+      : currentSketchOrOptions
+    const options = isBoardPickOptions(currentSketchOrOptions)
+      ? currentSketchOrOptions
+      : maybeOptions
     if (!currentSketch) {
       return undefined
     }
     const boardsConfig: BoardsConfig = {
-      selectedBoard: this.currentSketch?.board,
-      selectedPort: this.currentSketch?.port,
+      selectedBoard: currentSketch.board,
+      selectedPort: currentSketch.port,
     }
     const { arduino } = await this.client
     return pickBoard(
@@ -1194,8 +1289,9 @@ export class BoardLabContextImpl implements BoardLabContext {
       boardsConfig,
       this.boardsListWatcher.detectedPorts,
       this.boardsListWatcher.onDidChangeDetectedPorts,
+      this.recentBoards,
       this.pinnedBoards,
-      this.recentBoards
+      options
     )
   }
 
@@ -1241,17 +1337,50 @@ export class BoardLabContextImpl implements BoardLabContext {
     }
   }
 
-  async selectBoard(
+  async setBoardByFqbn(
+    fqbn: string | FQBN,
     currentSketch:
       | SketchFolder
       | Promise<SketchFolder | undefined>
       | undefined = this.currentSketch ?? this.selectSketch()
-  ): Promise<BoardsListItemWithBoard | BoardIdentifier | undefined> {
+  ): Promise<ApiBoardDetails | undefined> {
     const sketch = await currentSketch
     if (!(sketch instanceof SketchFolderImpl)) {
       return undefined
     }
-    const picked = await this.pickBoard(sketch)
+    const boardDetails = await this.getBoardDetails(fqbn)
+    sketch.setBoard(boardDetails)
+    const parsed = typeof fqbn === 'string' ? new FQBN(fqbn) : fqbn
+    const hasOptions = parsed.options && Object.keys(parsed.options).length > 0
+    sketch.setConfigOptions(hasOptions ? parsed.toString() : undefined)
+    this.emitSketchChange(sketch, 'board', 'configOptions')
+
+    this.messenger.sendNotification(
+      notifyDidChangeSelectedBoard,
+      { type: 'webview', webviewType: 'boardlab.examples' },
+      boardDetails
+    )
+    return boardDetails
+  }
+
+  async selectBoard(
+    currentSketchOrOptions:
+      | SketchFolder
+      | Promise<SketchFolder | undefined>
+      | BoardPickOptions
+      | undefined = this.currentSketch ?? this.selectSketch(),
+    maybeOptions?: BoardPickOptions
+  ): Promise<PickBoardResult | undefined> {
+    const sketch = await (isBoardPickOptions(currentSketchOrOptions)
+      ? (this.currentSketch ?? this.selectSketch())
+      : currentSketchOrOptions)
+    if (!(sketch instanceof SketchFolderImpl)) {
+      return undefined
+    }
+    const options = isBoardPickOptions(currentSketchOrOptions)
+      ? currentSketchOrOptions
+      : maybeOptions
+    const picked = await this.pickBoard(sketch, options)
     if (!picked) {
       return undefined
     }
@@ -1329,19 +1458,14 @@ export class BoardLabContextImpl implements BoardLabContext {
       board
     )
 
-    return board
+    return picked
   }
 
   async applyBoardSettingsFromFqbn(
     sketch: SketchFolderImpl,
     fqbn: string
   ): Promise<void> {
-    const boardDetails = await this.getBoardDetails(fqbn)
-    sketch.setBoard(boardDetails)
-    const parsed = new FQBN(fqbn)
-    const hasOptions = parsed.options && Object.keys(parsed.options).length > 0
-    sketch.setConfigOptions(hasOptions ? parsed.toString() : undefined)
-    this.emitSketchChange(sketch, 'board', 'configOptions')
+    await this.setBoardByFqbn(fqbn, sketch)
   }
 
   async pickProgrammer(
