@@ -1635,6 +1635,7 @@
     "theme": "light"
   },
   "preview": true,
+  "markdown": "github",
   "extensionKind": [
     "ui"
   ]
