@@ -2204,22 +2204,7 @@ export function activate(context: vscode.ExtensionContext) {
     platformsViewProvider.onDidResolve(() => pushPlatformsFilter())
   )
 
-  let bridgeModeReloadPrompted = false
   let daemonDebugReloadPrompted = false
-  const promptBridgeModeReload = async () => {
-    if (bridgeModeReloadPrompted) {
-      return
-    }
-    bridgeModeReloadPrompted = true
-    const choice = await vscode.window.showInformationMessage(
-      'BoardLab needs to reload the window to apply the monitor bridge mode change.',
-      'Reload now',
-      'Later'
-    )
-    if (choice === 'Reload now') {
-      await vscode.commands.executeCommand('workbench.action.reloadWindow')
-    }
-  }
   const promptDaemonDebugReload = async () => {
     if (daemonDebugReloadPrompted) {
       return
@@ -2237,9 +2222,6 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration('boardlab.monitor.bridgeMode')) {
-        promptBridgeModeReload()
-      }
       if (event.affectsConfiguration('boardlab.monitor.bridgeLogHeartbeat')) {
         const config = vscode.workspace.getConfiguration('boardlab.monitor')
         const enabled = config.get<boolean>('bridgeLogHeartbeat', false)
