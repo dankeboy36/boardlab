@@ -491,7 +491,7 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
         const { arduino } = await this.boardlabContext.client
         const ok = await this.validateSketchProfile(resolvedTask.sketchPath)
         if (!ok) {
-          throw new Error('Profile validation failed')
+          return this.createValidationFailurePty()
         }
         const detectedPorts =
           this.boardlabContext.boardsListWatcher.detectedPorts
@@ -546,7 +546,7 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
         const { arduino } = await this.boardlabContext.client
         const ok = await this.validateSketchProfile(resolvedTask.sketchPath)
         if (!ok) {
-          throw new Error('Profile validation failed')
+          return this.createValidationFailurePty()
         }
         const detectedPorts =
           this.boardlabContext.boardsListWatcher.detectedPorts
@@ -602,7 +602,7 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
       // Pre-validate sketch profile (if present)
       const ok = await this.validateSketchProfile(resolvedTask.sketchPath)
       if (!ok) {
-        throw new Error('Profile validation failed')
+        return this.createValidationFailurePty()
       }
       const compileConfig =
         vscode.workspace.getConfiguration('boardlab.compile')
@@ -699,7 +699,7 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
         const { arduino } = await this.boardlabContext.client
         const ok = await this.validateSketchProfile(resolvedTask.sketchPath)
         if (!ok) {
-          throw new Error('Profile validation failed')
+          return this.createValidationFailurePty()
         }
         const detectedPorts =
           this.boardlabContext.boardsListWatcher.detectedPorts
@@ -775,6 +775,37 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
       return true
     } catch {
       return true
+    }
+  }
+
+  private createValidationFailurePty(
+    message = 'Sketch profile has validation errors. Fix issues before running tasks.'
+  ): vscode.Pseudoterminal {
+    const emitter = new vscode.EventEmitter<string>()
+    const closeEmitter = new vscode.EventEmitter<void | number>()
+    let closed = false
+
+    const finalize = (code?: number) => {
+      if (closed) {
+        return
+      }
+      closed = true
+      closeEmitter.fire(code)
+      emitter.dispose()
+      closeEmitter.dispose()
+    }
+
+    return {
+      onDidWrite: emitter.event,
+      onDidClose: closeEmitter.event,
+      open: () => {
+        if (closed) {
+          return
+        }
+        emitter.fire(red(terminalEOL(`${message}\n`)))
+        finalize(1)
+      },
+      close: () => finalize(),
     }
   }
 
@@ -1226,7 +1257,7 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
   }
 
   private async statusText(): Promise<string> {
-    const icon = '$(dashboard)'
+    const icon = '$(boardlab-icon)'
     const currentSketch = this.boardlabContext.currentSketch
     if (!currentSketch) {
       return `${icon} BoardLab`

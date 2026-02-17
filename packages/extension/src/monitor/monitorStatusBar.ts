@@ -74,17 +74,23 @@ export class MonitorStatusBar implements vscode.Disposable {
       ? `${icon} Monitor - ${portLabel}`
       : `${icon} Monitor`
     this.statusBarItem.tooltip = isSuspended
-      ? 'Monitor suspended on current port (upload in progress).'
-      : 'Monitor running on current port.'
+      ? 'Monitor suspended (upload in progress).'
+      : 'Monitor running.'
     this.statusBarItem.show()
   }
 
   private currentPort(): PortIdentifier | undefined {
-    const port = this.boardlabContext.currentSketch?.port
-    if (!port?.protocol || !port.address) {
+    const sketchPort = this.boardlabContext.currentSketch?.port
+    if (sketchPort?.protocol && sketchPort.address) {
+      return { protocol: sketchPort.protocol, address: sketchPort.address }
+    }
+
+    const running = this.boardlabContext.monitorManager.getRunningMonitors()
+    const fallback = running[0]?.port
+    if (!fallback?.protocol || !fallback.address) {
       return undefined
     }
-    return { protocol: port.protocol, address: port.address }
+    return { protocol: fallback.protocol, address: fallback.address }
   }
 
   private formatPortLabel(port: PortIdentifier): string {

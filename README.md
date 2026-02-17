@@ -2,6 +2,25 @@
 
 Vendor-independent board development for Visual Studio Code, powered by Arduino CLI.
 
+> [!WARNING]
+> **BoardLab is in early alpha.**
+>
+> APIs, UX details, and configuration may change without notice.
+> If you need a production-stable Arduino IDE experience today, please use Arduino IDE 2.x.
+> BoardLab is for early adopters, contributors, and power users who want to help shape the future of vendor-independent board development in Visual Studio Code.
+>
+> ---
+>
+> ### Community Feedback
+>
+> > "BoardLab" is another extension that makes VS Code into a full Arduino IDE equivalent. It is a very young project still in the alpha development phase. However, it is quite notable because it was created by @dankeboy36, who is the same person who brought us the "ESP Exception Decoder" extension for Arduino IDE 2.x, as well as other very significant and high quality contributions to the Arduino ecosystem.
+> >
+> > — @ptillisch, [Arduino Forum](https://forum.arduino.cc/t/problems-installing-vscode-and-platformio/1424230/12#p-8356780-boardlab-7)
+>
+> BoardLab is being built in public. Early feedback — positive and critical — is welcomed.
+
+---
+
 BoardLab for Visual Studio Code aims to be feature-complete with Arduino IDE 2.x, while staying fully open, power-user friendly, and strictly native to VS Code's UX.
 
 All builds, uploads, board management, library management, and metadata are handled by the official Arduino CLI.

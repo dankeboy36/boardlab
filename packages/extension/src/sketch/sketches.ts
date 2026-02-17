@@ -3,6 +3,10 @@ import { basename, relative } from 'path'
 import * as vscode from 'vscode'
 
 import {
+  matchesQuickPickConstraints,
+  type QuickPickConstraints,
+} from '../quickPickConstraints'
+import {
   InmemoryRecentItems,
   QuickInputNoopLabel,
   RecentItems,
@@ -15,19 +19,39 @@ import { Sketch } from './types'
 /** `items` are main sketch file URI strings. */
 export class InmemoryRecentSketches extends InmemoryRecentItems<string> {}
 
+export interface SketchPickOptions extends QuickPickConstraints<Sketch> {}
+
 export async function pickSketch(
   sketchbooks: Sketchbooks,
   pinnedItems: RecentItems<string> = noopRecentItems(),
-  recentItems: RecentItems<string> = noopRecentItems()
+  recentItems: RecentItems<string> = noopRecentItems(),
+  options: SketchPickOptions = {}
 ): Promise<Sketch | undefined> {
   const toDispose: vscode.Disposable[] = []
   const input = vscode.window.createQuickPick()
-  const updateInput = (): unknown =>
-    (input.items = toSketchQuickPickItem(
-      sketchbooks,
-      pinnedItems.items,
-      recentItems.items
-    ))
+  let updateToken = 0
+  const updateInput = (): void => {
+    const currentToken = ++updateToken
+    ;(async () => {
+      input.busy = true
+      try {
+        const items = await toSketchQuickPickItem(
+          sketchbooks,
+          pinnedItems.items,
+          recentItems.items,
+          options
+        )
+        if (currentToken !== updateToken) {
+          return
+        }
+        input.items = items
+      } finally {
+        if (currentToken === updateToken) {
+          input.busy = false
+        }
+      }
+    })()
+  }
   // https://github.com/microsoft/vscode/issues/73904#issuecomment-680298036
 
   ;(input as any).sortByLabel = false
@@ -38,21 +62,24 @@ export async function pickSketch(
   try {
     const selected = await new Promise<Sketch | undefined>((resolve) => {
       updateInput()
-      input.busy = false
       toDispose.push(
         input.onDidChangeSelection((items) => {
-          const item = items[0]
-          if (item instanceof QuickInputNoopLabel) {
-            return
-          }
-          if (item instanceof SketchQuickPickItem) {
-            resolve(item.sketch)
-          }
-          if (item instanceof CreateSketchQuickPickItem) {
-            vscode.commands.executeCommand('boardlab.openNewSketchWizard')
-            resolve(undefined)
-          }
-          input.hide()
+          ;(async () => {
+            const item = items[0]
+            if (item instanceof QuickInputNoopLabel) {
+              return
+            }
+            if (item instanceof SketchQuickPickItem) {
+              resolve(item.sketch)
+              input.hide()
+              return
+            }
+            if (item instanceof CreateSketchQuickPickItem) {
+              vscode.commands.executeCommand('boardlab.openNewSketchWizard')
+              resolve(undefined)
+              input.hide()
+            }
+          })()
         }),
         input.onDidHide(() => {
           resolve(undefined)
@@ -69,12 +96,14 @@ export async function pickSketch(
   }
 }
 
-function toSketchQuickPickItem(
+async function toSketchQuickPickItem(
   sketchbooks: Sketchbooks,
-  pinnedSketches: string[],
-  recentSketches: string[]
-): vscode.QuickPickItem[] {
+  _pinnedSketches: string[],
+  _recentSketches: string[],
+  options: SketchPickOptions
+): Promise<vscode.QuickPickItem[]> {
   const quickItems: vscode.QuickPickItem[] = []
+  let hasAnySketch = false
   for (const [uri, sketchbook] of sketchbooks.all().entries()) {
     const sketchbookUri = vscode.Uri.parse(uri)
     if (!vscode.workspace.getWorkspaceFolder(sketchbookUri)) {
@@ -82,13 +111,23 @@ function toSketchQuickPickItem(
     }
     const sketchbookPath = sketchbookUri.fsPath
     if (sketchbook.sketches.length) {
-      quickItems.push({
-        kind: vscode.QuickPickItemKind.Separator,
-        label: basename(sketchbookPath),
-      })
+      hasAnySketch = true
     }
+    const filteredSketches: Sketch[] = []
+    for (const sketch of sketchbook.sketches) {
+      if (await matchesQuickPickConstraints(sketch, options)) {
+        filteredSketches.push(sketch)
+      }
+    }
+    if (!filteredSketches.length) {
+      continue
+    }
+    quickItems.push({
+      kind: vscode.QuickPickItemKind.Separator,
+      label: basename(sketchbookPath),
+    })
     quickItems.push(
-      ...sketchbook.sketches.map(
+      ...filteredSketches.map(
         (sketch) => new SketchQuickPickItem(sketch, sketchbookPath)
       )
     )
@@ -96,7 +135,9 @@ function toSketchQuickPickItem(
   if (!quickItems.length) {
     return [
       new CreateSketchQuickPickItem(),
-      new QuickInputNoopLabel('No sketches found in workspace'),
+      new QuickInputNoopLabel(
+        hasAnySketch ? 'No matching sketches' : 'No sketches found in workspace'
+      ),
     ]
   }
   return quickItems

@@ -49,6 +49,7 @@
     "format:ino": "node scripts/clang-format.cjs",
     "format:js": "prettier --write .",
     "generate:editor-icons": "node scripts/generate-editor-icons.cjs",
+    "generate:update-fonts": "node scripts/update-fonts.cjs",
     "postinstall": "copyfiles -f ./node_modules/ardunno-cli/schemas/arduino-cli-schema.json ./schemas",
     "lint": "npm run lint:js && npm run lint:md",
     "lint:fix": "eslint packages --ext js,jsx,ts,tsx --fix",
@@ -713,20 +714,8 @@
         "boardlab.monitor.bridgePort": {
           "type": "number",
           "default": 55888,
-          "markdownDescription": "Preferred TCP port for the BoardLab monitor bridge server used to connect Visual Studio Code instances. If another process responds on this port with an unexpected protocol, the extension will warn and will not start its own bridge.",
+          "markdownDescription": "Preferred TCP port for the BoardLab monitor bridge server used to connect Visual Studio Code instances. BoardLab will restart an existing BoardLab bridge on this port when needed. If a non-BoardLab process uses this port, monitor startup fails and the error is shown.",
           "minimum": 55000,
-          "tags": [
-            "advanced"
-          ]
-        },
-        "boardlab.monitor.bridgeMode": {
-          "type": "string",
-          "enum": [
-            "external-process",
-            "in-process"
-          ],
-          "default": "external-process",
-          "markdownDescription": "Controls how the BoardLab monitor bridge server is started. Use 'in-process' to run it inside the Visual Studio Code extension host for easier debugging. Changing this setting requires reloading the window.",
           "tags": [
             "advanced"
           ]
@@ -827,6 +816,15 @@
         "priority": "default"
       }
     ],
+    "icons": {
+      "boardlab-icon": {
+        "description": "BoardLab logo icon.",
+        "default": {
+          "fontPath": "./resources/theme/boardlab.woff",
+          "fontCharacter": "\\e000"
+        }
+      }
+    },
     "jsonValidation": [
       {
         "fileMatch": "arduino-cli.json",
@@ -1479,7 +1477,7 @@
       }
     ],
     "views": {
-      "boardlabSketches": [
+      "boardlabPanel": [
         {
           "id": "boardlab.currentSketch",
           "name": "Current Sketch",
@@ -1498,18 +1496,14 @@
           "contextualTitle": "Examples",
           "icon": "$(book)",
           "type": "webview"
-        }
-      ],
-      "boardlabPlatforms": [
+        },
         {
           "id": "boardlab.platformsManager",
           "type": "webview",
           "name": "Boards Manager",
           "contextualTitle": "Boards Manager",
           "icon": "$(package)"
-        }
-      ],
-      "boardlabLibraries": [
+        },
         {
           "id": "boardlab.librariesManager",
           "type": "webview",
@@ -1522,19 +1516,9 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "title": "Sketches",
-          "id": "boardlabSketches",
-          "icon": "$(file-submodule)"
-        },
-        {
-          "title": "Boards",
-          "id": "boardlabPlatforms",
-          "icon": "$(package)"
-        },
-        {
-          "title": "Libraries",
-          "id": "boardlabLibraries",
-          "icon": "$(library)"
+          "title": "BoardLab",
+          "id": "boardlabPanel",
+          "icon": "resources/icons/boardlab.svg"
         }
       ]
     },
@@ -1638,6 +1622,7 @@
     "typescript": "^5.1.x",
     "vitest": "^4.0.16",
     "vscode-arduino-api": "^0.2.4",
+    "webfont": "^11.2.26",
     "webpack": "^5.104.1",
     "webpack-cli": "^6.0.1"
   },
@@ -1650,6 +1635,7 @@
     "theme": "light"
   },
   "preview": true,
+  "markdown": "github",
   "extensionKind": [
     "ui"
   ]

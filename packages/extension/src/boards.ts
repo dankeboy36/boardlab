@@ -31,6 +31,10 @@ import {
 import { Arduino } from './cli/arduino'
 import { portProtocolIcon } from './ports'
 import {
+  matchesQuickPickConstraints,
+  type QuickPickConstraints,
+} from './quickPickConstraints'
+import {
   InmemoryRecentItems,
   QuickInputNoopLabel,
   RecentItems,
@@ -50,6 +54,57 @@ const pinnedButton = inputButton('pinned', 'Unpin board')
 const removeButton = inputButton('discard', 'Remove from history')
 
 type PickBoardResult = BoardIdentifier | BoardsListItemWithBoard
+export type { PickBoardResult }
+
+export interface BoardPickCandidate {
+  readonly board: BoardIdentifier
+  readonly port?: PortIdentifier
+  readonly selection: PickBoardResult
+}
+
+export interface BoardPickOptions
+  extends QuickPickConstraints<BoardPickCandidate> {}
+
+function toBoardPickCandidate(selection: PickBoardResult): BoardPickCandidate {
+  if (isBoardIdentifier(selection)) {
+    return {
+      board: selection,
+      selection,
+    }
+  }
+  return {
+    board: selection.board,
+    port: selection.port,
+    selection,
+  }
+}
+
+async function filterBoardIdentifiersForQuickPick<
+  TBoard extends BoardIdentifier,
+>(boards: ReadonlyArray<TBoard>, options: BoardPickOptions): Promise<TBoard[]> {
+  const result: TBoard[] = []
+  for (const board of boards) {
+    if (
+      await matchesQuickPickConstraints<BoardPickCandidate>(
+        {
+          board,
+          selection: board,
+        },
+        options
+      )
+    ) {
+      result.push(board)
+    }
+  }
+  return result
+}
+
+async function isBoardSelectionAllowed(
+  selection: PickBoardResult,
+  options: BoardPickOptions
+): Promise<boolean> {
+  return matchesQuickPickConstraints(toBoardPickCandidate(selection), options)
+}
 
 function isPlatform(arg: unknown): arg is Required<Platform> {
   // TODO: https://github.com/dankeboy36/boardlab-cli/issues/4
@@ -73,7 +128,8 @@ export async function pickBoard(
   detectedPorts: DetectedPorts,
   onDidChangeDetectedPorts: vscode.Event<unknown>,
   recentItems: RecentItems<BoardIdentifier> = noopRecentItems(),
-  pinnedItems: RecentItems<BoardIdentifier> = noopRecentItems()
+  pinnedItems: RecentItems<BoardIdentifier> = noopRecentItems(),
+  options: BoardPickOptions = {}
 ): Promise<PickBoardResult | undefined> {
   const toDispose: vscode.Disposable[] = []
   const input = vscode.window.createQuickPick()
@@ -90,6 +146,7 @@ export async function pickBoard(
     const selected = await new Promise<PickBoardResult | undefined>(
       (resolve) => {
         const cancel = new AbortController()
+        let updateToken = 0
         let searchResultBoards: BoardListItem[] | undefined
         const search = async (searchArgs = '') => {
           input.busy = true
@@ -97,19 +154,33 @@ export async function pickBoard(
             searchResultBoards = !searchArgs
               ? undefined
               : await arduino.searchBoard({ searchArgs }, cancel.signal)
-            updateItems()
           } finally {
-            input.busy = false
+            updateItems()
           }
         }
         const updateItems = (): void => {
-          const boardsList = createBoardsList(detectedPorts, boardsConfig)
-          input.items = toBoardQuickPickItems(
-            boardsList,
-            searchResultBoards?.slice(),
-            pinnedItems.items,
-            recentItems.items
-          )
+          const currentToken = ++updateToken
+          ;(async () => {
+            input.busy = true
+            try {
+              const boardsList = createBoardsList(detectedPorts, boardsConfig)
+              const items = await toBoardQuickPickItems(
+                boardsList,
+                searchResultBoards?.slice(),
+                pinnedItems.items,
+                recentItems.items,
+                options
+              )
+              if (currentToken !== updateToken) {
+                return
+              }
+              input.items = items
+            } finally {
+              if (currentToken === updateToken) {
+                input.busy = false
+              }
+            }
+          })()
         }
         toDispose.push(
           input.onDidChangeValue(search),
@@ -119,25 +190,28 @@ export async function pickBoard(
             input.dispose()
           }),
           input.onDidChangeSelection((items) => {
-            const item = items[0]
-            if (item instanceof QuickInputNoopLabel) {
-              return
-            }
-            let result: PickBoardResult | undefined
-            let selectedBoardForHistory: BoardIdentifier | undefined
-            if (item instanceof BoardsListQuickPickItem) {
-              result = item.item
-              selectedBoardForHistory = item.item.board
-            } else if (item instanceof BoardQuickPickItem) {
-              result = item.data
-              selectedBoardForHistory = item.data
-            }
-            if (selectedBoardForHistory) {
+            ;(async () => {
+              const item = items[0]
+              if (item instanceof QuickInputNoopLabel) {
+                return
+              }
+              let result: PickBoardResult | undefined
+              let selectedBoardForHistory: BoardIdentifier | undefined
+              if (item instanceof BoardsListQuickPickItem) {
+                result = item.item
+                selectedBoardForHistory = item.item.board
+              } else if (item instanceof BoardQuickPickItem) {
+                result = item.data
+                selectedBoardForHistory = item.data
+              }
+              if (!result || !selectedBoardForHistory) {
+                return
+              }
               // Fire and forget; history update is persisted via memento.
               recentItems.add(selectedBoardForHistory)
-            }
-            resolve(result)
-            input.hide()
+              resolve(result)
+              input.hide()
+            })()
           }),
           input.onDidTriggerItemButton(async ({ item, button }) => {
             if (item instanceof QuickInputNoopLabel) {
@@ -163,7 +237,6 @@ export async function pickBoard(
           recentItems.onDidUpdate(updateItems)
         )
         updateItems()
-        input.busy = false
       }
     )
     return selected
@@ -172,28 +245,38 @@ export async function pickBoard(
   }
 }
 
-export function toBoardQuickPickItems(
+export async function toBoardQuickPickItems(
   boardsList: BoardsList,
   searchResultBoards: BoardListItem[] | undefined,
   pinnedBoards: BoardIdentifier[],
-  recentBoards: BoardIdentifier[]
-): vscode.QuickPickItem[] {
+  recentBoards: BoardIdentifier[],
+  options: BoardPickOptions = {}
+): Promise<vscode.QuickPickItem[]> {
   const quickItems: vscode.QuickPickItem[] = []
-  const pinnedAll = pinnedBoards.slice()
-  const recentAll = recentBoards.slice()
+  const filteredSearchResultBoards = searchResultBoards
+    ? await filterBoardIdentifiersForQuickPick(searchResultBoards, options)
+    : undefined
+  const pinnedAll = await filterBoardIdentifiersForQuickPick(
+    pinnedBoards.slice(),
+    options
+  )
+  const recentAll = await filterBoardIdentifiersForQuickPick(
+    recentBoards.slice(),
+    options
+  )
 
   // When searching, only show pinned/recent entries that match the search
   // result. When no search term is active, show all pinned/recent.
   let pinned = pinnedAll
   let recent = recentAll
-  if (searchResultBoards) {
+  if (filteredSearchResultBoards) {
     pinned = pinnedAll.filter((candidate) =>
-      searchResultBoards.some((other) =>
+      filteredSearchResultBoards.some((other) =>
         boardIdentifierEquals(candidate, other as any)
       )
     )
     recent = recentAll.filter((candidate) =>
-      searchResultBoards.some((other) =>
+      filteredSearchResultBoards.some((other) =>
         boardIdentifierEquals(candidate, other as any)
       )
     )
@@ -235,16 +318,20 @@ export function toBoardQuickPickItems(
 
   const attachedItems: vscode.QuickPickItem[] = []
   for (const item of boardsList.boards) {
-    if (searchResultBoards) {
-      const searchResultItemIndex = searchResultBoards.findIndex((other) =>
-        boardIdentifierEquals(other, item.board)
+    if (!(await isBoardSelectionAllowed(item, options))) {
+      continue
+    }
+    if (filteredSearchResultBoards) {
+      const searchResultItemIndex = filteredSearchResultBoards.findIndex(
+        (other) => boardIdentifierEquals(other, item.board)
       )
-      if (searchResultItemIndex >= 0) {
-        searchResultBoards.splice(searchResultItemIndex, 1)
-        const qpItem = new BoardsListQuickPickItem(item)
-        setBoardButtons(qpItem, pinnedBoards, recentBoards)
-        attachedItems.push(qpItem)
+      if (searchResultItemIndex < 0) {
+        continue
       }
+      filteredSearchResultBoards.splice(searchResultItemIndex, 1)
+      const qpItem = new BoardsListQuickPickItem(item)
+      setBoardButtons(qpItem, pinnedBoards, recentBoards)
+      attachedItems.push(qpItem)
     } else {
       const qpItem = new BoardsListQuickPickItem(item)
       setBoardButtons(qpItem, pinnedBoards, recentBoards)
@@ -259,8 +346,8 @@ export function toBoardQuickPickItems(
     quickItems.push(...attachedItems)
   }
 
-  if (searchResultBoards) {
-    const searchOnlyBoards = searchResultBoards.filter(
+  if (filteredSearchResultBoards) {
+    const searchOnlyBoards = filteredSearchResultBoards.filter(
       (board) =>
         !pinned.some((pinnedBoard) =>
           boardIdentifierEquals(pinnedBoard, board)
