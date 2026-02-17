@@ -1257,7 +1257,7 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
   }
 
   private async statusText(): Promise<string> {
-    const icon = '$(dashboard)'
+    const icon = '$(boardlab-icon)'
     const currentSketch = this.boardlabContext.currentSketch
     if (!currentSketch) {
       return `${icon} BoardLab`
