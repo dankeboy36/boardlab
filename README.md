@@ -1,19 +1,6 @@
 # BoardLab
 
-<p align="center">
-  <table>
-    <tr>
-      <td align="center" width="48">
-        <br/>
-        <img src="./resources/images/boardlab_large.png" alt="BoardLab logo" width="60" />
-      </td>
-      <td align="left">
-        <br/>
-        Vendor-independent board development for Visual Studio Code, powered by Arduino CLI.
-      </td>
-    </tr>
-  </table>
-</p>
+Vendor-independent board development for Visual Studio Code, powered by Arduino CLI.
 
 > [!WARNING]
 > **BoardLab is in early alpha.**
