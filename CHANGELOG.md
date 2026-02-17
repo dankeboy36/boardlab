@@ -1,3 +1,10 @@
+## [0.0.8](https://github.com/dankeboy36/boardlab/compare/0.0.7...0.0.8) (2026-02-17)
+
+
+### Bug Fixes
+
+* resolve extension monitor API and bridge inconsistencies ([#19](https://github.com/dankeboy36/boardlab/issues/19)) ([4bbfdae](https://github.com/dankeboy36/boardlab/commit/4bbfdaefff79ddd959807ef2fabea6520f646b7f))
+
 ## [0.0.7](https://github.com/dankeboy36/boardlab/compare/0.0.6...0.0.7) (2026-02-11)
 
 
