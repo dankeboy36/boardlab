@@ -1,3 +1,10 @@
+## [0.0.9](https://github.com/dankeboy36/boardlab/compare/0.0.8...0.0.9) (2026-02-18)
+
+
+### Bug Fixes
+
+* **build:** remove tinyexec dependency breaking Windows packaging ([#21](https://github.com/dankeboy36/boardlab/issues/21)) ([2872902](https://github.com/dankeboy36/boardlab/commit/2872902a8573acc8bd552f7b204661a6449e4da1)), closes [#20](https://github.com/dankeboy36/boardlab/issues/20) [dankeboy36/esp-exception-decoder#56](https://github.com/dankeboy36/esp-exception-decoder/issues/56)
+
 ## [0.0.8](https://github.com/dankeboy36/boardlab/compare/0.0.7...0.0.8) (2026-02-17)
 
 
