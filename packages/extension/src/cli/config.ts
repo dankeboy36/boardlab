@@ -1,9 +1,9 @@
+import { spawn } from 'node:child_process'
 import { promises as fs, constants as fsConstants, watch } from 'node:fs'
 import { homedir } from 'node:os'
 import path, { resolve as resolvePath } from 'node:path'
 
 import deepEqual from 'fast-deep-equal'
-import { exec } from 'tinyexec'
 import * as vscode from 'vscode'
 import type { CliConfig as ApiCliConfig } from 'vscode-arduino-api'
 
@@ -188,7 +188,7 @@ export class CliConfig implements vscode.Disposable {
       configArgs.push('--config-file', cliConfigFileUri.fsPath)
     }
 
-    await exec(executablePath, configArgs, {
+    await execCommand(executablePath, configArgs, {
       // It's false by default anyway, but being explicit here
       // In case of error it prints {"error":"Cannot get the configuration key X: key X not found"} to stderr
       throwOnError: false,
@@ -207,7 +207,7 @@ export class CliConfig implements vscode.Disposable {
     // XXX: with CLI 1.1.1 format json must come before the config-key?
     configArgs.push('--format', 'json')
 
-    const { stdout, stderr } = await exec(executablePath, configArgs, {
+    const { stdout, stderr } = await execCommand(executablePath, configArgs, {
       // It's false by default anyway, but being explicit here
       // In case of error it prints {"error":"Cannot get the configuration key X: key X not found"} to stderr
       throwOnError: false,
@@ -353,7 +353,7 @@ export class CliConfig implements vscode.Disposable {
           )
           console.log('Creating a new managed configuration file')
           const arduinoCliPath = await this.cliContext.resolveExecutablePath()
-          const { stdout } = await exec(arduinoCliPath, [
+          const { stdout } = await execCommand(arduinoCliPath, [
             'config',
             'init',
             '--dest-file',
@@ -472,4 +472,68 @@ function expandHome(pathValue: string): string {
     return homedir()
   }
   return pathValue.replace(/^~(?=$|[\\/])/, homedir())
+}
+
+interface ExecCommandResult {
+  stdout: string
+  stderr: string
+  exitCode: number | null
+}
+
+interface ExecCommandOptions {
+  throwOnError?: boolean
+}
+
+// Must not use tinyexec with CJS on win32: https://github.com/dankeboy36/boardlab/issues/20
+async function execCommand(
+  command: string,
+  args: string[],
+  options?: ExecCommandOptions
+): Promise<ExecCommandResult> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      shell: false,
+    })
+
+    let stdout = ''
+    let stderr = ''
+    let settled = false
+
+    child.stdout?.on('data', (chunk) => (stdout += chunk.toString()))
+    child.stderr?.on('data', (chunk) => (stderr += chunk.toString()))
+
+    child.on('error', (error) => {
+      if (settled) {
+        return
+      }
+      settled = true
+      reject(error)
+    })
+
+    child.on('close', (exitCode) => {
+      if (settled) {
+        return
+      }
+      settled = true
+
+      const result: ExecCommandResult = {
+        stdout,
+        stderr,
+        exitCode,
+      }
+
+      if ((options?.throwOnError ?? false) && exitCode !== 0) {
+        const error = new Error(
+          `Command "${command}" exited with code ${exitCode ?? 'unknown'}`
+        ) as Error & ExecCommandResult
+        error.stdout = stdout
+        error.stderr = stderr
+        error.exitCode = exitCode
+        reject(error)
+        return
+      }
+
+      resolve(result)
+    })
+  })
 }
