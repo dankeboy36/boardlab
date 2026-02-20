@@ -42,7 +42,7 @@ jobs:
         run: |
           set -euo pipefail
           MODE=""
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then MODE="--release"; fi
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then MODE="--release --on-no-release preview"; fi
           VERSION=$(npx next-version-helper $MODE)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         env:
