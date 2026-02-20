@@ -22,7 +22,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.get_version.outputs.version }}
-      short_sha: ${{ steps.get_sha.outputs.short_sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -45,10 +44,6 @@ jobs:
           MODE=""
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then MODE="--release"; fi
           VERSION=$(npx next-version-helper $MODE)
-          if [ -z "$VERSION" ]; then
-            echo "semantic-release did not return a next version." >&2
-            exit 1
-          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         env:
           DEBUG: semantic-release-next-version,semantic-release:*
@@ -92,7 +87,6 @@ jobs:
 
   package:
     name: Package VSIX
-    if: ${{ github.ref != 'refs/heads/main' }}
     runs-on: ubuntu-latest
     needs: [test, determine-version]
     steps:
@@ -119,18 +113,65 @@ jobs:
       - name: Package
         run: npm run package
 
+      - name: Create VSIX Checksum
+        run: |
+          set -euo pipefail
+          VSIX_FILE="boardlab-${{ needs.determine-version.outputs.version }}.vsix"
+          if [ ! -f "$VSIX_FILE" ]; then
+            echo "Expected VSIX not found after packaging: $VSIX_FILE" >&2
+            exit 1
+          fi
+          sha256sum "$VSIX_FILE" | tee "$VSIX_FILE.sha256"
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           if-no-files-found: error
           name: boardlab-${{ needs.determine-version.outputs.version }}
-          path: '*.vsix'
+          path: |
+            boardlab-${{ needs.determine-version.outputs.version }}.vsix
+            boardlab-${{ needs.determine-version.outputs.version }}.vsix.sha256
+
+  smoke:
+    name: Smoke Test (${{ matrix.os }}, node-${{ matrix.node }})
+    needs: [package, determine-version]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        node: [22.14.0]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Use Node.js
+        uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Download VSIX Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: boardlab-${{ needs.determine-version.outputs.version }}
+          path: .
+
+      - name: Smoke Test
+        run: ${{ matrix.os == 'ubuntu-latest' && 'xvfb-run' || '' }} npm run test:smoke
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release:
     name: Release
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
-    needs: [determine-version, test]
+    needs: [determine-version, test, package, smoke]
     steps:
       - name: Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -146,14 +187,32 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Download Arduino Built-in Examples
-        run: npm run download:builtins
+      - name: Download VSIX Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: boardlab-${{ needs.determine-version.outputs.version }}
+          path: .
 
-      - name: Set Version
-        run: npm pkg set version="${{ needs.determine-version.outputs.version }}"
+      - name: Verify and Log VSIX Checksum
+        id: vsix_checksum
+        run: |
+          set -euo pipefail
+          VSIX_FILE="boardlab-${{ needs.determine-version.outputs.version }}.vsix"
+          if [ ! -f "$VSIX_FILE" ]; then
+            echo "Expected VSIX not found in release job: $VSIX_FILE" >&2
+            exit 1
+          fi
 
-      - name: Package
-        run: npm run package
+          SHA_FILE="${VSIX_FILE}.sha256"
+          if [ -f "$SHA_FILE" ]; then
+            sha256sum --check "$SHA_FILE"
+            SHA256=$(awk '{print $1}' "$SHA_FILE")
+          else
+            SHA256=$(sha256sum "$VSIX_FILE" | awk '{print $1}')
+            echo "${SHA256}  ${VSIX_FILE}" > "$SHA_FILE"
+          fi
+
+          echo "VSIX checksum: ${SHA256}  ${VSIX_FILE}"
 
       - name: Load secrets from 1Password
         id: load_secrets

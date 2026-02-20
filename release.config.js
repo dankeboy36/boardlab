@@ -25,6 +25,9 @@ module.exports = {
           {
             path: '*.vsix',
           },
+          {
+            path: '*.vsix.sha256',
+          },
         ],
       },
     ],
@@ -33,6 +36,7 @@ module.exports = {
       'semantic-release-vsce',
       {
         packageVsix: false,
+        publishPackagePath: '*.vsix',
         publish: true,
       },
     ],

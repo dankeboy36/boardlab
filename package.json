@@ -63,6 +63,7 @@
     "test": "vitest run --config ./packages/extension/vitest.config.ts",
     "test:ci": "npm --workspaces --if-present --fail-fast run test:ci && npm --workspaces --if-present --fail-fast run test:e2e && npm test && npm run test:vsix",
     "test:e2e": "npm --workspaces --if-present --fail-fast run test:e2e",
+    "test:smoke": "node ./scripts/run-smoke-extester.cjs",
     "pretest:vsix": "npm run compile",
     "test:vsix": "node ./out/test/runTest.js",
     "watch": "tsc -watch -p ./"
@@ -1614,13 +1615,14 @@
     "prettier-plugin-packagejson": "^2.5.18",
     "rimraf": "^6.0.1",
     "semantic-release": "^25.0.2",
-    "semantic-release-next-version": "^0.1.2",
+    "semantic-release-next-version": "^0.1.4",
     "semantic-release-vsce": "^6.0.20",
     "temp": "^0.9.4",
     "ts-loader": "^9.5.4",
     "typescript": "^5.1.x",
     "vitest": "^4.0.16",
     "vscode-arduino-api": "^0.2.4",
+    "vscode-extension-tester": "^8.22.0",
     "webfont": "^11.2.26",
     "webpack": "^5.104.1",
     "webpack-cli": "^6.0.1"
