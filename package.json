@@ -785,11 +785,13 @@
         },
         "boardlab.hooks.preCompileTasks": {
           "type": "array",
-          "default": [],
+          "default": [
+            "BoardLab: Validate Sketch Profile"
+          ],
           "items": {
             "type": "string"
           },
-          "markdownDescription": "Task labels to run before compile tasks (`compile`, `compile-with-debug-symbols`, `export-binary`). Tasks run in order. Non-zero exit code blocks the compile task."
+          "markdownDescription": "Task labels to run before compile tasks (`compile`, `compile-with-debug-symbols`, `export-binary`). Tasks run in order. Non-zero exit code blocks the compile task. Defaults to `BoardLab: Validate Sketch Profile`."
         },
         "boardlab.hooks.postCompileTasks": {
           "type": "array",
@@ -1450,6 +1452,20 @@
           "message": 5,
           "loop": true
         }
+      },
+      {
+        "name": "boardlab-profile",
+        "applyTo": "closedDocuments",
+        "fileLocation": "absolute",
+        "source": "boardlab-profile",
+        "pattern": {
+          "regexp": "^(.*?):(\\d+):(\\d+):\\s+(error|warning|info):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
       }
     ],
     "submenus": [
@@ -1485,7 +1501,7 @@
         "properties": {
           "command": {
             "type": "string",
-            "description": "The BoardLab command to execute. Supported commands are 'compile', 'compile-with-debug-symbols', 'upload', 'upload-using-programmer', 'burn-bootloader', 'export-binary', 'archive-sketch', and 'get-board-info'."
+            "description": "The BoardLab command to execute. Supported commands are 'compile', 'compile-with-debug-symbols', 'upload', 'upload-using-programmer', 'burn-bootloader', 'export-binary', 'archive-sketch', 'get-board-info', and 'validate-sketch-profile'."
           },
           "sketchPath": {
             "type": "string",
