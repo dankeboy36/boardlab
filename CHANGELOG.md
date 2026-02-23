@@ -1,3 +1,10 @@
+## [0.0.11](https://github.com/dankeboy36/boardlab/compare/0.0.10...0.0.11) (2026-02-23)
+
+
+### Bug Fixes
+
+* no error sketch project file is not found ([#25](https://github.com/dankeboy36/boardlab/issues/25)) ([07c19ee](https://github.com/dankeboy36/boardlab/commit/07c19ee4f71faf9624f15e73444a4c4aa5f77529))
+
 ## [0.0.10](https://github.com/dankeboy36/boardlab/compare/0.0.9...0.0.10) (2026-02-23)
 
 
