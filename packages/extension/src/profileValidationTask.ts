@@ -1,4 +1,5 @@
 import path from 'node:path'
+import fs from 'node:fs/promises'
 
 import * as vscode from 'vscode'
 
@@ -139,6 +140,7 @@ function createProfileValidationTaskPty(params: {
     const sketchYamlPath = path.join(params.sketchPath, 'sketch.yaml')
     let doc: vscode.TextDocument
     try {
+      await fs.access(sketchYamlPath)
       doc = await vscode.workspace.openTextDocument(
         vscode.Uri.file(sketchYamlPath)
       )
@@ -277,13 +279,19 @@ function compareDiagnostics(
   return left.message.localeCompare(right.message)
 }
 
-function isMissingProfilesFileError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false
-  }
-  const anyError = error as { code?: unknown }
-  if (typeof anyError.code === 'string' && anyError.code === 'FileNotFound') {
+export function isMissingProfilesFileError(error: unknown): boolean {
+  // Node.js
+  if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
     return true
   }
-  return /file not found|enoent/i.test(error.message)
+
+  // VS Code error when opening missing resources as text document
+  if (error instanceof Error && error.name === 'CodeExpectedError') {
+    const text = `${error.message}\n${error.stack ?? ''}`.toLowerCase()
+    if (text.includes('cannot open') || text.includes('nonexistent file')) {
+      return true
+    }
+  }
+
+  return false
 }
