@@ -1,3 +1,10 @@
+## [0.0.10](https://github.com/dankeboy36/boardlab/compare/0.0.9...0.0.10) (2026-02-23)
+
+
+### Bug Fixes
+
+* VS Code pre/post hooks for compile/upload + profile validation task ([#24](https://github.com/dankeboy36/boardlab/issues/24)) ([a0f0d07](https://github.com/dankeboy36/boardlab/commit/a0f0d07f797a93699d5c3e5314c935ee7ca237f4))
+
 ## [0.0.9](https://github.com/dankeboy36/boardlab/compare/0.0.8...0.0.9) (2026-02-18)
 
 
