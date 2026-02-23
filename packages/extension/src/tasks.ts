@@ -24,11 +24,23 @@ import {
   platformIdFromFqbn,
 } from './platformUtils'
 import { portProtocolIcon, resolvePort } from './ports'
-import { collectCliDiagnostics } from './profile/cliDiagnostics'
-import { validateProfilesYAML } from './profile/validation'
+import {
+  createValidateSketchProfileTask,
+  isValidateSketchProfileTaskDefinition,
+  validateSketchProfileCommand,
+  validateSketchProfileTaskLabel,
+  type ValidateSketchProfileTaskDefinition,
+} from './profileValidationTask'
 import { createProgrammerItemDescription } from './sketch/currentSketchView'
 import { Sketch } from './sketch/types'
 import { buildStatusText } from './statusText'
+import {
+  createHookTaskRunId,
+  type HookPhase,
+  type HookRunResult,
+  type HookSettingKey,
+  TaskHooksManager,
+} from './taskHooks'
 import { type TaskKind, taskKindLiterals, type TaskStatus } from './taskTracker'
 import { onDidChangeTaskStates, tryStopTask } from './taskTracker'
 import { presentTaskStatus } from './taskUiState'
@@ -45,12 +57,26 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
   private resolvedSketch: Sketch | undefined
   private resolvedBoard: BoardIdentifier | undefined
   private resolvedPort: Port | undefined
+  private readonly hooks: TaskHooksManager
+
   private compileTaskProgress:
     | (CompileProgressUpdate & { sketchPath: string })
     | undefined
 
   constructor(private readonly boardlabContext: BoardLabContextImpl) {
     this._disposables = []
+    this.hooks = new TaskHooksManager({
+      boardlabTaskType,
+      defaultPreCompileTaskLabels: [validateSketchProfileTaskLabel],
+      resolveHookTask: (tasks, label, sketchPath) => {
+        const resolvedHookTask = this.resolveHookTask(tasks, label, sketchPath)
+        if (!resolvedHookTask) {
+          return undefined
+        }
+        return this.resolveContextualHookTask(resolvedHookTask, sketchPath)
+      },
+      openWorkspaceTasksFile: () => this.openWorkspaceTasksFile(),
+    })
     this.statusBarItem = vscode.window.createStatusBarItem(
       'boardlab.contextStatusBar',
       vscode.StatusBarAlignment.Left,
@@ -117,7 +143,12 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
   }
 
   provideTasks(): vscode.Task[] {
-    return []
+    return [
+      this.validateSketchProfileTask({
+        type: boardlabTaskType,
+        command: validateSketchProfileCommand,
+      }),
+    ]
   }
 
   async compile(params: {
@@ -244,6 +275,18 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
     )
   }
 
+  async validateSketchProfile(params: {
+    sketchPath: string
+  }): Promise<vscode.TaskExecution> {
+    return vscode.tasks.executeTask(
+      this.validateSketchProfileTask({
+        type: boardlabTaskType,
+        command: validateSketchProfileCommand,
+        sketchPath: params.sketchPath,
+      })
+    )
+  }
+
   resolveTask(task: vscode.Task): vscode.Task | undefined {
     if (isCompileTaskDefinition(task.definition)) {
       return this.compileTask(task.definition)
@@ -268,6 +311,11 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
     }
     if (isGetBoardInfoTaskDefinition(task.definition)) {
       return this.getBoardInfoTask(task.definition)
+    }
+    if (
+      isValidateSketchProfileTaskDefinition(task.definition, boardlabTaskType)
+    ) {
+      return this.validateSketchProfileTask(task.definition)
     }
     return undefined
   }
@@ -453,6 +501,22 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
     )
   }
 
+  private validateSketchProfileTask(
+    definition: ValidateSketchProfileTaskDefinition
+  ): vscode.Task {
+    return createValidateSketchProfileTask({
+      definition,
+      boardlabTaskType,
+      boardlabContext: this.boardlabContext,
+      createValidationFailurePty: (message) =>
+        this.createValidationFailurePty(message),
+      recordCustomHookTaskExitCode: (taskRunId, code) =>
+        this.hooks.recordCustomHookTaskExitCode(taskRunId, code),
+      recordProfileValidationExitCode: (sketchPath, code) =>
+        this.hooks.recordProfileValidationExitCode(sketchPath, code),
+    })
+  }
+
   private exportBinariesTask(
     definition: ExportBinaryTaskDefinition
   ): vscode.Task {
@@ -489,9 +553,18 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
       boardlabTaskType,
       new vscode.CustomExecution(async (resolvedTask) => {
         const { arduino } = await this.boardlabContext.client
-        const ok = await this.validateSketchProfile(resolvedTask.sketchPath)
-        if (!ok) {
-          return this.createValidationFailurePty()
+        const preUploadHooks = await this.runPreHooksAndRestoreFocus({
+          setting: 'preUploadTasks',
+          sketchPath: resolvedTask.sketchPath,
+          phase: 'pre-upload',
+          blockOnFailure: true,
+          showCancelPrompt: true,
+          mainTaskNameHint: `${resolvedTask.command} ${resolvedTask.port}`,
+        })
+        if (!preUploadHooks.ok) {
+          return this.createValidationFailurePty(
+            preUploadHooks.output.join('\n')
+          )
         }
         const detectedPorts =
           this.boardlabContext.boardsListWatcher.detectedPorts
@@ -507,17 +580,22 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
           : undefined
 
         if (!portIdentifier) {
-          const { pty } = arduino.uploadUsingProgrammer({
+          const { pty, result } = arduino.uploadUsingProgrammer({
             sketchPath: resolvedTask.sketchPath,
             fqbn: resolvedTask.fqbn,
             port,
             programmer,
             verbose,
           })
-          return pty
+          const wrappedPty = this.hooks.withPostHooks(pty, result, {
+            setting: 'postUploadTasks',
+            sketchPath: resolvedTask.sketchPath,
+            phase: 'post-upload',
+          })
+          return this.hooks.withPtyPreface(wrappedPty, preUploadHooks.output)
         }
 
-        const { pty } = await this.boardlabContext.withMonitorSuspended(
+        const { pty, result } = await this.boardlabContext.withMonitorSuspended(
           portIdentifier,
           async (options) =>
             arduino.uploadUsingProgrammer({
@@ -529,7 +607,12 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
               retry: options?.retry,
             })
         )
-        return pty
+        const wrappedPty = this.hooks.withPostHooks(pty, result, {
+          setting: 'postUploadTasks',
+          sketchPath: resolvedTask.sketchPath,
+          phase: 'post-upload',
+        })
+        return this.hooks.withPtyPreface(wrappedPty, preUploadHooks.output)
       })
     )
   }
@@ -544,9 +627,18 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
       boardlabTaskType,
       new vscode.CustomExecution(async (resolvedTask) => {
         const { arduino } = await this.boardlabContext.client
-        const ok = await this.validateSketchProfile(resolvedTask.sketchPath)
-        if (!ok) {
-          return this.createValidationFailurePty()
+        const preUploadHooks = await this.runPreHooksAndRestoreFocus({
+          setting: 'preUploadTasks',
+          sketchPath: resolvedTask.sketchPath,
+          phase: 'pre-upload',
+          blockOnFailure: true,
+          showCancelPrompt: true,
+          mainTaskNameHint: `${resolvedTask.command} ${resolvedTask.port}`,
+        })
+        if (!preUploadHooks.ok) {
+          return this.createValidationFailurePty(
+            preUploadHooks.output.join('\n')
+          )
         }
         const detectedPorts =
           this.boardlabContext.boardsListWatcher.detectedPorts
@@ -560,15 +652,20 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
           : undefined
 
         if (!portIdentifier) {
-          const { pty } = arduino.burnBootloader({
+          const { pty, result } = arduino.burnBootloader({
             fqbn: resolvedTask.fqbn,
             port,
             programmer, // https://github.com/arduino/arduino-cli/issues/3043
           })
-          return pty
+          const wrappedPty = this.hooks.withPostHooks(pty, result, {
+            setting: 'postUploadTasks',
+            sketchPath: resolvedTask.sketchPath,
+            phase: 'post-upload',
+          })
+          return this.hooks.withPtyPreface(wrappedPty, preUploadHooks.output)
         }
 
-        const { pty } = await this.boardlabContext.withMonitorSuspended(
+        const { pty, result } = await this.boardlabContext.withMonitorSuspended(
           portIdentifier,
           async (options) =>
             arduino.burnBootloader({
@@ -578,7 +675,12 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
               retry: options?.retry,
             })
         )
-        return pty
+        const wrappedPty = this.hooks.withPostHooks(pty, result, {
+          setting: 'postUploadTasks',
+          sketchPath: resolvedTask.sketchPath,
+          phase: 'post-upload',
+        })
+        return this.hooks.withPtyPreface(wrappedPty, preUploadHooks.output)
       })
     )
   }
@@ -599,10 +701,18 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
   ): vscode.CustomExecution {
     return new vscode.CustomExecution(async (resolvedTask) => {
       const { arduino } = await this.boardlabContext.client
-      // Pre-validate sketch profile (if present)
-      const ok = await this.validateSketchProfile(resolvedTask.sketchPath)
-      if (!ok) {
-        return this.createValidationFailurePty()
+      const preCompileHooks = await this.runPreHooksAndRestoreFocus({
+        setting: 'preCompileTasks',
+        sketchPath: resolvedTask.sketchPath,
+        phase: 'pre-compile',
+        blockOnFailure: true,
+        showCancelPrompt: true,
+        mainTaskNameHint: `${resolvedTask.command} ${resolvedTask.fqbn}`,
+      })
+      if (!preCompileHooks.ok) {
+        return this.createValidationFailurePty(
+          preCompileHooks.output.join('\n')
+        )
       }
       const compileConfig =
         vscode.workspace.getConfiguration('boardlab.compile')
@@ -649,7 +759,12 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
           progressDisposable.dispose()
           this.setCompileProgress(resolvedTask.sketchPath, undefined)
         })
-      return pty
+      const wrappedPty = this.hooks.withPostHooks(pty, result, {
+        setting: 'postCompileTasks',
+        sketchPath: resolvedTask.sketchPath,
+        phase: 'post-compile',
+      })
+      return this.hooks.withPtyPreface(wrappedPty, preCompileHooks.output)
     })
   }
 
@@ -697,9 +812,18 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
       boardlabTaskType,
       new vscode.CustomExecution(async (resolvedTask) => {
         const { arduino } = await this.boardlabContext.client
-        const ok = await this.validateSketchProfile(resolvedTask.sketchPath)
-        if (!ok) {
-          return this.createValidationFailurePty()
+        const preUploadHooks = await this.runPreHooksAndRestoreFocus({
+          setting: 'preUploadTasks',
+          sketchPath: resolvedTask.sketchPath,
+          phase: 'pre-upload',
+          blockOnFailure: true,
+          showCancelPrompt: true,
+          mainTaskNameHint: `${resolvedTask.command} ${resolvedTask.port}`,
+        })
+        if (!preUploadHooks.ok) {
+          return this.createValidationFailurePty(
+            preUploadHooks.output.join('\n')
+          )
         }
         const detectedPorts =
           this.boardlabContext.boardsListWatcher.detectedPorts
@@ -716,16 +840,21 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
           : undefined
 
         if (!portIdentifier) {
-          const { pty } = arduino.upload({
+          const { pty, result } = arduino.upload({
             sketchPath: resolvedTask.sketchPath,
             fqbn: resolvedTask.fqbn,
             port,
             verbose,
           })
-          return pty
+          const wrappedPty = this.hooks.withPostHooks(pty, result, {
+            setting: 'postUploadTasks',
+            sketchPath: resolvedTask.sketchPath,
+            phase: 'post-upload',
+          })
+          return this.hooks.withPtyPreface(wrappedPty, preUploadHooks.output)
         }
 
-        const { pty } = await this.boardlabContext.withMonitorSuspended(
+        const { pty, result } = await this.boardlabContext.withMonitorSuspended(
           portIdentifier,
           async (options) =>
             arduino.upload({
@@ -736,46 +865,135 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
               retry: options?.retry,
             })
         )
-        return pty
+        const wrappedPty = this.hooks.withPostHooks(pty, result, {
+          setting: 'postUploadTasks',
+          sketchPath: resolvedTask.sketchPath,
+          phase: 'post-upload',
+        })
+        return this.hooks.withPtyPreface(wrappedPty, preUploadHooks.output)
       })
     )
   }
 
-  private async validateSketchProfile(sketchPath: string): Promise<boolean> {
-    try {
-      const uri = vscode.Uri.file(
-        require('node:path').join(sketchPath, 'sketch.yaml')
-      )
-      let doc: vscode.TextDocument
-      try {
-        doc = await vscode.workspace.openTextDocument(uri)
-      } catch {
-        return true // no profiles file; fine
-      }
-      const text = doc.getText()
-      const ast = validateProfilesYAML(text, doc)
-      let cli: vscode.Diagnostic[] = []
-      try {
-        cli = await collectCliDiagnostics(
-          this.boardlabContext as any,
-          doc,
-          text
-        )
-      } catch {}
-      const all = [...ast, ...cli]
-      const hasError = all.some(
-        (d) => d.severity === vscode.DiagnosticSeverity.Error
-      )
-      if (hasError) {
-        vscode.window.showErrorMessage(
-          'Sketch profile has validation errors. Fix issues before running tasks.'
-        )
-        return false
-      }
-      return true
-    } catch {
-      return true
+  private resolveContextualHookTask(
+    task: vscode.Task,
+    sketchPath: string
+  ): vscode.Task {
+    if (
+      !isValidateSketchProfileTaskDefinition(task.definition, boardlabTaskType)
+    ) {
+      return task
     }
+    return this.validateSketchProfileTask({
+      ...task.definition,
+      sketchPath,
+      hookTaskRunId: createHookTaskRunId(),
+    })
+  }
+
+  private resolveHookTask(
+    tasks: readonly vscode.Task[],
+    label: string,
+    sketchPath: string
+  ): vscode.Task | undefined {
+    const matches = tasks.filter((task) => task.name === label)
+    if (!matches.length) {
+      if (label === validateSketchProfileTaskLabel) {
+        return this.validateSketchProfileTask({
+          type: boardlabTaskType,
+          command: validateSketchProfileCommand,
+        })
+      }
+      return undefined
+    }
+
+    const sketchUri = vscode.Uri.file(sketchPath)
+    const sketchWorkspace = vscode.workspace.getWorkspaceFolder(sketchUri)
+    if (sketchWorkspace) {
+      const workspaceScoped = matches.find(
+        (task) =>
+          isWorkspaceFolderScope(task.scope) &&
+          task.scope.uri.toString() === sketchWorkspace.uri.toString()
+      )
+      if (workspaceScoped) {
+        return workspaceScoped
+      }
+    }
+
+    const workspaceTask = matches.find(
+      (task) => task.scope === vscode.TaskScope.Workspace
+    )
+    if (workspaceTask) {
+      return workspaceTask
+    }
+    return matches[0]
+  }
+
+  private async openWorkspaceTasksFile(): Promise<void> {
+    try {
+      await vscode.commands.executeCommand(
+        'workbench.action.tasks.openWorkspaceFile'
+      )
+    } catch {
+      await vscode.commands.executeCommand(
+        'workbench.action.tasks.configureTaskRunner'
+      )
+    }
+  }
+
+  private async runPreHooksAndRestoreFocus(params: {
+    setting: HookSettingKey
+    sketchPath: string
+    phase: HookPhase
+    blockOnFailure: boolean
+    showCancelPrompt: boolean
+    mainTaskNameHint: string
+  }): Promise<HookRunResult> {
+    const hookResult = await this.hooks.runConfiguredHooks(params)
+    this.focusMainTaskTerminal(params.mainTaskNameHint)
+    return hookResult
+  }
+
+  private focusMainTaskTerminal(taskNameHint: string): void {
+    if (!taskNameHint) {
+      return
+    }
+    const expectedNames = new Set<string>([
+      taskNameHint,
+      `${boardlabTaskType}: ${taskNameHint}`,
+    ])
+    const findMainTaskTerminal = (): vscode.Terminal | undefined =>
+      vscode.window.terminals.find((terminal) =>
+        expectedNames.has(terminal.name)
+      ) ??
+      vscode.window.terminals.find((terminal) =>
+        terminal.name.endsWith(`: ${taskNameHint}`)
+      ) ??
+      vscode.window.terminals.find((terminal) =>
+        terminal.name.endsWith(taskNameHint)
+      )
+
+    const terminal = findMainTaskTerminal()
+    if (terminal) {
+      try {
+        terminal.show(false)
+      } catch (error) {
+        console.warn('Failed to refocus main task terminal', error)
+      }
+      return
+    }
+
+    setTimeout(() => {
+      const delayedTerminal = findMainTaskTerminal()
+      if (!delayedTerminal) {
+        return
+      }
+      try {
+        delayedTerminal.show(false)
+      } catch (error) {
+        console.warn('Failed to refocus main task terminal', error)
+      }
+    }, 0)
   }
 
   private createValidationFailurePty(
@@ -1463,12 +1681,26 @@ const boardlabTaskType = 'boardlab' as const
 const boardlabProblemMatcher = `$${boardlabTaskType}` as const
 const pickPort = '${' + 'command:boardlab.pickPort' + '}'
 
-type TaskCommand = (typeof taskKindLiterals)[number]
+const boardlabTaskCommandLiterals = [
+  ...taskKindLiterals,
+  validateSketchProfileCommand,
+] as const
+type TaskCommand = (typeof boardlabTaskCommandLiterals)[number]
 function isTaskCommand(arg: unknown): arg is TaskCommand {
   return (
-    typeof arg === 'string' && taskKindLiterals.includes(arg as TaskCommand)
+    typeof arg === 'string' &&
+    boardlabTaskCommandLiterals.includes(arg as TaskCommand)
   )
 }
+
+function isWorkspaceFolderScope(
+  scope: vscode.Task['scope']
+): scope is vscode.WorkspaceFolder {
+  return Boolean(
+    scope && typeof (scope as vscode.WorkspaceFolder).uri === 'object'
+  )
+}
+
 interface CommandTaskDefinition extends vscode.TaskDefinition {
   type: typeof boardlabTaskType
   command: TaskCommand

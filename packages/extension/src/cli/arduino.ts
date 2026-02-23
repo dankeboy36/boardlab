@@ -945,7 +945,43 @@ function createPty<T = void>(streamable: Streamable<T>): vscode.Pseudoterminal {
   const onDidWriteEmitter = new vscode.EventEmitter<string>()
   const onDidCloseEmitter = new vscode.EventEmitter<void | number>()
   const toDispose: vscode.Disposable[] = [onDidWriteEmitter, onDidCloseEmitter]
+  const deferred = defer<T>()
+  const preOpenWrites: string[] = []
   let closed = false
+  let opened = false
+
+  const write = (text: string): void => {
+    if (opened) {
+      onDidWriteEmitter.fire(text)
+      return
+    }
+    preOpenWrites.push(text)
+  }
+
+  const flushPreOpenWrites = (): void => {
+    if (!preOpenWrites.length) {
+      return
+    }
+    for (const text of preOpenWrites) {
+      onDidWriteEmitter.fire(text)
+    }
+    preOpenWrites.length = 0
+  }
+
+  toDispose.push(
+    streamable.onDidReceiveMessage((message) => write(terminalEOL(message))),
+    streamable.onDidReceiveError((error) => {
+      if (typeof error === 'string') {
+        write(red(terminalEOL(error)))
+      } else {
+        deferred.reject(error)
+      }
+    }),
+    streamable.onDidComplete(() => deferred.resolve())
+  )
+  // Compile/upload can fail before VS Code calls `open()`.
+  // Attach a sink to avoid unhandled rejection warnings in that window.
+  deferred.promise.catch(() => undefined)
 
   return {
     onDidWrite: onDidWriteEmitter.event,
@@ -960,20 +996,8 @@ function createPty<T = void>(streamable: Streamable<T>): vscode.Pseudoterminal {
       disposeAll(...toDispose)
     },
     open: async (): Promise<void> => {
-      const deferred = defer<T>()
-      toDispose.push(
-        streamable.onDidReceiveMessage((message) =>
-          onDidWriteEmitter.fire(terminalEOL(message))
-        ),
-        streamable.onDidReceiveError((error) => {
-          if (typeof error === 'string') {
-            onDidWriteEmitter.fire(red(terminalEOL(error)))
-          } else {
-            deferred.reject(error)
-          }
-        }),
-        streamable.onDidComplete(() => deferred.resolve())
-      )
+      opened = true
+      flushPreOpenWrites()
       try {
         await deferred.promise
         if (!closed) {
