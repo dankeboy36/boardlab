@@ -124,7 +124,7 @@ This roadmap is intentionally pragmatic and incremental.
 
 ## Release Notes
 
-Release notes are maintained in [`CHANGELOG.md`](./CHANGELOG.md).
+Release notes are maintained in the [GitHub changelog](https://github.com/dankeboy36/boardlab/blob/main/CHANGELOG.md).
 
 ---
 
