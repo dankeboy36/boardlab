@@ -125,7 +125,7 @@ export function isApiBoardListItem(
 export async function pickBoard(
   arduino: Arduino,
   boardsConfig: BoardsConfig | undefined,
-  detectedPorts: DetectedPorts,
+  detectedPorts: () => DetectedPorts,
   onDidChangeDetectedPorts: vscode.Event<unknown>,
   recentItems: RecentItems<BoardIdentifier> = noopRecentItems(),
   pinnedItems: RecentItems<BoardIdentifier> = noopRecentItems(),
@@ -163,7 +163,7 @@ export async function pickBoard(
           ;(async () => {
             input.busy = true
             try {
-              const boardsList = createBoardsList(detectedPorts, boardsConfig)
+              const boardsList = createBoardsList(detectedPorts(), boardsConfig)
               const items = await toBoardQuickPickItems(
                 boardsList,
                 searchResultBoards?.slice(),
@@ -292,13 +292,31 @@ export async function toBoardQuickPickItems(
     )
     .slice(0, 3)
 
+  function findMatchingIdentifiedBoard(
+    other: BoardIdentifier
+  ): BoardsListItemWithBoard | undefined {
+    return boardsList.boards.find((b) => {
+      if (other.fqbn && b.board.fqbn) {
+        try {
+          return new FQBN(other.fqbn)
+            .sanitize()
+            .equals(new FQBN(b.board.fqbn).sanitize())
+        } catch {}
+      }
+      return false
+    })
+  }
+
   if (pinned.length) {
     quickItems.push({
       label: 'pinned boards',
       kind: vscode.QuickPickItemKind.Separator,
     })
     for (const board of pinned) {
-      const item = new BoardQuickPickItem(board)
+      const matchingIdentifiedBoard = findMatchingIdentifiedBoard(board)
+      const item = matchingIdentifiedBoard
+        ? new BoardsListQuickPickItem(matchingIdentifiedBoard)
+        : new BoardQuickPickItem(board)
       setBoardButtons(item, pinnedBoards, recentBoards)
       quickItems.push(item)
     }
@@ -310,7 +328,10 @@ export async function toBoardQuickPickItems(
       kind: vscode.QuickPickItemKind.Separator,
     })
     for (const board of recent) {
-      const item = new BoardQuickPickItem(board)
+      const matchingIdentifiedBoard = findMatchingIdentifiedBoard(board)
+      const item = matchingIdentifiedBoard
+        ? new BoardsListQuickPickItem(matchingIdentifiedBoard)
+        : new BoardQuickPickItem(board)
       setBoardButtons(item, pinnedBoards, recentBoards)
       quickItems.push(item)
     }
@@ -458,12 +479,13 @@ class BoardQuickPickItem extends BaseQuickPickItem<BoardIdentifier> {
     super(board.name, board)
     // Platform metadata is inspected here only to compute deprecation state;
     // description is applied later only when labels collide.
-    const platform = (board as any)?.platform
-    const release = platform?.release
-    if (release) {
-      const name = String(release.name ?? '')
-      const nameDeprecated = /^\s*\[deprecated/i.test(name)
-      this.isDeprecatedPlatform = nameDeprecated
+    if (isApiBoardListItem(board)) {
+      const release = board.platform?.release
+      if (release) {
+        const name = String(release.name ?? '')
+        const nameDeprecated = /^\s*\[deprecated/i.test(name)
+        this.isDeprecatedPlatform = nameDeprecated
+      }
     }
   }
 }
@@ -473,6 +495,9 @@ class BoardsListQuickPickItem extends BoardQuickPickItem {
     readonly item: BoardsListItemWithBoard & { port?: PortIdentifier }
   ) {
     super(item.board)
+    if (item.port) {
+      this.description = `on ${item.port.address}`
+    }
   }
 }
 export function portQuickItemLabel(port: Port, selected = false): string {

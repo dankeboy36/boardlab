@@ -2,6 +2,7 @@ import {
   DetectedPort,
   DetectedPorts,
   Port,
+  PortIdentifier,
   createBoardsList,
   createPortKey,
   findMatchingPortIndex,
@@ -31,6 +32,12 @@ const removeButton = inputButton('discard', 'Remove from history')
 
 export interface PortPickCandidate {
   readonly detectedPort: DetectedPort
+  readonly port: Port
+}
+
+interface PortQuickPickItem extends vscode.QuickPickItem {
+  readonly buttons: vscode.QuickInputButton[]
+  readonly portKey: PortQName
   readonly port: Port
 }
 
@@ -103,24 +110,30 @@ export async function pickPort(
             if (item instanceof QuickInputNoopLabel) {
               return
             }
-            let port: Port | undefined
-            if (item instanceof DetectedPortQuickItem) {
-              port = item.detectedPort.port
+            if (
+              !(item instanceof DetectedPortQuickItem) &&
+              !(item instanceof PortQNameQuickItem)
+            ) {
+              return
             }
+            const port = item.port
             if (!port) {
               return
             }
             // Fire and forget; history update is persisted via memento.
-            recentPorts.add(createPortKey(port))
+            recentPorts.add(item.portKey)
             resolve(port)
             input.hide()
           })()
         }),
         input.onDidTriggerItemButton(async ({ item, button }) => {
-          if (!(item instanceof DetectedPortQuickItem)) {
+          if (
+            !(item instanceof DetectedPortQuickItem) &&
+            !(item instanceof PortQNameQuickItem)
+          ) {
             return
           }
-          const portKey = createPortKey(item.detectedPort.port)
+          const portKey = item.portKey
           if (button === pinnedButton) {
             await pinnedPorts.remove(portKey)
           } else if (button === pinButton) {
@@ -154,6 +167,71 @@ export async function pickPortQName(
   return port ? createPortKey(port) : undefined
 }
 
+interface PortHistoryEntry {
+  readonly portKey: PortQName
+  readonly port: Port
+  readonly detectedPort?: DetectedPort
+}
+
+function toDisplayPort(port: PortIdentifier): Port {
+  return {
+    address: port.address,
+    protocol: port.protocol,
+    label: port.address,
+    protocolLabel: port.protocol,
+  }
+}
+
+function dedupePortQNames(portQNames: PortQName[]): PortQName[] {
+  const deduped: PortQName[] = []
+  const seen = new Set<PortQName>()
+  for (const portKey of portQNames) {
+    if (seen.has(portKey)) {
+      continue
+    }
+    seen.add(portKey)
+    deduped.push(portKey)
+  }
+  return deduped
+}
+
+async function toHistoryEntries(
+  portQNames: PortQName[],
+  detectedPortsByKey: ReadonlyMap<PortQName, DetectedPort>,
+  options: PortPickOptions
+): Promise<PortHistoryEntry[]> {
+  const entries: PortHistoryEntry[] = []
+  for (const portKey of portQNames) {
+    const detectedPort = detectedPortsByKey.get(portKey)
+    if (detectedPort) {
+      entries.push({
+        portKey,
+        port: detectedPort.port,
+        detectedPort,
+      })
+      continue
+    }
+
+    const revivedPort = revivePort(portKey)
+    if (!revivedPort) {
+      continue
+    }
+    const port = toDisplayPort(revivedPort)
+    if (!(await isPortAllowed({ port }, options))) {
+      continue
+    }
+    entries.push({ portKey, port })
+  }
+  return entries
+}
+
+function toHistoryQuickPickItem(entry: PortHistoryEntry): PortQuickPickItem {
+  if (entry.detectedPort) {
+    return new DetectedPortQuickItem(entry.detectedPort, false)
+  }
+  return new PortQNameQuickItem(entry.portKey, entry.port)
+}
+
 export async function toPortItems(
   detectedPorts: DetectedPorts,
   pinnedPortQNames: PortQName[],
@@ -166,17 +244,22 @@ export async function toPortItems(
       detectedPortsByKey.set(createPortKey(detectedPort.port), detectedPort)
     }
   }
-  const pinned = pinnedPortQNames.filter((portKey) =>
-    detectedPortsByKey.has(portKey)
+  const pinnedPortKeys = dedupePortQNames(pinnedPortQNames)
+  const recentPortKeys = dedupePortQNames(recentPortQNames).filter(
+    (portKey) => !pinnedPortKeys.includes(portKey)
   )
-  const recent = recentPortQNames
-    .filter(
-      (portKey) =>
-        !pinned.some((pinnedPortKey) => pinnedPortKey === portKey) &&
-        detectedPortsByKey.has(portKey)
-    )
-    .slice(0, 3)
-  const historyPortKeys = new Set<PortQName>([...pinned, ...recent])
+  const pinned = await toHistoryEntries(
+    pinnedPortKeys,
+    detectedPortsByKey,
+    options
+  )
+  const recent = (
+    await toHistoryEntries(recentPortKeys, detectedPortsByKey, options)
+  ).slice(0, 3)
+  const historyPortKeys = new Set<PortQName>([
+    ...pinned.map(({ portKey }) => portKey),
+    ...recent.map(({ portKey }) => portKey),
+  ])
 
   const boardList = createBoardsList(detectedPorts)
   const groupedPorts = boardList.portsGroupedByProtocol()
@@ -188,12 +271,8 @@ export async function toPortItems(
       kind: vscode.QuickPickItemKind.Separator,
       label: 'pinned ports',
     })
-    for (const portKey of pinned) {
-      const detectedPort = detectedPortsByKey.get(portKey)
-      if (!detectedPort) {
-        continue
-      }
-      const item = new DetectedPortQuickItem(detectedPort, false)
+    for (const entry of pinned) {
+      const item = toHistoryQuickPickItem(entry)
       setPortButtons(item, pinnedPortQNames, recentPortQNames)
       quickItems.push(item)
     }
@@ -204,12 +283,8 @@ export async function toPortItems(
       kind: vscode.QuickPickItemKind.Separator,
       label: 'recent ports',
     })
-    for (const portKey of recent) {
-      const detectedPort = detectedPortsByKey.get(portKey)
-      if (!detectedPort) {
-        continue
-      }
-      const item = new DetectedPortQuickItem(detectedPort, false)
+    for (const entry of recent) {
+      const item = toHistoryQuickPickItem(entry)
       setPortButtons(item, pinnedPortQNames, recentPortQNames)
       quickItems.push(item)
     }
@@ -243,10 +318,10 @@ export async function toPortItems(
   return quickItems
 }
 
-// Removed unused PortQNameQuickItem
-
-class DetectedPortQuickItem implements vscode.QuickPickItem {
+class DetectedPortQuickItem implements PortQuickPickItem {
   readonly buttons: vscode.QuickInputButton[] = []
+  readonly portKey: PortQName
+  readonly port: Port
   label: string
   description?: string
   detail?: string
@@ -255,9 +330,21 @@ class DetectedPortQuickItem implements vscode.QuickPickItem {
     readonly detectedPort: DetectedPort,
     selected: boolean
   ) {
+    this.port = detectedPort.port
+    this.portKey = createPortKey(detectedPort.port)
     this.label = portQuickItemLabel(detectedPort.port, selected)
     const boards = detectedPort.boards
-    if (boards) {
+    if (!boards || !boards?.length) {
+      // for unrecognized boards, such as ESP32 Wroom
+      if (
+        detectedPort.port.hardwareId ||
+        detectedPort.port.properties?.['pid'] ||
+        detectedPort.port.properties?.['PID']
+        // Check for VID?
+      ) {
+        this.description = 'unrecognized board'
+      }
+    } else {
       if (detectedPort.boards.length === 1) {
         this.description = detectedPort.boards[0].name
       } else if (detectedPort.boards.length > 1) {
@@ -271,12 +358,27 @@ class DetectedPortQuickItem implements vscode.QuickPickItem {
   }
 }
 
+class PortQNameQuickItem implements PortQuickPickItem {
+  readonly buttons: vscode.QuickInputButton[] = []
+  label: string
+  description?: string
+  detail?: string
+
+  constructor(
+    readonly portKey: PortQName,
+    readonly port: Port
+  ) {
+    this.label = portQuickItemLabel(port, false)
+    this.description = 'not detected'
+  }
+}
+
 function setPortButtons(
-  item: DetectedPortQuickItem,
+  item: PortQuickPickItem,
   pinnedPortQNames: PortQName[],
   recentPortQNames: PortQName[]
 ): void {
-  const portKey = createPortKey(item.detectedPort.port)
+  const { portKey } = item
   if (pinnedPortQNames.some((candidate) => candidate === portKey)) {
     item.buttons.push(pinnedButton)
   } else {

@@ -1172,7 +1172,7 @@ export class BoardLabContextImpl implements BoardLabContext {
     const pickedBoard = await pickBoard(
       arduino,
       boardsConfig,
-      this.boardsListWatcher.detectedPorts,
+      () => this.boardsListWatcher.detectedPorts,
       this.boardsListWatcher.onDidChangeDetectedPorts
     )
     let board: BoardIdentifier
@@ -1287,7 +1287,7 @@ export class BoardLabContextImpl implements BoardLabContext {
     return pickBoard(
       arduino,
       boardsConfig,
-      this.boardsListWatcher.detectedPorts,
+      () => this.boardsListWatcher.detectedPorts,
       this.boardsListWatcher.onDidChangeDetectedPorts,
       this.recentBoards,
       this.pinnedBoards,
