@@ -1,3 +1,10 @@
+## [0.0.12](https://github.com/dankeboy36/boardlab/compare/0.0.11...0.0.12) (2026-02-24)
+
+
+### Bug Fixes
+
+* board/port picker history uses live detection ([#28](https://github.com/dankeboy36/boardlab/issues/28)) ([065b87e](https://github.com/dankeboy36/boardlab/commit/065b87e37454bc117c8e03c9a1b63385739f9a68)), closes [#11](https://github.com/dankeboy36/boardlab/issues/11)
+
 ## [0.0.11](https://github.com/dankeboy36/boardlab/compare/0.0.10...0.0.11) (2026-02-23)
 
 
