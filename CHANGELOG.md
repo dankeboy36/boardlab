@@ -1,3 +1,10 @@
+## [0.0.13](https://github.com/dankeboy36/boardlab/compare/0.0.12...0.0.13) (2026-02-26)
+
+
+### Bug Fixes
+
+* stabilize monitor bridge during VSIX updates ([#32](https://github.com/dankeboy36/boardlab/issues/32)) ([60b0aeb](https://github.com/dankeboy36/boardlab/commit/60b0aeb96bab018f0bd3d31afa4a8e9ef5c9ef48))
+
 ## [0.0.12](https://github.com/dankeboy36/boardlab/compare/0.0.11...0.0.12) (2026-02-24)
 
 
