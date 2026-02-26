@@ -673,9 +673,35 @@ export async function createServer(options = {}) {
     timeoutMs: controlOptions.heartbeatTimeoutMs ?? 0,
   }
   const { stream: logFileStream } = createMonitorBridgeLogStream()
+  const restoreConsole = () => {
+    console.log = baseConsoleFunctions.log
+    console.info = baseConsoleFunctions.info
+    console.warn = baseConsoleFunctions.warn
+    console.error = baseConsoleFunctions.error
+  }
   const writeLogFile = (line) => {
-    if (logFileStream && !logFileStream.destroyed) {
-      logFileStream.write(`${line}\n`)
+    if (
+      logFileStream &&
+      !logFileStream.destroyed &&
+      !logFileStream.writableEnded
+    ) {
+      try {
+        logFileStream.write(`${line}\n`)
+      } catch (error) {
+        if (
+          !(
+            error &&
+            typeof error === 'object' &&
+            'code' in error &&
+            error.code === 'ERR_STREAM_WRITE_AFTER_END'
+          )
+        ) {
+          baseConsoleFunctions.error(
+            '[monitor bridge] failed writing log line',
+            error
+          )
+        }
+      }
     }
   }
   const traceWriter = new TraceWriter({
@@ -1251,7 +1277,7 @@ export async function createServer(options = {}) {
       resolve(undefined)
     }
     server.once('error', handleError)
-    server.listen(listenPort, handleListening)
+    server.listen(listenPort, host, handleListening)
   })
   const address = server.address()
   const boundPort =
@@ -3351,6 +3377,7 @@ export async function createServer(options = {}) {
     httpServer: server,
     attachmentRegistry,
     async close() {
+      restoreConsole()
       try {
         watcher.dispose?.()
       } catch {}
@@ -3434,15 +3461,6 @@ export async function createServer(options = {}) {
         } catch {}
       }
       try {
-        traceWriter.emit(
-          'logDidWrite',
-          {
-            message: 'Trace shutdown: closing log file stream',
-            level: 'debug',
-            logger: 'bridge',
-          },
-          { layer: 'bridge' }
-        )
         logFileStream.end()
       } catch {}
       traceWriter.emit(

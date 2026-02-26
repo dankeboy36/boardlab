@@ -24,6 +24,9 @@ import {
   type MonitorManagerOptions,
 } from '../../monitor/monitorManager'
 
+const TEST_EXTENSION_ID = 'dankeboy36.boardlab'
+const FALLBACK_TEST_EXTENSION_VERSION = '0.0.12'
+
 class TestMemento implements vscode.Memento {
   private readonly values = new Map<string, unknown>()
 
@@ -150,6 +153,40 @@ async function waitFor(
   }
 }
 
+function createTestExtensionContext(
+  extensionPath: string,
+  version: string
+): vscode.ExtensionContext {
+  return {
+    extensionPath,
+    extensionMode: vscode.ExtensionMode.Test,
+    subscriptions: [],
+    workspaceState: new TestMemento(),
+    globalState: new TestMemento(),
+    extension: {
+      id: TEST_EXTENSION_ID,
+      extensionPath,
+      packageJSON: {
+        version,
+      },
+    } as unknown as vscode.Extension<unknown>,
+  } as unknown as vscode.ExtensionContext
+}
+
+function resolveTestExtensionIdentity(): {
+  extensionPath: string
+  version: string
+} {
+  const extension = vscode.extensions.getExtension(TEST_EXTENSION_ID)
+  const extensionPath =
+    extension?.extensionPath ?? path.resolve(__dirname, '..', '..', '..')
+  const version =
+    typeof extension?.packageJSON?.version === 'string'
+      ? extension.packageJSON.version
+      : FALLBACK_TEST_EXTENSION_VERSION
+  return { extensionPath, version }
+}
+
 describe('MonitorManager (existing bridge)', function () {
   this.timeout(20_000)
 
@@ -186,13 +223,8 @@ describe('MonitorManager (existing bridge)', function () {
   it('embeds the monitor bridge and tracks monitor lifecycle', async () => {
     const mockBridge = new MockCliBridge()
     const messenger = new TestMessenger()
-    const extensionPath = path.resolve(__dirname, '..', '..', '..', '..')
-    const context: vscode.ExtensionContext = {
-      extensionPath,
-      subscriptions: [],
-      workspaceState: new TestMemento(),
-      globalState: new TestMemento(),
-    } as unknown as vscode.ExtensionContext
+    const { extensionPath, version } = resolveTestExtensionIdentity()
+    const context = createTestExtensionContext(extensionPath, version)
     const cliContext: CliContext = {
       resolveExecutablePath: async () => '/tmp/mock-cli',
     } as unknown as CliContext
@@ -214,6 +246,7 @@ describe('MonitorManager (existing bridge)', function () {
       testIntrospection: true,
       identity: {
         extensionPath,
+        version,
         mode: 'external-process',
       },
     } as any)
@@ -324,13 +357,8 @@ describe('MonitorManager (existing bridge)', function () {
   it('supports extension-host monitor clients without webview monitor wiring', async () => {
     const mockBridge = new MockCliBridge()
     const messenger = new TestMessenger()
-    const extensionPath = path.resolve(__dirname, '..', '..', '..', '..')
-    const context: vscode.ExtensionContext = {
-      extensionPath,
-      subscriptions: [],
-      workspaceState: new TestMemento(),
-      globalState: new TestMemento(),
-    } as unknown as vscode.ExtensionContext
+    const { extensionPath, version } = resolveTestExtensionIdentity()
+    const context = createTestExtensionContext(extensionPath, version)
     const cliContext: CliContext = {
       resolveExecutablePath: async () => '/tmp/mock-cli',
     } as unknown as CliContext
@@ -352,6 +380,7 @@ describe('MonitorManager (existing bridge)', function () {
       testIntrospection: true,
       identity: {
         extensionPath,
+        version,
         mode: 'external-process',
       },
     } as any)
@@ -447,13 +476,8 @@ describe('MonitorManager (existing bridge)', function () {
   it('auto-resolves baudrate for extension-host monitor clients', async () => {
     const mockBridge = new MockCliBridge()
     const messenger = new TestMessenger()
-    const extensionPath = path.resolve(__dirname, '..', '..', '..', '..')
-    const context: vscode.ExtensionContext = {
-      extensionPath,
-      subscriptions: [],
-      workspaceState: new TestMemento(),
-      globalState: new TestMemento(),
-    } as unknown as vscode.ExtensionContext
+    const { extensionPath, version } = resolveTestExtensionIdentity()
+    const context = createTestExtensionContext(extensionPath, version)
     const cliContext: CliContext = {
       resolveExecutablePath: async () => '/tmp/mock-cli',
     } as unknown as CliContext
@@ -475,6 +499,7 @@ describe('MonitorManager (existing bridge)', function () {
       testIntrospection: true,
       identity: {
         extensionPath,
+        version,
         mode: 'external-process',
       },
     } as any)

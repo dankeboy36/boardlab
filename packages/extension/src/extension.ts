@@ -51,18 +51,19 @@ import { ExamplesIndex } from './examples/examplesIndex'
 import { registerExampleCommands } from './examples/importCommands'
 import { showLibraryReadme } from './examples/readme'
 import { showBuiltinSketchReadmeFromFolderStrict } from './examples/showBuiltinSketchReadme'
-import { MonitorFileSystemProvider } from './monitor/monitorFs'
-import { MonitorResourceStore } from './monitor/monitorResources'
-import { MonitorSelectionCoordinator } from './monitor/monitorSelections'
-import { MonitorStatusBar } from './monitor/monitorStatusBar'
 import {
   logDetectedPorts,
   logMonitorBridgeMetrics,
 } from './monitor/bridgeMetrics'
+import { MonitorFileSystemProvider } from './monitor/monitorFs'
+import { MonitorResourceStore } from './monitor/monitorResources'
+import { MonitorSelectionCoordinator } from './monitor/monitorSelections'
+import { MonitorStatusBar } from './monitor/monitorStatusBar'
 import { formatMonitorUri, MONITOR_URI_SCHEME } from './monitor/monitorUri'
+import { PlatformMissingStatusBar } from './platformMissingStatusBar'
 import { collectCliDiagnostics } from './profile/cliDiagnostics'
-import { readProfile, readProfiles, updateProfile } from './profile/profiles'
 import { ProfilesCodeActionProvider } from './profile/codeActions'
+import { readProfile, readProfiles, updateProfile } from './profile/profiles'
 import { validateProfilesYAML } from './profile/validation'
 import { registerProfilesYamlValidation } from './profile/validationHost'
 import { CurrentSketchView } from './sketch/currentSketchView'
@@ -80,7 +81,6 @@ import { SketchbookView } from './sketch/sketchbookView'
 import { SketchFolderImpl } from './sketch/sketchFolder'
 import type { Resource as SketchResource } from './sketch/types'
 import { BoardLabTasks } from './tasks'
-import { PlatformMissingStatusBar } from './platformMissingStatusBar'
 import {
   getTaskStatus,
   markTaskFinished,

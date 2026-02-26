@@ -43,8 +43,15 @@ import {
 
 import { createNodeSocketAdapter } from './wsAdapters'
 
+const DEFAULT_RECONNECT_BASE_DELAY_MS = 1_000
+const DEFAULT_RECONNECT_MAX_DELAY_MS = 30_000
+const DEFAULT_RECONNECT_MAX_ATTEMPTS = 8
+
 export interface MonitorBridgeClientOptions {
   readonly resolveBridgeInfo: () => Promise<MonitorBridgeInfo>
+  readonly reconnectBaseDelayMs?: number
+  readonly reconnectMaxDelayMs?: number
+  readonly reconnectMaxAttempts?: number
 }
 
 /**
@@ -57,6 +64,11 @@ export class MonitorBridgeClient implements vscode.Disposable {
   private connectionDisposables: Disposable[] = []
   private socket: WebSocket | undefined
   private reconnectTimer: NodeJS.Timeout | undefined
+  private reconnectAttempts = 0
+  private readonly reconnectBaseDelayMs: number
+  private readonly reconnectMaxDelayMs: number
+  private readonly reconnectMaxAttempts: number
+  private disposed = false
   private readonly clientId = randomUUID()
   private lastConnectResult: HostConnectClientResult | undefined
   private currentDetectedPorts: DetectedPorts = {}
@@ -103,7 +115,20 @@ export class MonitorBridgeClient implements vscode.Disposable {
   private readonly onDidResumeMonitorEmitter =
     new vscode.EventEmitter<DidResumeMonitorNotification>()
 
-  constructor(private readonly options: MonitorBridgeClientOptions) {}
+  constructor(private readonly options: MonitorBridgeClientOptions) {
+    this.reconnectBaseDelayMs = Math.max(
+      100,
+      options.reconnectBaseDelayMs ?? DEFAULT_RECONNECT_BASE_DELAY_MS
+    )
+    this.reconnectMaxDelayMs = Math.max(
+      this.reconnectBaseDelayMs,
+      options.reconnectMaxDelayMs ?? DEFAULT_RECONNECT_MAX_DELAY_MS
+    )
+    this.reconnectMaxAttempts = Math.max(
+      1,
+      options.reconnectMaxAttempts ?? DEFAULT_RECONNECT_MAX_ATTEMPTS
+    )
+  }
 
   get onDidChangeDetectedPorts(): vscode.Event<DetectedPorts> {
     return this.onDidChangeDetectedPortsEmitter.event
@@ -211,6 +236,7 @@ export class MonitorBridgeClient implements vscode.Disposable {
   }
 
   dispose(): void {
+    this.disposed = true
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = undefined
@@ -383,6 +409,9 @@ export class MonitorBridgeClient implements vscode.Disposable {
   }
 
   private handleConnectionLost(error?: unknown) {
+    if (this.disposed) {
+      return
+    }
     if (error) {
       console.warn('[MonitorBridgeClient] connection lost', error)
     } else {
@@ -392,12 +421,27 @@ export class MonitorBridgeClient implements vscode.Disposable {
     if (this.reconnectTimer) {
       return
     }
+    const attempt = this.reconnectAttempts + 1
+    const delayMs = this.computeReconnectDelayMs(attempt)
+    this.reconnectAttempts = Math.min(attempt, this.reconnectMaxAttempts)
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = undefined
+      if (this.disposed) {
+        return
+      }
       this.ensureConnection().catch((err) => {
-        console.error('[MonitorBridgeClient] reconnect failed', err)
+        console.error('[MonitorBridgeClient] reconnect failed', {
+          attempt,
+          maxAttempts: this.reconnectMaxAttempts,
+          error: err instanceof Error ? err.message : String(err),
+        })
       })
-    }, 1_000)
+    }, delayMs)
+    this.log('scheduled reconnect', {
+      attempt,
+      maxAttempts: this.reconnectMaxAttempts,
+      delayMs,
+    })
   }
 
   private disposeConnection() {
@@ -421,6 +465,7 @@ export class MonitorBridgeClient implements vscode.Disposable {
   }
 
   private applyInitialSnapshot(snapshot: HostConnectClientResult) {
+    this.reconnectAttempts = 0
     this.lastConnectResult = snapshot
     this.updateDetectedPortsIfNotEqual(snapshot.detectedPorts)
     this.currentMonitorSettings = snapshot.monitorSettingsByProtocol
@@ -472,5 +517,13 @@ export class MonitorBridgeClient implements vscode.Disposable {
       set.delete(key)
     }
     this.currentSuspendedPortKeys = Array.from(set)
+  }
+
+  private computeReconnectDelayMs(attempt: number): number {
+    const exponentialDelay =
+      this.reconnectBaseDelayMs * 2 ** Math.max(0, attempt - 1)
+    const cappedDelay = Math.min(exponentialDelay, this.reconnectMaxDelayMs)
+    const jitter = Math.floor(Math.random() * Math.max(100, cappedDelay / 4))
+    return cappedDelay + jitter
   }
 }

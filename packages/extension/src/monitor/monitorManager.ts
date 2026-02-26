@@ -1,9 +1,10 @@
-import { spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import fs from 'node:fs'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 
-import { createPortKey, type DetectedPorts, PortIdentifier } from 'boards-list'
+import { createPortKey, PortIdentifier, type DetectedPorts } from 'boards-list'
 import deepEqual from 'fast-deep-equal'
 import * as vscode from 'vscode'
 import type { Messenger } from 'vscode-messenger'
@@ -28,50 +29,56 @@ import {
   notifyMonitorIntentStart,
   notifyMonitorIntentStop,
   notifyMonitorOpenError,
+  notifyMonitorPhysicalStateChanged,
   notifyMonitorSessionState,
   notifyMonitorViewDidChangeBaudrate,
   notifyMonitorViewDidChangeDetectedPorts,
   notifyMonitorViewDidChangeMonitorSettings,
   notifyMonitorViewDidPause,
   notifyMonitorViewDidResume,
-  notifyMonitorPhysicalStateChanged,
   notifyTraceEvent,
   requestMonitorDetectedPorts,
   requestMonitorPause,
   requestMonitorPhysicalStateSnapshot,
-  requestMonitorSessionSnapshot,
   requestMonitorResume,
   requestMonitorSendMessage,
+  requestMonitorSessionSnapshot,
   requestMonitorUpdateBaudrate,
   type ConnectClientParams,
   type DisconnectMonitorClientParams,
   type HostConnectClientResult,
+  type MonitorBridgeInfo,
+  type MonitorBridgeLogEntry,
   type MonitorClientAttachParams,
   type MonitorClientDetachParams,
-  type MonitorBridgeInfo,
+  type MonitorIntentParams,
+  type MonitorOpenErrorNotification,
   type MonitorSelectionNotification,
+  type MonitorSessionState,
   type MonitorSettingsByProtocol,
   type RequestPauseResumeMonitorParams,
   type RequestSendMonitorMessageParams,
   type RequestUpdateBaudrateParams,
-  type MonitorIntentParams,
-  type MonitorOpenErrorNotification,
-  type MonitorBridgeLogEntry,
-  type MonitorSessionState,
   type TraceEventNotification,
 } from '@boardlab/protocol'
 
-import {
-  MonitorLogicalTracker,
-  type MonitorPhysicalState,
-} from './monitorLogicalTracker'
 import type { CliContext } from '../cli/context'
+import { kill } from './kill'
 import {
   MonitorBridgeClient,
   type MonitorBridgeClientOptions,
 } from './monitorBridgeClient'
+import {
+  MonitorBridgeOrchestrator,
+  type MonitorBridgeRuntimeSnapshot,
+} from './monitorBridgeOrchestrator'
+import {
+  MonitorLogicalTracker,
+  type MonitorPhysicalState,
+} from './monitorLogicalTracker'
 import { MonitorPhysicalStateRegistry } from './monitorPhysicalStateRegistry'
 import { MonitorPortSession } from './monitorPortSession'
+import { portToPid } from './pidPort'
 
 const DEFAULT_BRIDGE_HOST = '127.0.0.1'
 const DEFAULT_BRIDGE_PORT = 55888
@@ -82,6 +89,10 @@ const WAIT_DELAY_MS = 200
 const PROBE_TIMEOUT_MS = 1_000_000
 const HEARTBEAT_REQUEST_TIMEOUT_MS = 5_000
 const EXTERNAL_HTTP_RETRY_DELAY_MS = 200
+const TAKEOVER_DECISION_DEDUPE_MS = 2_000
+const TAKEOVER_DECISION_DEDUPE_RETENTION_MS = 30_000
+const STALE_HOST_WAIT_ATTEMPTS = 40
+const STALE_HOST_WAIT_DELAY_MS = 250
 
 interface ServiceReadyInfo extends MonitorBridgeInfo {
   readonly ownerPid: number
@@ -101,6 +112,13 @@ interface AttachResponse {
   readonly wsUrl: string
 }
 
+interface WindowsPortOwnerInfo {
+  readonly pid: number
+  readonly name?: string
+  readonly commandLine?: string
+  readonly executablePath?: string
+}
+
 export type MonitorRuntimeState =
   | 'disconnected'
   | 'connected'
@@ -111,6 +129,46 @@ export interface MonitorStateChangeEvent {
   readonly port: PortIdentifier
   readonly state: MonitorRuntimeState
   readonly reason?: string
+}
+
+type BridgeOwnerReuseContext =
+  | 'retry-recheck'
+  | 'preferred-port'
+  | 'wait-for-bridge'
+
+interface BridgeOwnerReuseDecision {
+  readonly reuse: boolean
+  readonly reason?: string
+}
+
+export function decideBridgeOwnerReuse(
+  handled: 'none' | 'killed',
+  compatible: boolean,
+  context: BridgeOwnerReuseContext
+): BridgeOwnerReuseDecision {
+  if (handled === 'killed') {
+    return { reuse: false }
+  }
+  if (compatible) {
+    return { reuse: true }
+  }
+  if (context === 'retry-recheck') {
+    return { reuse: false, reason: 'retry-recheck-owner-incompatible' }
+  }
+  if (context === 'preferred-port') {
+    return { reuse: false, reason: 'preferred-port-owner-incompatible' }
+  }
+  return { reuse: false, reason: 'wait-owner-incompatible' }
+}
+
+export function shouldBypassTakeoverPolicyForStartupWait(
+  reason: string | undefined
+): boolean {
+  return (
+    reason === 'cooldown-local' ||
+    reason === 'cooldown-shared' ||
+    reason === 'lease-fresh-foreign-owner'
+  )
 }
 
 export class BridgeInUseError extends Error {
@@ -195,6 +253,23 @@ function resolveBridgeIdentity(
   }
 }
 
+function toComparableExtensionPath(
+  value: string | undefined
+): string | undefined {
+  if (!value) {
+    return undefined
+  }
+  try {
+    const uri = /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(value)
+      ? vscode.Uri.parse(value)
+      : vscode.Uri.file(value)
+    const fsPath = uri.fsPath || value
+    return process.platform === 'win32' ? fsPath.toLowerCase() : fsPath
+  } catch {
+    return process.platform === 'win32' ? value.toLowerCase() : value
+  }
+}
+
 class MonitorBridgeServiceClient implements vscode.Disposable {
   private readonly clientId = randomUUID()
   private preferredPort: number
@@ -208,7 +283,17 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
   private readonly heartbeatIntervalMs: number
   private readonly heartbeatTimeoutMs: number
   private readonly identity: MonitorBridgeIdentity
+  private readonly extensionId: string
+  private extensionsChangedDisposable: vscode.Disposable | undefined
   private logging: MonitorBridgeLoggingOptions
+  private startupError: Error | undefined
+  private readonly orchestrator: MonitorBridgeOrchestrator
+  private readonly takeoverDecisionTimestamps = new Map<string, number>()
+  private installedIdentity:
+    | { version?: string; extensionPath?: string }
+    | undefined
+
+  private staleHostReloadPromptShown = false
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -240,12 +325,23 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
         ? options.heartbeatTimeoutMs
         : 0
     this.identity = options.identity ?? {}
+    this.extensionId = this.context.extension.id
     this.logging = options.logging ?? {}
+    this.orchestrator = new MonitorBridgeOrchestrator({
+      identity: this.identity,
+      clientId: this.clientId,
+    })
+    this.refreshInstalledIdentity('startup')
+    this.extensionsChangedDisposable = vscode.extensions.onDidChange(() => {
+      this.refreshInstalledIdentity('extensions.onDidChange')
+    })
   }
 
   async getBridgeInfo(): Promise<ServiceReadyInfo> {
+    this.orchestrator.noteDemand()
     const ready = await this.ensureService()
     await this.ensureAttached(ready)
+    await this.orchestrator.clearRestartLock(ready.port).catch(() => undefined)
     return ready
   }
 
@@ -279,6 +375,8 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
 
   dispose(): void {
     this.disposed = true
+    this.extensionsChangedDisposable?.dispose()
+    this.extensionsChangedDisposable = undefined
     this.stopHeartbeat()
     this.detach().catch((error) => {
       this.logError('Failed to detach from monitor bridge service', error)
@@ -286,6 +384,35 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
   }
 
   private async ensureService(): Promise<ServiceReadyInfo> {
+    this.refreshInstalledIdentity('ensure-service')
+    if (!this.isInstalledVersionOwner()) {
+      this.log('Skipping monitor bridge resolution: extension host is stale', {
+        extensionId: this.extensionId,
+        hostVersion: this.identity.version ?? 'unknown',
+        hostExtensionPath: this.identity.extensionPath ?? 'unknown',
+        installedVersion: this.installedIdentity?.version ?? 'unknown',
+        installedExtensionPath:
+          this.installedIdentity?.extensionPath ?? 'unknown',
+      })
+      const ready = await this.waitForInstalledOwnerBridge()
+      if (ready) {
+        this.log(
+          'Stale extension host found active bridge from installed owner',
+          {
+            ownerPid: ready.ownerPid,
+            port: ready.port,
+            version: ready.version ?? 'unknown',
+            extensionPath: ready.extensionPath ?? 'unknown',
+          }
+        )
+        this.readyInfo = ready
+        this.attachToken = undefined
+        return ready
+      }
+      throw new Error(
+        'Monitor bridge startup blocked: running extension host is stale and installed owner bridge did not become available in time'
+      )
+    }
     if (
       this.readyInfo &&
       (await this.isBridgeReachable(this.readyInfo).catch(() => false))
@@ -309,15 +436,231 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
       return reused
     }
 
+    this.readyInfo = undefined
     const actualPort = await this.launchService(this.preferredPort)
     const portToProbe = actualPort > 0 ? actualPort : this.preferredPort
-    const ready = await this.waitForBridge(portToProbe)
+    let ready: ServiceReadyInfo
+    try {
+      ready = await this.waitForBridge(portToProbe)
+    } catch (error) {
+      this.log('Bridge startup failed after launch; evaluating recovery', {
+        port: portToProbe,
+        error: formatError(error),
+      })
+      const recovered = await this.tryRecoverStaleWindowsBridgeProcess(
+        portToProbe,
+        error
+      )
+      if (!recovered) {
+        if (
+          error instanceof Error &&
+          /exited before startup/i.test(error.message)
+        ) {
+          this.logTakeoverDecision('retry', 'early-startup-exit', {
+            port: this.preferredPort,
+          })
+          await delay(this.orchestrator.computeRetryBackoffMs())
+          const owner = await this.fetchHealth(this.preferredPort).catch(
+            () => undefined
+          )
+          if (owner) {
+            this.logTakeoverDecision('retry-recheck', 'owner-observed', {
+              ownerPid: owner.ownerPid,
+              ownerVersion: owner.version,
+              ownerExtensionPath: owner.extensionPath,
+            })
+            const handled = await this.handleVersionMismatch(owner)
+            const reuseDecision = decideBridgeOwnerReuse(
+              handled,
+              this.isCompatibleBridge(owner),
+              'retry-recheck'
+            )
+            if (reuseDecision.reuse) {
+              this.readyInfo = owner
+              this.attachToken = undefined
+              await this.orchestrator
+                .writeOwnerLease(owner, { takeover: false })
+                .catch(() => undefined)
+              return owner
+            }
+            if (
+              reuseDecision.reason &&
+              !reuseDecision.reason.endsWith('owner-incompatible')
+            ) {
+              this.logTakeoverDecision('skip', reuseDecision.reason, {
+                policy: 'version-mismatch',
+                runningPid: owner.ownerPid,
+                runningVersion: owner.version,
+                expectedVersion: this.identity.version,
+                port: owner.port,
+              })
+            }
+          }
+          const retryPort = await this.launchService(this.preferredPort)
+          const retryPortToProbe =
+            retryPort > 0 ? retryPort : this.preferredPort
+          ready = await this.waitForBridge(retryPortToProbe)
+          if (ready.port > 0) {
+            this.preferredPort = ready.port
+          }
+          this.readyInfo = ready
+          this.attachToken = undefined
+          return ready
+        }
+        this.log('Bridge recovery was not applied; rethrowing startup error', {
+          port: portToProbe,
+        })
+        throw error
+      }
+      this.log('Bridge recovery applied; relaunching monitor bridge', {
+        port: this.preferredPort,
+      })
+      const retryPort = await this.launchService(this.preferredPort)
+      const retryPortToProbe = retryPort > 0 ? retryPort : this.preferredPort
+      ready = await this.waitForBridge(retryPortToProbe)
+    }
     if (ready.port > 0) {
       this.preferredPort = ready.port
     }
     this.readyInfo = ready
     this.attachToken = undefined
     return ready
+  }
+
+  private async tryRecoverStaleWindowsBridgeProcess(
+    port: number,
+    error: unknown
+  ): Promise<boolean> {
+    if (process.platform !== 'win32') {
+      this.log('Skipping stale bridge recovery: platform is not win32', {
+        platform: process.platform,
+      })
+      return false
+    }
+    if (port <= 0) {
+      this.log('Skipping stale bridge recovery: invalid port', { port })
+      return false
+    }
+    if (
+      !(
+        error instanceof BridgeInUseError ||
+        (error instanceof Error &&
+          /EADDRINUSE|address already in use|Timed out waiting for BoardLab monitor bridge startup|exited before startup/i.test(
+            error.message
+          ))
+      )
+    ) {
+      this.log(
+        'Skipping stale bridge recovery: startup error is not recoverable',
+        {
+          port,
+          error: formatError(error),
+        }
+      )
+      return false
+    }
+
+    this.log(
+      'Windows bridge startup failed; checking port owner for recovery',
+      {
+        port,
+        startupError: formatError(error),
+      }
+    )
+
+    const takeoverDecision = await this.orchestrator.evaluateTakeoverPolicy(
+      'stale-recovery',
+      port
+    )
+    if (!takeoverDecision.allowed) {
+      this.logTakeoverDecision('skip', takeoverDecision.reason, {
+        policy: 'stale-recovery',
+        port,
+      })
+      return false
+    }
+
+    const pid = await this.getWindowsPidForPort(port)
+    if (!pid) {
+      this.log('No Windows port owner PID found for recovery', { port })
+      return false
+    }
+    const owner = await this.inspectWindowsProcess(pid)
+    const ownerInfo: WindowsPortOwnerInfo = owner ? { pid, ...owner } : { pid }
+
+    this.log('Resolved Windows port owner', {
+      port,
+      pid: ownerInfo.pid,
+      name: ownerInfo.name,
+      executablePath: ownerInfo.executablePath,
+      commandLine: ownerInfo.commandLine,
+    })
+
+    if (!this.shouldTerminateStaleWindowsBridgeOwner(ownerInfo, port)) {
+      this.log('Windows bridge port owner does not look stale, skipping stop', {
+        port,
+        pid: ownerInfo.pid,
+        name: ownerInfo.name,
+      })
+      this.logTakeoverDecision('skip', 'owner-not-stale', {
+        policy: 'stale-recovery',
+        port,
+        pid: ownerInfo.pid,
+      })
+      return false
+    }
+
+    this.logTakeoverDecision('kill', 'stale-owner-confirmed', {
+      policy: 'stale-recovery',
+      port,
+      pid: ownerInfo.pid,
+    })
+    this.log('Stopping stale Windows monitor bridge process detected by port', {
+      port,
+      pid: ownerInfo.pid,
+      name: ownerInfo.name,
+    })
+
+    const stopped = await this.stopBridgeProcess({
+      ownerPid: ownerInfo.pid,
+      port,
+      wsUrl: '',
+      httpBaseUrl: `http://${DEFAULT_BRIDGE_HOST}:${port}`,
+      version: undefined,
+      mode: undefined,
+      extensionPath: ownerInfo.executablePath,
+      commit: undefined,
+      nodeVersion: undefined,
+      platform: undefined,
+      startedAt: undefined,
+    })
+
+    if (!stopped) {
+      this.log('Failed to stop stale Windows monitor bridge process', {
+        port,
+        pid: ownerInfo.pid,
+      })
+      return false
+    }
+
+    this.log('Stopped stale Windows monitor bridge process; retrying startup', {
+      port,
+      pid: ownerInfo.pid,
+    })
+    this.orchestrator.noteTakeover()
+    await this.orchestrator
+      .writeOwnerLease(
+        {
+          ownerPid: ownerInfo.pid,
+          port,
+          wsUrl: '',
+          httpBaseUrl: `http://${DEFAULT_BRIDGE_HOST}:${port}`,
+        } as ServiceReadyInfo,
+        { takeover: true }
+      )
+      .catch(() => undefined)
+    this.startupError = undefined
+    return true
   }
 
   private async tryPreferredPort(): Promise<ServiceReadyInfo | undefined> {
@@ -331,7 +674,24 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
       return undefined
     }
     const handled = await this.handleVersionMismatch(reused)
-    if (handled === 'killed') {
+    const reuseDecision = decideBridgeOwnerReuse(
+      handled,
+      this.isCompatibleBridge(reused),
+      'preferred-port'
+    )
+    if (!reuseDecision.reuse) {
+      if (
+        reuseDecision.reason &&
+        !reuseDecision.reason.endsWith('owner-incompatible')
+      ) {
+        this.logTakeoverDecision('skip', reuseDecision.reason, {
+          policy: 'version-mismatch',
+          runningPid: reused.ownerPid,
+          runningVersion: reused.version,
+          expectedVersion: this.identity.version,
+          port: reused.port,
+        })
+      }
       return undefined
     }
     return reused
@@ -342,12 +702,39 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
       throw new Error('Invalid BoardLab monitor bridge port')
     }
     for (let attempt = 0; attempt < WAIT_ATTEMPTS; attempt++) {
+      if (this.startupError) {
+        this.log('Bridge startup error detected while waiting for health', {
+          port,
+          attempt: attempt + 1,
+          startupError: formatError(this.startupError),
+        })
+        throw this.startupError
+      }
       try {
         const ready = await this.fetchHealth(port)
         if (ready) {
-          const handled = await this.handleVersionMismatch(ready)
-          if (handled === 'none') {
+          const handled = await this.handleVersionMismatch(ready, {
+            startupWait: true,
+          })
+          const reuseDecision = decideBridgeOwnerReuse(
+            handled,
+            this.isCompatibleBridge(ready),
+            'wait-for-bridge'
+          )
+          if (reuseDecision.reuse) {
             return ready
+          }
+          if (
+            reuseDecision.reason &&
+            !reuseDecision.reason.endsWith('owner-incompatible')
+          ) {
+            this.logTakeoverDecision('skip', reuseDecision.reason, {
+              policy: 'version-mismatch',
+              runningPid: ready.ownerPid,
+              runningVersion: ready.version,
+              expectedVersion: this.identity.version,
+              port: ready.port,
+            })
           }
         }
       } catch (error) {
@@ -355,7 +742,32 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
           throw error
         }
       }
+      if (this.startupError) {
+        this.log('Bridge startup error detected after health probe', {
+          port,
+          attempt: attempt + 1,
+          startupError: formatError(this.startupError),
+        })
+        throw this.startupError
+      }
       await delay(WAIT_DELAY_MS)
+    }
+    if (this.startupError) {
+      throw this.startupError
+    }
+    const finalReady = await this.fetchHealth(port).catch(() => undefined)
+    if (finalReady) {
+      const finalHandled = await this.handleVersionMismatch(finalReady, {
+        startupWait: true,
+      })
+      const finalReuseDecision = decideBridgeOwnerReuse(
+        finalHandled,
+        this.isCompatibleBridge(finalReady),
+        'wait-for-bridge'
+      )
+      if (finalReuseDecision.reuse) {
+        return finalReady
+      }
     }
     throw new Error('Timed out waiting for BoardLab monitor bridge startup')
   }
@@ -466,32 +878,103 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
     }
   }
 
+  private async waitForInstalledOwnerBridge(): Promise<
+    ServiceReadyInfo | undefined
+  > {
+    for (let attempt = 0; attempt < STALE_HOST_WAIT_ATTEMPTS; attempt++) {
+      if (this.disposed) {
+        return undefined
+      }
+      const ready = await this.fetchHealth(this.preferredPort).catch(
+        () => undefined
+      )
+      if (ready) {
+        return ready
+      }
+      if (attempt === 0 || (attempt + 1) % 8 === 0) {
+        this.log('Waiting for installed owner bridge to become available', {
+          attempt: attempt + 1,
+          maxAttempts: STALE_HOST_WAIT_ATTEMPTS,
+          port: this.preferredPort,
+        })
+      }
+      await delay(STALE_HOST_WAIT_DELAY_MS)
+    }
+    this.log('Timed out waiting for installed owner bridge', {
+      maxAttempts: STALE_HOST_WAIT_ATTEMPTS,
+      delayMs: STALE_HOST_WAIT_DELAY_MS,
+      port: this.preferredPort,
+    })
+    return undefined
+  }
+
   private isCompatibleBridge(info: ServiceReadyInfo): boolean {
-    const expectedVersion = this.identity.version
-    if (expectedVersion) {
-      if (!info.version || info.version !== expectedVersion) {
-        return false
-      }
-    }
-    const expectedExtensionPath = this.identity.extensionPath
-    if (expectedExtensionPath) {
-      if (!info.extensionPath || info.extensionPath !== expectedExtensionPath) {
-        return false
-      }
-    }
-    const expectedCommit = this.identity.commit
-    if (expectedCommit) {
-      if (!info.commit || info.commit !== expectedCommit) {
-        return false
-      }
-    }
-    return true
+    return this.orchestrator.isCompatibleBridge(info)
   }
 
   private async handleVersionMismatch(
-    info: ServiceReadyInfo
+    info: ServiceReadyInfo,
+    options: { startupWait?: boolean } = {}
   ): Promise<'none' | 'killed'> {
+    if (!this.isInstalledVersionOwner()) {
+      this.logTakeoverDecision('skip', 'host-version-not-installed', {
+        policy: 'version-mismatch',
+        runningPid: info.ownerPid,
+        runningVersion: info.version,
+        expectedVersion: this.identity.version,
+        port: info.port,
+        installedVersion: this.installedIdentity?.version,
+      })
+      return 'none'
+    }
     if (this.isCompatibleBridge(info)) {
+      await this.orchestrator
+        .writeOwnerLease(info, { takeover: false })
+        .catch(() => undefined)
+      return 'none'
+    }
+
+    const takeoverDecision = await this.orchestrator.evaluateTakeoverPolicy(
+      'version-mismatch',
+      info.port
+    )
+    if (
+      !takeoverDecision.allowed &&
+      options.startupWait &&
+      shouldBypassTakeoverPolicyForStartupWait(takeoverDecision.reason)
+    ) {
+      this.logTakeoverDecision('retry', 'startup-wait-policy-override', {
+        policy: 'version-mismatch',
+        blockedReason: takeoverDecision.reason,
+        runningPid: info.ownerPid,
+        runningVersion: info.version,
+        expectedVersion: this.identity.version,
+        port: info.port,
+      })
+    } else if (!takeoverDecision.allowed) {
+      this.logTakeoverDecision('skip', takeoverDecision.reason, {
+        policy: 'version-mismatch',
+        runningPid: info.ownerPid,
+        runningVersion: info.version,
+        expectedVersion: this.identity.version,
+        port: info.port,
+      })
+      return 'none'
+    }
+
+    const restartLock = await this.orchestrator.tryAcquireRestartLock(
+      info.port,
+      this.identity.version
+    )
+    if (!restartLock.acquired) {
+      this.logTakeoverDecision('skip', restartLock.reason, {
+        policy: 'version-mismatch',
+        runningPid: info.ownerPid,
+        runningVersion: info.version,
+        expectedVersion: this.identity.version,
+        port: info.port,
+      })
+      this.promptReloadForStaleHost()
       return 'none'
     }
 
@@ -505,13 +988,25 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
       runningCommit: info.commit ?? 'unknown',
       expectedCommit: this.identity.commit ?? 'unknown',
     })
+    this.logTakeoverDecision('kill', 'version-mismatch', {
+      policy: 'version-mismatch',
+      runningPid: info.ownerPid,
+      runningVersion: info.version,
+      expectedVersion: this.identity.version,
+      port: info.port,
+    })
     const stopped = await this.stopBridgeProcess(info)
     if (!stopped) {
+      await this.orchestrator.clearRestartLock(info.port).catch(() => undefined)
       throw new BridgeInUseError(
         info.port,
         `failed-to-stop-existing-bridge-pid-${info.ownerPid || 'unknown'}`
       )
     }
+    this.orchestrator.noteTakeover()
+    await this.orchestrator
+      .writeOwnerLease(info, { takeover: true })
+      .catch(() => undefined)
     return 'killed'
   }
 
@@ -528,8 +1023,38 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
       port: info.port,
       version: info.version,
     })
+    if (process.platform === 'win32') {
+      this.log('Attempting to stop monitor bridge with fkill', {
+        pid,
+        force: false,
+      })
+      const terminatedWithFkill = await this.killProcessWithFkill(pid, false)
+      if (terminatedWithFkill) {
+        this.log('Stopped monitor bridge with fkill', { pid, force: false })
+        return true
+      }
+      this.log('fkill graceful stop did not terminate process; escalating', {
+        pid,
+      })
+      this.log('Attempting to stop monitor bridge with fkill', {
+        pid,
+        force: true,
+      })
+      const forceTerminatedWithFkill = await this.killProcessWithFkill(
+        pid,
+        true
+      )
+      if (forceTerminatedWithFkill) {
+        this.log('Stopped monitor bridge with fkill', { pid, force: true })
+        return true
+      }
+      this.log('fkill forced stop did not terminate process; using signals', {
+        pid,
+      })
+    }
     try {
       process.kill(pid, 'SIGTERM')
+      this.log('Sent SIGTERM to monitor bridge process', { pid })
     } catch (error) {
       const code = getErrnoCode(error)
       if (code === 'ESRCH') {
@@ -548,6 +1073,7 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
     })
     try {
       process.kill(pid, 'SIGKILL')
+      this.log('Sent SIGKILL to monitor bridge process', { pid })
     } catch (error) {
       const code = getErrnoCode(error)
       if (code === 'ESRCH') {
@@ -558,6 +1084,23 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
     }
     const terminated = await this.waitForProcessExit(pid)
     if (!terminated) {
+      if (process.platform === 'win32') {
+        this.log('Monitor bridge still alive after SIGKILL; retrying fkill', {
+          pid,
+        })
+        this.log('Attempting to stop monitor bridge with fkill', {
+          pid,
+          force: true,
+        })
+        const forceTerminatedWithFkill = await this.killProcessWithFkill(
+          pid,
+          true
+        )
+        if (forceTerminatedWithFkill) {
+          this.log('Stopped monitor bridge with fkill', { pid, force: true })
+          return true
+        }
+      }
       this.log('Monitor bridge process is still alive after SIGKILL', { pid })
     }
     return terminated
@@ -595,6 +1138,7 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
   }
 
   private async launchService(port: number): Promise<number> {
+    this.startupError = undefined
     const cliPath = await this.resolveCliPath()
     const entry = this.serviceEntryPoint
     const args = [
@@ -636,10 +1180,45 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
         stdio: 'pipe', // // TODO: change to ignore when ready
       })
       this.log('Launched monitor bridge service', { pid: child.pid })
+      child.stdout?.on('data', (chunk) => {
+        const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8')
+        this.log('monitor bridge service stdout', {
+          pid: child.pid,
+          port,
+          message: text.trim(),
+        })
+      })
+      child.stderr?.on('data', (chunk) => {
+        const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8')
+        this.log('monitor bridge service stderr', {
+          pid: child.pid,
+          port,
+          message: text.trim(),
+        })
+        if (
+          !this.startupError &&
+          /EADDRINUSE|address already in use/i.test(text)
+        ) {
+          this.startupError = new BridgeInUseError(
+            port,
+            'address-already-in-use'
+          )
+        }
+      })
       child.on('error', (error) => {
+        if (!this.startupError) {
+          this.startupError =
+            error instanceof Error ? error : new Error(String(error))
+        }
         this.logError('monitor bridge service process error', error)
       })
       child.on('exit', (code, signal) => {
+        if (!this.startupError && !this.readyInfo && code && code !== 0) {
+          const reason = signal ? `signal-${signal}` : `exit-code-${code}`
+          this.startupError = new Error(
+            `Monitor bridge service exited before startup (${reason})`
+          )
+        }
         this.log('monitor bridge service process exited', { code, signal })
       })
       // child.unref() // TODO: uncomment when ready
@@ -697,6 +1276,9 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
       }
       const data = (await response.json()) as AttachResponse
       this.attachToken = data.token
+      await this.orchestrator
+        .writeOwnerLease(info, { takeover: false })
+        .catch(() => undefined)
       this.startHeartbeat(info)
     } catch (error) {
       this.attachToken = undefined
@@ -794,6 +1376,18 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
         this.log('Monitor bridge heartbeat rejected', {
           status: response.status,
         })
+      } else {
+        const runtimeInfo: MonitorBridgeRuntimeSnapshot = {
+          ownerPid: this.readyInfo?.ownerPid ?? process.pid,
+          port: this.readyInfo?.port ?? this.preferredPort,
+          version: this.readyInfo?.version,
+          extensionPath: this.readyInfo?.extensionPath,
+          mode: this.readyInfo?.mode,
+          commit: this.readyInfo?.commit,
+        }
+        await this.orchestrator
+          .writeOwnerLease(runtimeInfo, { heartbeat: true, takeover: false })
+          .catch(() => undefined)
       }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
@@ -832,6 +1426,373 @@ class MonitorBridgeServiceClient implements vscode.Disposable {
 
   private logError(message: string, error: unknown): void {
     this.outputChannel.appendLine(`${message} ${formatError(error)}`)
+  }
+
+  private async getWindowsPidForPort(
+    port: number
+  ): Promise<number | undefined> {
+    if (process.platform !== 'win32' || port <= 0) {
+      return undefined
+    }
+    try {
+      this.log('Looking up Windows PID by bridge port', { port })
+      const pid = await portToPid({ port, host: '*' })
+      const valid = Number.isInteger(pid) && (pid ?? 0) > 0
+      this.log('Windows PID lookup result', {
+        port,
+        pid: valid ? pid : undefined,
+      })
+      return valid ? pid : undefined
+    } catch (error) {
+      this.logError('Failed resolving PID by port with pid-port', error)
+      return undefined
+    }
+  }
+
+  private async killProcessWithFkill(
+    pid: number,
+    force: boolean
+  ): Promise<boolean> {
+    if (pid <= 0 || pid === process.pid) {
+      this.log('Skipping fkill: invalid target PID', {
+        pid,
+        currentPid: process.pid,
+      })
+      return false
+    }
+    try {
+      this.log('Invoking fkill for monitor bridge process', { pid, force })
+      await kill(pid, force)
+    } catch (error) {
+      if (
+        !force &&
+        error instanceof Error &&
+        /Failed to kill processes/i.test(error.message)
+      ) {
+        this.log('fkill graceful attempt did not terminate target process', {
+          pid,
+        })
+        return false
+      }
+      this.logError('Failed to stop monitor bridge process with fkill', error)
+      return false
+    }
+
+    const timeoutMs = force ? 5_000 : 2_500
+    const stopped = await this.waitForProcessExit(pid, timeoutMs)
+    if (!stopped) {
+      this.log('Process still running after fkill', { pid, force })
+    }
+    return stopped
+  }
+
+  private logTakeoverDecision(
+    action: 'skip' | 'kill' | 'retry' | 'retry-recheck',
+    reason: string,
+    data?: Record<string, unknown>
+  ): void {
+    const payload = {
+      action,
+      reason,
+      port: this.preferredPort,
+      expectedVersion: this.identity.version ?? 'unknown',
+      expectedExtensionPath: this.identity.extensionPath ?? 'unknown',
+      ...data,
+    }
+    const signature = JSON.stringify(payload)
+    const now = Date.now()
+    const previous = this.takeoverDecisionTimestamps.get(signature)
+    if (
+      previous !== undefined &&
+      now - previous < TAKEOVER_DECISION_DEDUPE_MS
+    ) {
+      return
+    }
+    this.takeoverDecisionTimestamps.set(signature, now)
+    if (this.takeoverDecisionTimestamps.size > 128) {
+      for (const [key, timestamp] of this.takeoverDecisionTimestamps) {
+        if (now - timestamp > TAKEOVER_DECISION_DEDUPE_RETENTION_MS) {
+          this.takeoverDecisionTimestamps.delete(key)
+        }
+      }
+    }
+    this.log('takeover_decision', payload)
+  }
+
+  private refreshInstalledIdentity(
+    reason: 'startup' | 'extensions.onDidChange' | 'ensure-service'
+  ): void {
+    const extension = vscode.extensions.getExtension(this.extensionId)
+    const apiVersion =
+      typeof extension?.packageJSON?.version === 'string'
+        ? extension.packageJSON.version
+        : undefined
+    const apiExtensionPath = extension?.extensionPath
+    const fsDetected = this.detectInstalledIdentityFromFilesystem()
+    const shouldUseFilesystem =
+      !!fsDetected?.extensionPath &&
+      toComparableExtensionPath(fsDetected.extensionPath) !==
+        toComparableExtensionPath(apiExtensionPath)
+    const installedVersion = shouldUseFilesystem
+      ? fsDetected?.version
+      : apiVersion
+    const installedExtensionPath = shouldUseFilesystem
+      ? fsDetected?.extensionPath
+      : apiExtensionPath
+    this.installedIdentity = {
+      version: installedVersion,
+      extensionPath: installedExtensionPath,
+    }
+    const owner = this.isInstalledVersionOwner()
+    this.log('Resolved installed BoardLab extension identity', {
+      reason,
+      extensionId: this.extensionId,
+      hostVersion: this.identity.version ?? 'unknown',
+      hostExtensionPath: this.identity.extensionPath ?? 'unknown',
+      installedVersion: installedVersion ?? 'unknown',
+      installedExtensionPath: installedExtensionPath ?? 'unknown',
+      installedSource: shouldUseFilesystem ? 'filesystem' : 'vscode.extensions',
+      vscodeApiVersion: apiVersion ?? 'unknown',
+      vscodeApiExtensionPath: apiExtensionPath ?? 'unknown',
+      filesystemVersion: fsDetected?.version ?? 'unknown',
+      filesystemExtensionPath: fsDetected?.extensionPath ?? 'unknown',
+      owner,
+    })
+    if (!owner && reason !== 'startup') {
+      this.promptReloadForStaleHost()
+    }
+  }
+
+  private detectInstalledIdentityFromFilesystem():
+    | { version?: string; extensionPath?: string }
+    | undefined {
+    const extensionRoot = path.dirname(this.context.extensionPath)
+    if (!extensionRoot) {
+      return undefined
+    }
+    const prefix = `${this.extensionId.toLowerCase()}-`
+    try {
+      const candidates = fs
+        .readdirSync(extensionRoot, { withFileTypes: true })
+        .filter((entry) => {
+          return (
+            entry.isDirectory() && entry.name.toLowerCase().startsWith(prefix)
+          )
+        })
+        .map((entry) => {
+          const extensionPath = path.join(extensionRoot, entry.name)
+          const stats = fs.statSync(extensionPath)
+          return {
+            extensionPath,
+            mtimeMs: stats.mtimeMs,
+          }
+        })
+        .sort((a, b) => b.mtimeMs - a.mtimeMs)
+
+      const selected = candidates[0]
+      if (!selected) {
+        return undefined
+      }
+      let version: string | undefined
+      try {
+        const packageJsonPath = path.join(
+          selected.extensionPath,
+          'package.json'
+        )
+        const packageJsonText = fs.readFileSync(packageJsonPath, 'utf8')
+        const packageJson = JSON.parse(packageJsonText) as { version?: unknown }
+        if (typeof packageJson.version === 'string') {
+          version = packageJson.version
+        }
+      } catch {
+        // ignore parse/IO errors and fallback to path-only identity
+      }
+      return {
+        version,
+        extensionPath: selected.extensionPath,
+      }
+    } catch {
+      return undefined
+    }
+  }
+
+  private isInstalledVersionOwner(): boolean {
+    const installedVersion = this.installedIdentity?.version
+    const hostVersion = this.identity.version
+    if (installedVersion && hostVersion && installedVersion !== hostVersion) {
+      return false
+    }
+    const installedPath = toComparableExtensionPath(
+      this.installedIdentity?.extensionPath
+    )
+    const hostPath = toComparableExtensionPath(this.identity.extensionPath)
+    if (installedPath && hostPath && installedPath !== hostPath) {
+      return false
+    }
+    return true
+  }
+
+  private promptReloadForStaleHost(): void {
+    if (this.staleHostReloadPromptShown || this.disposed) {
+      return
+    }
+    this.staleHostReloadPromptShown = true
+    vscode.window
+      .showWarningMessage(
+        'BoardLab update detected. This window is running an older extension host. Reload to finish switching monitor bridge ownership.',
+        'Reload Window'
+      )
+      .then((selection) => {
+        if (selection === 'Reload Window') {
+          vscode.commands.executeCommand('workbench.action.reloadWindow')
+        }
+      })
+  }
+
+  private async inspectWindowsProcess(
+    pid: number
+  ): Promise<Omit<WindowsPortOwnerInfo, 'pid'> | undefined> {
+    if (process.platform !== 'win32' || pid <= 0) {
+      return undefined
+    }
+    const script = [
+      `$pid = ${pid}`,
+      '$p = Get-CimInstance Win32_Process -Filter "ProcessId=$pid"',
+      'if (-not $p) { return }',
+      '[pscustomobject]@{',
+      '  name = $p.Name',
+      '  commandLine = $p.CommandLine',
+      '  executablePath = $p.ExecutablePath',
+      '} | ConvertTo-Json -Compress',
+    ].join('; ')
+
+    const stdout = await this.execFileText('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      script,
+    ]).catch((execError) => {
+      this.log('Failed to inspect Windows process details', {
+        pid,
+        error: formatError(execError),
+      })
+      return ''
+    })
+
+    const text = stdout.trim()
+    if (!text) {
+      return undefined
+    }
+
+    try {
+      const row = JSON.parse(text) as {
+        name?: unknown
+        commandLine?: unknown
+        executablePath?: unknown
+      }
+      return {
+        name: typeof row.name === 'string' ? row.name : undefined,
+        commandLine:
+          typeof row.commandLine === 'string' ? row.commandLine : undefined,
+        executablePath:
+          typeof row.executablePath === 'string'
+            ? row.executablePath
+            : undefined,
+      }
+    } catch (parseError) {
+      this.log('Failed to parse Windows process payload', {
+        pid,
+        payload: text,
+        error: formatError(parseError),
+      })
+      return undefined
+    }
+  }
+
+  private shouldTerminateStaleWindowsBridgeOwner(
+    owner: WindowsPortOwnerInfo,
+    port: number
+  ): boolean {
+    if (!Number.isInteger(owner.pid) || owner.pid <= 0) {
+      return false
+    }
+    if (owner.pid === process.pid) {
+      return false
+    }
+
+    const commandLine = this.normalizeForMatch(owner.commandLine)
+    if (!commandLine) {
+      return false
+    }
+    if (
+      !commandLine.includes('boardlab') ||
+      !commandLine.includes('portino-bridge') ||
+      !commandLine.includes('servicemain.js')
+    ) {
+      return false
+    }
+    if (!commandLine.includes(`--port ${port}`)) {
+      return false
+    }
+
+    const expectedExtensionPath = this.normalizeForMatch(
+      this.identity.extensionPath
+    )
+    if (!expectedExtensionPath) {
+      return false
+    }
+
+    const ownerMatchesCurrentPath = commandLine.includes(expectedExtensionPath)
+    if (!ownerMatchesCurrentPath) {
+      return true
+    }
+
+    const expectedVersion = this.normalizeForMatch(this.identity.version)
+    if (!expectedVersion) {
+      return false
+    }
+    return !commandLine.includes(`--boardlab-version ${expectedVersion}`)
+  }
+
+  private normalizeForMatch(value: string | undefined): string {
+    if (!value) {
+      return ''
+    }
+    return value.replace(/\//g, '\\').toLowerCase()
+  }
+
+  private async execFileText(
+    command: string,
+    args: readonly string[],
+    timeoutMs = 5_000
+  ): Promise<string> {
+    return await new Promise<string>((resolve, reject) => {
+      execFile(
+        command,
+        [...args],
+        {
+          encoding: 'utf8',
+          windowsHide: true,
+          timeout: timeoutMs,
+          maxBuffer: 1_000_000,
+        },
+        (error, stdout, stderr) => {
+          if (error) {
+            const output = String(stdout ?? '').trim()
+            if (output) {
+              resolve(output)
+              return
+            }
+            const message = String(stderr ?? '').trim()
+            reject(new Error(message || String(error)))
+            return
+          }
+          resolve(String(stdout ?? ''))
+        }
+      )
+    })
   }
 }
 
