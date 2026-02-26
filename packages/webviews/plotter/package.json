@@ -24,7 +24,7 @@
     "@react-hookz/web": "^25.1.1",
     "@reduxjs/toolkit": "^2.8.2",
     "@vscode/codicons": "^0.0.44",
-    "boards-list": "^2.0.0",
+    "boards-list": "^2.0.1",
     "fqbn": "^1.3.1",
     "nanoid": "^5.1.5",
     "p-defer": "^3.0.0",
