@@ -1,3 +1,10 @@
+## [0.0.14](https://github.com/dankeboy36/boardlab/compare/0.0.13...0.0.14) (2026-02-26)
+
+
+### Bug Fixes
+
+* use Arduino CLI 1.4.1 with `connection_timeout` fix ([#30](https://github.com/dankeboy36/boardlab/issues/30)) ([c53d1a4](https://github.com/dankeboy36/boardlab/commit/c53d1a44aef791c63f0abca20478a1fd9e0c0c3c))
+
 ## [0.0.13](https://github.com/dankeboy36/boardlab/compare/0.0.12...0.0.13) (2026-02-26)
 
 
