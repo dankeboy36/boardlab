@@ -1330,7 +1330,7 @@ export function activate(context: vscode.ExtensionContext) {
           return showBuiltinSketchReadmeFromFolderStrict(
             vscode.Uri.file(sketchFolderPath),
             {
-              tag: '1.10.2',
+              tag: '1.10.3',
               source: meta.source,
               exampleId,
               exampleRelPath: sketchRelPath,

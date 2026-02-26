@@ -43,7 +43,7 @@
     "precompile": "npm run build --workspaces",
     "compile": "tsc -p ./",
     "postcompile": "copyfiles -u 3 \"packages/servers/portino-bridge/out/**\" out/portino-bridge",
-    "download:builtins": "node scripts/fetch-builtins.cjs --tag 1.10.2 --target resources/arduino-examples",
+    "download:builtins": "node scripts/fetch-builtins.cjs --tag 1.10.3 --target resources/arduino-examples",
     "download:builtins:verify": "cd resources/arduino-examples/01.Basics/Blink",
     "format": "npm run format:js && npm run format:ino",
     "format:ino": "node scripts/clang-format.cjs",

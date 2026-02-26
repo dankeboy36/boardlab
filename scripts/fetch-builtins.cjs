@@ -5,7 +5,7 @@ const os = require('node:os')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 
-const DEFAULT_TAG = process.env.TAG || '1.10.2'
+const DEFAULT_TAG = process.env.TAG || '1.10.3'
 const DEFAULT_TARGET =
   process.env.TARGET || 'resources/arduino-examples/examples'
 
