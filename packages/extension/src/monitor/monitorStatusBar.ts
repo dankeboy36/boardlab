@@ -139,7 +139,7 @@ export class MonitorStatusBar implements vscode.Disposable {
     }
 
     if (picked.action === 'open-monitor') {
-      await vscode.commands.executeCommand('boardlab.monitor.focus')
+      await vscode.commands.executeCommand('boardlab.openMonitor')
       return
     }
     if (picked.action === 'open-plotter') {

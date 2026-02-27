@@ -81,6 +81,11 @@
         "category": "BoardLab"
       },
       {
+        "command": "boardlab.downloadCli",
+        "title": "Download Arduino CLI",
+        "category": "BoardLab"
+      },
+      {
         "command": "boardlab.selectSketch",
         "title": "Select Sketch",
         "icon": "$(file-submodule)",
@@ -136,7 +141,7 @@
       {
         "command": "boardlab.openMonitor",
         "title": "Open Monitor",
-        "icon": "$(terminal)",
+        "icon": "$(monitor-icon)",
         "category": "BoardLab"
       },
       {
@@ -243,11 +248,6 @@
       {
         "command": "boardlab.platformMissingActions",
         "title": "Resolve Missing Platform",
-        "category": "BoardLab"
-      },
-      {
-        "command": "boardlab.monitor.focus",
-        "title": "Open Monitor",
         "category": "BoardLab"
       },
       {
@@ -853,10 +853,17 @@
     ],
     "icons": {
       "boardlab-icon": {
-        "description": "BoardLab logo icon.",
+        "description": "BoardLab logo icon",
         "default": {
           "fontPath": "./resources/theme/boardlab.woff",
           "fontCharacter": "\\e000"
+        }
+      },
+      "monitor-icon": {
+        "description": "Monitor icon",
+        "default": {
+          "fontPath": "./resources/theme/boardlab.woff",
+          "fontCharacter": "\\e001"
         }
       }
     },

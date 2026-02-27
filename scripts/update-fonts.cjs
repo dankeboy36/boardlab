@@ -5,7 +5,7 @@ const path = require('node:path')
 
 const webfont = require('webfont')
 
-const svgs = ['boardlab.svg'].map((name) =>
+const svgs = ['boardlab.svg', 'monitor.svg'].map((name) =>
   path.join(__dirname, '..', 'resources', 'icons', name)
 )
 

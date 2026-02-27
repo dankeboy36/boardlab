@@ -56,6 +56,8 @@ import {
 
 import type { BoardLabContext } from './boardlabContext'
 import type { Arduino } from './cli/arduino'
+import { extractPlatformInfo } from './platformMissing'
+import { platformIdFromFqbn } from './platformUtils'
 import { disposeAll } from './utils'
 
 interface ResourceManagerToolbarParam {
@@ -753,7 +755,12 @@ export class PlatformsManager extends ResourcesManager<
             Version | undefined,
           ]
           if (!resource) {
-            return
+            const fallback = await this.resolveCurrentBoardInstallParams()
+            if (!fallback) {
+              await vscode.commands.executeCommand('boardlab.selectBoard')
+              return
+            }
+            return this.install(fallback)
           }
           const version = resolveVersion(resource, selectedVersion)
           if (!version) {
@@ -848,6 +855,40 @@ export class PlatformsManager extends ResourcesManager<
       this.onDidErrorUninstall(() => invalidatePlatformNames()),
       this.onDidUpdateIndex(() => invalidatePlatformNames())
     )
+  }
+
+  private async resolveCurrentBoardInstallParams(): Promise<
+    InstallResourceParams | undefined
+  > {
+    const board = this.boardlabContext.currentSketch?.board
+    if (!board) {
+      return undefined
+    }
+    const platform = extractPlatformInfo(board)
+    const fqbn =
+      typeof (board as { fqbn?: unknown }).fqbn === 'string'
+        ? (board as { fqbn?: string }).fqbn
+        : undefined
+    const platformId =
+      platform?.id ?? (fqbn ? platformIdFromFqbn(fqbn) : undefined)
+    if (!platformId) {
+      return undefined
+    }
+    const quick = await this.lookupPlatformQuick(platformId).catch(
+      () => undefined
+    )
+    const version =
+      platform?.version ??
+      quick?.availableVersions?.[0] ??
+      quick?.installedVersion
+    if (!version) {
+      return undefined
+    }
+    return {
+      id: platformId,
+      name: platform?.name ?? quick?.label ?? platformId,
+      version,
+    }
   }
 
   /**

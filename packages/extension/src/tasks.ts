@@ -49,6 +49,10 @@ import { disposeAll } from './utils'
 export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
   private readonly statusBarItem: vscode.StatusBarItem
   private readonly didChangeStatusBarEmitter: vscode.EventEmitter<void>
+  private readonly onDidChangeCompileProgressEmitter =
+    new vscode.EventEmitter<void>()
+
+  private readonly showStatusBar: boolean
 
   private _tasks: vscode.Task[] | undefined
   private _disposables: vscode.Disposable[]
@@ -60,11 +64,16 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
   private readonly hooks: TaskHooksManager
 
   private compileTaskProgress:
-    | (CompileProgressUpdate & { sketchPath: string })
+    | ({ sketchPath: string } & CompileProgressUpdate)
+    | { sketchPath: string; message?: string }
     | undefined
 
-  constructor(private readonly boardlabContext: BoardLabContextImpl) {
+  constructor(
+    private readonly boardlabContext: BoardLabContextImpl,
+    options: { showStatusBar?: boolean } = {}
+  ) {
     this._disposables = []
+    this.showStatusBar = options.showStatusBar ?? true
     this.hooks = new TaskHooksManager({
       boardlabTaskType,
       defaultPreCompileTaskLabels: [validateSketchProfileTaskLabel],
@@ -86,6 +95,7 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
     this._disposables.push(
       this.statusBarItem,
       this.didChangeStatusBarEmitter,
+      this.onDidChangeCompileProgressEmitter,
       boardlabContext.onDidChangeSketch(() => this.updateStatusBarItem()),
       boardlabContext.onDidChangeCurrentSketch(() =>
         this.updateStatusBarItem()
@@ -109,13 +119,41 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
       boardlabContext.onDidChangeActiveProfile(() => this.updateStatusBarItem())
     )
     this.statusBarItem.command = 'boardlab.openCommandCenter'
-    this.statusBarItem.show()
-    this.updateStatusBarItem()
+    if (this.showStatusBar) {
+      this.statusBarItem.show()
+      this.updateStatusBarItem()
+    } else {
+      this.statusBarItem.hide()
+    }
   }
 
   dispose() {
     vscode.Disposable.from(...this._disposables).dispose()
     this._disposables = []
+  }
+
+  get onDidChangeCompileProgress(): vscode.Event<void> {
+    return this.onDidChangeCompileProgressEmitter.event
+  }
+
+  get currentCompileProgress():
+    | {
+        sketchPath: string
+        percent?: number
+        message?: string
+      }
+    | undefined {
+    if (!this.compileTaskProgress) {
+      return undefined
+    }
+    return {
+      sketchPath: this.compileTaskProgress.sketchPath,
+      percent:
+        'percent' in this.compileTaskProgress
+          ? this.compileTaskProgress.percent
+          : undefined,
+      message: this.compileTaskProgress.message,
+    }
   }
 
   private async openCommandCenter(): Promise<void> {
@@ -330,8 +368,7 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
       this.compileTaskProgress &&
       this.compileTaskProgress.sketchPath === sketchPath
     ) {
-      this.compileTaskProgress = undefined
-      this.updateStatusBarItem()
+      this.setCompileProgressValue(undefined)
     }
   }
 
@@ -701,6 +738,10 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
   ): vscode.CustomExecution {
     return new vscode.CustomExecution(async (resolvedTask) => {
       const { arduino } = await this.boardlabContext.client
+      this.setCompileProgressValue({
+        sketchPath: resolvedTask.sketchPath,
+        message: 'Pre-compile tasks',
+      })
       const preCompileHooks = await this.runPreHooksAndRestoreFocus({
         setting: 'preCompileTasks',
         sketchPath: resolvedTask.sketchPath,
@@ -710,6 +751,7 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
         mainTaskNameHint: `${resolvedTask.command} ${resolvedTask.fqbn}`,
       })
       if (!preCompileHooks.ok) {
+        this.setCompileProgressValue(undefined)
         return this.createValidationFailurePty(
           preCompileHooks.output.join('\n')
         )
@@ -727,6 +769,10 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
         verbose,
         warnings,
         ...overrides,
+      })
+      this.setCompileProgressValue({
+        sketchPath: resolvedTask.sketchPath,
+        message: 'Compiling',
       })
       const progressDisposable = progress((update) =>
         this.setCompileProgress(resolvedTask.sketchPath, update)
@@ -757,7 +803,7 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
         })
         .finally(() => {
           progressDisposable.dispose()
-          this.setCompileProgress(resolvedTask.sketchPath, undefined)
+          this.setCompileProgressValue(undefined)
         })
       const wrappedPty = this.hooks.withPostHooks(pty, result, {
         setting: 'postCompileTasks',
@@ -1272,7 +1318,7 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
       items.push({ label: 'tools', kind: vscode.QuickPickItemKind.Separator })
       items.push(
         new CommandQuickPickItem(
-          '$(terminal) Open Monitor',
+          '$(monitor-icon) Open Monitor',
           'boardlab.openMonitor',
           this.formatContextLine({
             includeSketchPath: false,
@@ -1441,6 +1487,9 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
   }
 
   private async updateStatusBarItem(): Promise<void> {
+    if (!this.showStatusBar) {
+      return
+    }
     const oldText = this.statusBarItem.text
     const newText = await this.statusText()
     if (oldText !== newText) {
@@ -1458,19 +1507,40 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
         this.compileTaskProgress &&
         this.compileTaskProgress.sketchPath === sketchPath
       ) {
-        this.compileTaskProgress = undefined
-        this.updateStatusBarItem()
+        this.setCompileProgressValue(undefined)
       }
       return
     }
 
     const bounded = Math.max(0, Math.min(100, update.percent))
     const message = update.message?.trim() || undefined
-    this.compileTaskProgress = {
+    this.setCompileProgressValue({
       sketchPath,
       percent: bounded,
       message,
+    })
+  }
+
+  private setCompileProgressValue(
+    value:
+      | ({ sketchPath: string } & CompileProgressUpdate)
+      | { sketchPath: string; message?: string }
+      | undefined
+  ): void {
+    const current = this.compileTaskProgress
+    const same =
+      (!current && !value) ||
+      (current &&
+        value &&
+        current.sketchPath === value.sketchPath &&
+        current.message === value.message &&
+        ('percent' in current ? current.percent : undefined) ===
+          ('percent' in value ? value.percent : undefined))
+    if (same) {
+      return
     }
+    this.compileTaskProgress = value
+    this.onDidChangeCompileProgressEmitter.fire()
     this.updateStatusBarItem()
   }
 
@@ -1507,12 +1577,12 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
       sketch: this.sketchLabel(false),
       profile: activeProfile,
       progress: this.compileTaskProgress
-        ? typeof this.compileTaskProgress.percent === 'number'
+        ? 'percent' in this.compileTaskProgress
           ? {
               percent: this.compileTaskProgress.percent,
               message: this.compileTaskProgress.message,
             }
-          : { spinning: true, message: this.compileTaskProgress?.message }
+          : { spinning: true, message: this.compileTaskProgress.message }
         : undefined,
       maxVisible: 64,
     })

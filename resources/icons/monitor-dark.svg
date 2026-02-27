@@ -1,1 +1,61 @@
-<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="#c5c5c5"><path d="M18.75 1.5H5.25C3.1815 1.5 1.5 3.183 1.5 5.25V18.75C1.5 20.8185 3.1815 22.5 5.25 22.5H18.75C20.8185 22.5 22.5 20.8185 22.5 18.75V5.25C22.5 3.183 20.8185 1.5 18.75 1.5ZM21 18.75C21 19.9905 19.9905 21 18.75 21H5.25C4.0095 21 3 19.9905 3 18.75V5.25C3 4.0095 4.0095 3 5.25 3H18.75C19.9905 3 21 4.0095 21 5.25V18.75ZM10.281 13.281L5.781 17.781C5.634 17.928 5.442 18 5.25 18C5.058 18 4.866 17.9265 4.719 17.781C4.4265 17.4885 4.4265 17.013 4.719 16.7205L8.688 12.7515L4.719 8.7825C4.4265 8.49 4.4265 8.0145 4.719 7.722C5.0115 7.4295 5.487 7.4295 5.7795 7.722L10.2795 12.222C10.572 12.5145 10.572 12.99 10.2795 13.2825L10.281 13.281ZM19.5 17.25C19.5 17.664 19.164 18 18.75 18H11.25C10.836 18 10.5 17.664 10.5 17.25C10.5 16.836 10.836 16.5 11.25 16.5H18.75C19.164 16.5 19.5 16.836 19.5 17.25Z"/></svg>
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   version="1.1"
+   x="0"
+   y="0"
+   width="24"
+   height="24"
+   viewBox="0, 0, 24, 24"
+   id="svg3"
+   sodipodi:docname="monitor-tab-icon.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg" fill="#c5c5c5">
+  <defs
+     id="defs3" />
+  <sodipodi:namedview
+     id="namedview3"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="true"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="10.59411"
+     inkscape:cx="21.66298"
+     inkscape:cy="16.377024"
+     inkscape:window-width="1352"
+     inkscape:window-height="820"
+     inkscape:window-x="0"
+     inkscape:window-y="30"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg3" />
+  <g
+     id="g3"
+     transform="translate(1.0981019,1.9644212)">
+    <path
+       d="M 16.2,8.1 C 16.2,3.6 12.6,0 8.1,0 3.6,0 0,3.6 0,8.1 c 0,4.5 3.6,8.1 8.1,8.1 1.9,0 3.7,-0.7 5.1,-1.8 L 18.8,20 20.2,18.6 14.5,13 c 1.1,-1.4 1.7,-3.1 1.7,-4.9 z m -14.4,0 c 0,-3.5 2.8,-6.3 6.3,-6.3 3.5,0 6.3,2.8 6.3,6.3 0,3.5 -2.8,6.3 -6.3,6.3 C 4.6,14.5 1.8,11.6 1.8,8.1 Z"
+       id="path1" />
+    <rect
+       x="7.0999999"
+       y="7.0999999"
+       width="2"
+       height="2"
+       id="rect1" />
+    <rect
+       x="17.200001"
+       y="7.0999999"
+       width="2"
+       height="2"
+       id="rect2" />
+    <rect
+       x="20.299999"
+       y="7.0999999"
+       width="2"
+       height="2"
+       id="rect3" />
+  </g>
+</svg>

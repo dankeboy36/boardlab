@@ -1,5 +1,4 @@
-#!/usr/bin/env node
-
+// @ts-check
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')

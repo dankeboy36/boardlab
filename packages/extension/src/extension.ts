@@ -58,9 +58,9 @@ import {
 import { MonitorFileSystemProvider } from './monitor/monitorFs'
 import { MonitorResourceStore } from './monitor/monitorResources'
 import { MonitorSelectionCoordinator } from './monitor/monitorSelections'
-import { MonitorStatusBar } from './monitor/monitorStatusBar'
 import { formatMonitorUri, MONITOR_URI_SCHEME } from './monitor/monitorUri'
-import { PlatformMissingStatusBar } from './platformMissingStatusBar'
+import { CliHealthService } from './onboarding/cliHealthService'
+import { OnboardingIntentService } from './onboarding/intentService'
 import { collectCliDiagnostics } from './profile/cliDiagnostics'
 import { ProfilesCodeActionProvider } from './profile/codeActions'
 import { readProfile, readProfiles, updateProfile } from './profile/profiles'
@@ -80,6 +80,8 @@ import { registerSketchbookReadonlyFs } from './sketch/sketchbookFs'
 import { SketchbookView } from './sketch/sketchbookView'
 import { SketchFolderImpl } from './sketch/sketchFolder'
 import type { Resource as SketchResource } from './sketch/types'
+import { OnboardingStatusBarController } from './statusbar/controller'
+import { RuntimeStateService } from './statusbar/runtimeStateService'
 import { BoardLabTasks } from './tasks'
 import {
   getTaskStatus,
@@ -288,12 +290,21 @@ export function activate(context: vscode.ExtensionContext) {
     monitorsRegistry: boardlabContext.monitorsRegistry.constructor.name,
   })
 
-  const tasks = new BoardLabTasks(boardlabContext)
+  const tasks = new BoardLabTasks(boardlabContext, { showStatusBar: false })
   console.log('Registered tasks provider')
-  const platformMissingStatusBar = new PlatformMissingStatusBar(boardlabContext)
-  console.log('Registered platform status bar')
-  const monitorStatusBar = new MonitorStatusBar(boardlabContext)
-  console.log('Registered monitor status bar')
+  const cliHealthService = new CliHealthService(
+    boardlabContext.cliContext,
+    outputChannel
+  )
+  const onboardingIntentService = new OnboardingIntentService()
+  const runtimeStateService = new RuntimeStateService(boardlabContext, tasks)
+  const onboardingStatusBar = new OnboardingStatusBarController({
+    boardlabContext,
+    cliHealthService,
+    intentService: onboardingIntentService,
+    runtimeStateService,
+  })
+  console.log('Registered onboarding status bar')
   const currentSketchView = new CurrentSketchView(boardlabContext)
   console.log('Registered sketches view')
   const sketchbook = new SketchbookView(context, boardlabContext.sketchbooks)
@@ -473,8 +484,6 @@ export function activate(context: vscode.ExtensionContext) {
     return true
   }
 
-  context.subscriptions.push(platformMissingStatusBar, monitorStatusBar)
-
   context.subscriptions.push(
     vscode.tasks.onDidStartTask((event) => {
       const def = event.execution.task.definition as any
@@ -520,6 +529,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       'boardlab.compile',
       async (params: { sketchPath?: string; fqbn?: string } = {}) => {
+        onboardingIntentService.setIntent('compile')
         const resolved = await resolveSketchTaskParams(
           boardlabContext,
           params,
@@ -538,6 +548,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand(
       'boardlab.compileWithDebugSymbols',
       async (params: { sketchPath?: string; fqbn?: string } = {}) => {
+        onboardingIntentService.setIntent('compile')
         const resolved = await resolveSketchTaskParams(
           boardlabContext,
           params,
@@ -676,6 +687,7 @@ export function activate(context: vscode.ExtensionContext) {
       async (
         params: { sketchPath?: string; fqbn?: string; port?: string } = {}
       ) => {
+        onboardingIntentService.setIntent('upload')
         const resolved = await resolveSketchTaskParams(
           boardlabContext,
           params,
@@ -692,7 +704,8 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand('boardlab.openMonitor', async () => {
-      await vscode.commands.executeCommand('boardlab.monitor.focus')
+      onboardingIntentService.setIntent('monitor')
+      await openMonitorResource('boardlab.monitorEditor')
     }),
     vscode.commands.registerCommand(
       'boardlab.exportBinary',
@@ -721,6 +734,7 @@ export function activate(context: vscode.ExtensionContext) {
           programmer?: string
         } = {}
       ) => {
+        onboardingIntentService.setIntent('upload')
         const resolved = await resolveSketchTaskParams(
           boardlabContext,
           params,
@@ -1174,8 +1188,33 @@ export function activate(context: vscode.ExtensionContext) {
   const { cliContext } = boardlabContext
   context.subscriptions.push(
     tasks,
+    cliHealthService,
+    onboardingIntentService,
+    runtimeStateService,
+    onboardingStatusBar,
     currentSketchView,
     sketchbook,
+    vscode.commands.registerCommand('boardlab.onboarding.noop', () => {
+      // Intentionally empty command used for non-interactive status bar items.
+    }),
+    vscode.commands.registerCommand('boardlab.downloadCli', async () => {
+      outputChannel.appendLine('Onboarding: Download Arduino CLI requested')
+      await cliHealthService.refresh()
+      if (cliHealthService.cliStatus !== 'ready') {
+        vscode.window.showInformationMessage(
+          'Arduino CLI is still required. Complete the CLI setup to continue.'
+        )
+        return
+      }
+      await cliContext.daemon
+        .start()
+        .catch((error) =>
+          console.warn(
+            'Failed to start Arduino CLI daemon after CLI check',
+            error
+          )
+        )
+    }),
     vscode.commands.registerCommand(
       'boardlab.openArduinoCliConfig',
       async () => {
@@ -1765,9 +1804,6 @@ export function activate(context: vscode.ExtensionContext) {
         })
       }
     ),
-    vscode.commands.registerCommand('boardlab.monitor.focus', async () => {
-      await openMonitorResource('boardlab.monitorEditor')
-    }),
     vscode.commands.registerCommand('boardlab.plotter.focus', async () => {
       await openMonitorResource('boardlab.plotterEditor')
     }),

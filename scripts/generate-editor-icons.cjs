@@ -5,14 +5,22 @@ const path = require('node:path')
 const LIGHT_FILL = '#424242'
 const DARK_FILL = '#c5c5c5'
 
+/**
+ * @typedef {{
+ *   source: { type: 'codicon'; name: string } | { type: 'local'; file: string }
+ *   outputBase: string | string[]
+ * }} IconConfig
+ */
+
+/** @type {IconConfig[]} */
 const iconMap = [
   {
-    source: 'terminal',
-    outputBase: 'monitor',
+    source: { type: 'codicon', name: 'graph-line' },
+    outputBase: 'plotter',
   },
   {
-    source: 'graph-line',
-    outputBase: 'plotter',
+    source: { type: 'local', file: 'monitor.svg' },
+    outputBase: 'monitor',
   },
 ]
 
@@ -21,40 +29,72 @@ const resolveCodiconsRoot = () => {
   return path.dirname(pkgPath)
 }
 
+const withSvgExtension = (/** @type {string} */ name) =>
+  name.toLowerCase().endsWith('.svg') ? name : `${name}.svg`
+
 /**
  * @param {string} svg
  * @param {string} color
  */
-const replaceFill = (svg, color) =>
-  svg.replace(/fill="[^"]*"/g, `fill="${color}"`)
+const replaceOrInjectFill = (svg, color) => {
+  let replacedAny = false
+  const replaced = svg.replace(
+    /fill=(['"])([^'"]*)\1/g,
+    (full, quote, value) => {
+      if (String(value).toLowerCase() === 'none') {
+        return full
+      }
+      replacedAny = true
+      return `fill=${quote}${color}${quote}`
+    }
+  )
+  if (replacedAny) {
+    return replaced
+  }
+  return replaced.replace(/<svg\b([^>]*)>/, `<svg$1 fill="${color}">`)
+}
+
+/**
+ * @param {{ type: 'codicon'; name: string }
+ *   | { type: 'local'; file: string }} source
+ * @param {string} codiconSrcDir
+ * @param {string} localSrcDir
+ */
+const resolveSourcePath = (source, codiconSrcDir, localSrcDir) => {
+  if (source.type === 'codicon') {
+    return path.join(codiconSrcDir, `${source.name}.svg`)
+  }
+  return path.join(localSrcDir, withSvgExtension(source.file))
+}
 
 const main = () => {
   const codiconsRoot = resolveCodiconsRoot()
-  const srcDir = path.join(codiconsRoot, 'src', 'icons')
+  const codiconSrcDir = path.join(codiconsRoot, 'src', 'icons')
+  const localSrcDir = path.join(__dirname, '..', 'resources', 'icons')
   const outDir = path.join(__dirname, '..', 'resources', 'icons')
 
   fs.mkdirSync(outDir, { recursive: true })
 
+  let generated = 0
   iconMap.forEach(({ source, outputBase }) => {
-    const srcPath = path.join(srcDir, `${source}.svg`)
+    const srcPath = resolveSourcePath(source, codiconSrcDir, localSrcDir)
+    if (!fs.existsSync(srcPath)) {
+      throw new Error(`Icon source does not exist: ${srcPath}`)
+    }
     const svg = fs.readFileSync(srcPath, 'utf8')
+    const outputBases = Array.isArray(outputBase) ? outputBase : [outputBase]
 
-    const lightSvg = replaceFill(svg, LIGHT_FILL)
-    const darkSvg = replaceFill(svg, DARK_FILL)
+    const lightSvg = replaceOrInjectFill(svg, LIGHT_FILL)
+    const darkSvg = replaceOrInjectFill(svg, DARK_FILL)
 
-    fs.writeFileSync(
-      path.join(outDir, `${outputBase}-light.svg`),
-      lightSvg,
-      'utf8'
-    )
-    fs.writeFileSync(
-      path.join(outDir, `${outputBase}-dark.svg`),
-      darkSvg,
-      'utf8'
-    )
+    outputBases.forEach((base) => {
+      fs.writeFileSync(path.join(outDir, `${base}-light.svg`), lightSvg, 'utf8')
+      fs.writeFileSync(path.join(outDir, `${base}-dark.svg`), darkSvg, 'utf8')
+      generated += 2
+    })
   })
 
-  console.log(`Generated ${iconMap.length * 2} editor icons in ${outDir}.`)
+  console.log(`Generated ${generated} editor icons in ${outDir}.`)
 }
 
 main()

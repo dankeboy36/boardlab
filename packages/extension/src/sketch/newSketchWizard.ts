@@ -167,14 +167,6 @@ async function resolveSketchDestination(
     }
   > = []
 
-  if (sketchbookPath) {
-    items.push({
-      label: 'Create in Sketchbook',
-      description: path.join(sketchbookPath, '<sketch name>'),
-      destination: sketchbookPath,
-    })
-  }
-
   for (const folder of workspaceFolders) {
     if (folder.uri.scheme !== 'file') {
       continue
@@ -183,6 +175,14 @@ async function resolveSketchDestination(
       label: `Create in Workspace: ${folder.name}`,
       description: path.join(folder.uri.fsPath, '<sketch name>'),
       destination: folder.uri.fsPath,
+    })
+  }
+
+  if (sketchbookPath) {
+    items.push({
+      label: 'Create in Sketchbook',
+      description: path.join(sketchbookPath, '<sketch name>'),
+      destination: sketchbookPath,
     })
   }
 

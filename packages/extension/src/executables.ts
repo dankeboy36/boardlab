@@ -34,12 +34,15 @@ export class ExecutableContext {
     if (this._ensureExists) {
       return this._ensureExists.promise
     }
-    this._ensureExists = pDefer()
-    this.ensureExists().then(
-      this._ensureExists.resolve,
-      this._ensureExists.reject
-    )
-    return this._ensureExists.promise
+    const deferred = pDefer<string>()
+    this._ensureExists = deferred
+    this.ensureExists().then(deferred.resolve, (error) => {
+      // Allow retry after a failed attempt (e.g. user selected "Later",
+      // download canceled, transient network error).
+      deferred.reject(error)
+      this._ensureExists = undefined
+    })
+    return deferred.promise
   }
 
   private async ensureExists(): Promise<string> {

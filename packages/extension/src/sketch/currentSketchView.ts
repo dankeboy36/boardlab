@@ -255,7 +255,7 @@ class ToolsRootItem extends TreeItem {
         sketch,
         'Open Monitor',
         'boardlab.openMonitor',
-        'terminal',
+        'monitor-icon',
         'Open the serial monitor for the selected port.',
         'tool'
       ),

@@ -8,7 +8,6 @@ import {
 } from '../quickPickConstraints'
 import {
   InmemoryRecentItems,
-  QuickInputNoopLabel,
   RecentItems,
   disposeAll,
   noopRecentItems,
@@ -66,9 +65,6 @@ export async function pickSketch(
         input.onDidChangeSelection((items) => {
           ;(async () => {
             const item = items[0]
-            if (item instanceof QuickInputNoopLabel) {
-              return
-            }
             if (item instanceof SketchQuickPickItem) {
               resolve(item.sketch)
               input.hide()
@@ -76,6 +72,18 @@ export async function pickSketch(
             }
             if (item instanceof CreateSketchQuickPickItem) {
               vscode.commands.executeCommand('boardlab.openNewSketchWizard')
+              resolve(undefined)
+              input.hide()
+              return
+            }
+            if (item instanceof OpenSketchQuickPickItem) {
+              vscode.commands.executeCommand('boardlab.openSketch')
+              resolve(undefined)
+              input.hide()
+              return
+            }
+            if (item instanceof CloneSketchQuickPickItem) {
+              vscode.commands.executeCommand('boardlab.cloneSketch')
               resolve(undefined)
               input.hide()
             }
@@ -103,16 +111,12 @@ async function toSketchQuickPickItem(
   options: SketchPickOptions
 ): Promise<vscode.QuickPickItem[]> {
   const quickItems: vscode.QuickPickItem[] = []
-  let hasAnySketch = false
   for (const [uri, sketchbook] of sketchbooks.all().entries()) {
     const sketchbookUri = vscode.Uri.parse(uri)
     if (!vscode.workspace.getWorkspaceFolder(sketchbookUri)) {
       continue
     }
     const sketchbookPath = sketchbookUri.fsPath
-    if (sketchbook.sketches.length) {
-      hasAnySketch = true
-    }
     const filteredSketches: Sketch[] = []
     for (const sketch of sketchbook.sketches) {
       if (await matchesQuickPickConstraints(sketch, options)) {
@@ -135,9 +139,8 @@ async function toSketchQuickPickItem(
   if (!quickItems.length) {
     return [
       new CreateSketchQuickPickItem(),
-      new QuickInputNoopLabel(
-        hasAnySketch ? 'No matching sketches' : 'No sketches found in workspace'
-      ),
+      new OpenSketchQuickPickItem(),
+      new CloneSketchQuickPickItem(),
     ]
   }
   return quickItems
@@ -158,6 +161,20 @@ class SketchQuickPickItem implements vscode.QuickPickItem {
 }
 
 class CreateSketchQuickPickItem implements vscode.QuickPickItem {
-  label = '$(add) Create Sketch...'
-  description = 'Create a sketch in the workspace'
+  label = 'Create Sketch...'
+  description = 'Create new sketch'
+  detail =
+    'Create a new sketch. In the next step, choose workspace, sketchbook, or another folder.'
+}
+
+class OpenSketchQuickPickItem implements vscode.QuickPickItem {
+  label = 'Open Sketch...'
+  description = 'Add existing sketch folder'
+  detail = 'Open an existing sketch by adding its folder to this workspace.'
+}
+
+class CloneSketchQuickPickItem implements vscode.QuickPickItem {
+  label = 'Clone Sketch...'
+  description = 'Copy into workspace'
+  detail = 'Clone a sketch into this workspace. The original remains unchanged.'
 }
