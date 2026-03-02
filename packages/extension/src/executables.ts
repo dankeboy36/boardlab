@@ -29,7 +29,7 @@ export class ExecutableContext {
     protected readonly params: ExecutableContextParams
   ) {}
 
-  private _ensureExists: DeferredPromise<string> | undefined
+  private _downloadInProgress: DeferredPromise<string> | undefined
 
   async isExecutableAvailable(): Promise<boolean> {
     try {
@@ -56,35 +56,37 @@ export class ExecutableContext {
   }
 
   async resolveExecutablePath(): Promise<string> {
-    if (this._ensureExists) {
-      return this._ensureExists.promise
+    if (this._downloadInProgress) {
+      return this._downloadInProgress.promise
     }
-    const deferred = pDefer<string>()
-    this._ensureExists = deferred
-    this.ensureExists().then(deferred.resolve, (error) => {
-      // Allow retry after a failed attempt (e.g. user selected "Later",
-      // download canceled, transient network error).
-      deferred.reject(error)
-      this._ensureExists = undefined
-    })
-    return deferred.promise
+    if (await this.isExecutableAvailable()) {
+      return this.toolPath
+    }
+    if (!(await this.promptDownload())) {
+      throw new AbortError()
+    }
+    return this.ensureDownloaded()
   }
 
-  private async ensureExists(): Promise<string> {
-    try {
-      await fs.access(this.toolPath, fsConstants.X_OK)
-      return this.toolPath
-    } catch (err) {
-      if (err instanceof Error && 'code' in err && err.code === 'ENOENT') {
-        if (await this.promptDownload()) {
-          const toolPath = await this.download()
-          this.showSuccess()
-          return toolPath
-        }
-        throw new AbortError()
-      }
-      throw err
+  private ensureDownloaded(): Promise<string> {
+    if (this._downloadInProgress) {
+      return this._downloadInProgress.promise
     }
+
+    const deferred = pDefer<string>()
+    this._downloadInProgress = deferred
+    this.download().then(
+      (toolPath) => {
+        this.showSuccess()
+        deferred.resolve(toolPath)
+        this._downloadInProgress = undefined
+      },
+      (error) => {
+        deferred.reject(error)
+        this._downloadInProgress = undefined
+      }
+    )
+    return deferred.promise
   }
 
   private async download(): Promise<string> {
