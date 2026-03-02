@@ -29,12 +29,36 @@ export class CliHealthService implements vscode.Disposable {
     const token = ++this.refreshToken
     this.setCliStatus('checking')
     try {
-      // resolveExecutablePath checks whether file can be executed
-      await this.cliContext.resolveExecutablePath()
+      const available = await this.cliContext.isExecutableAvailable()
       if (token !== this.refreshToken) {
         return
       }
-      this.setCliStatus('ready')
+      if (available) {
+        this.setCliStatus('ready')
+        return
+      }
+      this.setCliStatus('required')
+      this.cliContext.resolveExecutablePath().then(
+        () => {
+          if (token !== this.refreshToken) {
+            return
+          }
+          this.setCliStatus('ready')
+        },
+        (error) => {
+          if (token !== this.refreshToken) {
+            return
+          }
+          if (error instanceof Error && error.name === 'AbortError') {
+            return
+          }
+          this.outputChannel?.appendLine(
+            `Arduino CLI installation did not complete: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          )
+        }
+      )
     } catch (error) {
       if (token !== this.refreshToken) {
         return

@@ -30,6 +30,31 @@ export class ExecutableContext {
   ) {}
 
   private _ensureExists: DeferredPromise<string> | undefined
+
+  async isExecutableAvailable(): Promise<boolean> {
+    try {
+      await fs.access(this.toolPath, fsConstants.X_OK)
+      return true
+    } catch (err) {
+      if (
+        err &&
+        typeof err === 'object' &&
+        'code' in err &&
+        typeof (err as { code?: unknown }).code === 'string'
+      ) {
+        return false
+      }
+      throw err
+    }
+  }
+
+  checkAvailability(): void {
+    this.resolveExecutablePath().catch(() => {
+      // Intentionally ignored: this is used to surface the existing
+      // welcome/download prompt without forcing the caller to await it.
+    })
+  }
+
   async resolveExecutablePath(): Promise<string> {
     if (this._ensureExists) {
       return this._ensureExists.promise

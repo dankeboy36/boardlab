@@ -42,7 +42,7 @@ export const defaultRuntimeState: RuntimeState = {
   upload: { state: 'idle' },
 }
 
-const NOOP_COMMAND = 'boardlab.onboarding.noop'
+const CHECK_CLI_COMMAND = 'boardlab.checkCliAvailability'
 
 function createItem(
   id: string,
@@ -259,7 +259,7 @@ export function deriveStatusBarModel(
         createItem(
           'cli-checking',
           '$(sync~spin) Checking Arduino CLI…',
-          NOOP_COMMAND,
+          CHECK_CLI_COMMAND,
           140,
           'Checking Arduino CLI'
         ),

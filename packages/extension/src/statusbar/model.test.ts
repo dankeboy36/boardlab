@@ -21,7 +21,7 @@ describe('deriveStatusBarModel', () => {
   it('maps CLI_CHECKING to checking item', () => {
     const model = deriveStatusBarModel('CLI_CHECKING', baseContext)
     expect(idsOf(model)).toEqual(['cli-checking'])
-    expect(model[0]?.command).toBe('boardlab.onboarding.noop')
+    expect(model[0]?.command).toBe('boardlab.checkCliAvailability')
     expect(model[0]?.text).toContain('Checking Arduino CLI')
   })
 

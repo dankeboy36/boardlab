@@ -1194,11 +1194,19 @@ export function activate(context: vscode.ExtensionContext) {
     onboardingStatusBar,
     currentSketchView,
     sketchbook,
-    vscode.commands.registerCommand('boardlab.onboarding.noop', () => {
-      // Intentionally empty command used for non-interactive status bar items.
+    vscode.commands.registerCommand('boardlab.checkCliAvailability', () => {
+      cliContext.checkAvailability()
     }),
     vscode.commands.registerCommand('boardlab.downloadCli', async () => {
       outputChannel.appendLine('Onboarding: Download Arduino CLI requested')
+      try {
+        await cliContext.resolveExecutablePath()
+      } catch {
+        vscode.window.showInformationMessage(
+          'Arduino CLI is still required. Complete the CLI setup to continue.'
+        )
+        return
+      }
       await cliHealthService.refresh()
       if (cliHealthService.cliStatus !== 'ready') {
         vscode.window.showInformationMessage(
