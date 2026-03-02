@@ -901,6 +901,26 @@
         "url": "./schemas/arduino-cli-schema.json"
       }
     ],
+    "keybindings": [
+      {
+        "command": "boardlab.compile",
+        "key": "ctrl+r",
+        "mac": "cmd+r",
+        "when": "currentSketchFqbn != ''"
+      },
+      {
+        "command": "boardlab.upload",
+        "key": "ctrl+u",
+        "mac": "cmd+u",
+        "when": "currentSketchPort != ''"
+      },
+      {
+        "command": "boardlab.uploadUsingProgrammer",
+        "key": "ctrl+shift+u",
+        "mac": "cmd+shift+u",
+        "when": "currentSketchPort != ''"
+      }
+    ],
     "menus": {
       "editor/title": [
         {

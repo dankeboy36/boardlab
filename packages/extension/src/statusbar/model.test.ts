@@ -54,14 +54,27 @@ describe('deriveStatusBarModel', () => {
   })
 
   it('shows install action when platform install target can be derived', () => {
+    const installArgs = [
+      {
+        id: 'arduino:avr',
+        name: 'Arduino AVR Boards',
+        availableVersions: ['1.8.6'],
+      },
+    ]
     const model = deriveStatusBarModel('PLATFORM_REQUIRED', {
       ...baseContext,
       canInstallPlatform: true,
-      platformInstallLabel: 'Arduino AVR Boards',
+      platformInstallLabel: 'Arduino AVR Boards (arduino:avr) platform',
+      platformInstallArgs: installArgs,
     })
-    expect(idsOf(model)).toEqual(['platform-required'])
-    expect(model[0]?.text).toContain('Install Arduino AVR Boards')
+    expect(idsOf(model)).toEqual(['platform-required', 'board'])
+    expect(model[0]?.text).toContain(
+      'Install Arduino AVR Boards (arduino:avr) platform'
+    )
     expect(model[0]?.command).toBe('boardlab.installPlatform')
+    expect(model[0]?.args).toEqual(installArgs)
+    expect(model[1]?.command).toBe('boardlab.selectBoard')
+    expect(model[1]?.text).toBe('Arduino Uno')
   })
 
   it('falls back to select board when platform target is unknown', () => {

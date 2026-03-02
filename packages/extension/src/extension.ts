@@ -1195,20 +1195,12 @@ export function activate(context: vscode.ExtensionContext) {
     currentSketchView,
     sketchbook,
     vscode.commands.registerCommand('boardlab.checkCliAvailability', () => {
-      cliContext.checkAvailability()
+      cliHealthService.refresh()
     }),
     vscode.commands.registerCommand('boardlab.downloadCli', async () => {
       outputChannel.appendLine('Onboarding: Download Arduino CLI requested')
-      try {
-        await cliContext.resolveExecutablePath()
-      } catch {
-        vscode.window.showInformationMessage(
-          'Arduino CLI is still required. Complete the CLI setup to continue.'
-        )
-        return
-      }
-      await cliHealthService.refresh()
-      if (cliHealthService.cliStatus !== 'ready') {
+      const available = await cliHealthService.confirmAndInstallCli()
+      if (!available) {
         vscode.window.showInformationMessage(
           'Arduino CLI is still required. Complete the CLI setup to continue.'
         )

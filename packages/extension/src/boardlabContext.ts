@@ -95,7 +95,7 @@ import {
   onDidChangeTaskStates,
   type TaskKind,
 } from './taskTracker'
-import { Sketch } from './sketch/types'
+import { isSketch, Sketch } from './sketch/types'
 import { BaseRecentItems, RecentItems, disposeAll, mementoKey } from './utils'
 
 class MementoRecentItems<T> extends BaseRecentItems<T> {
@@ -684,11 +684,7 @@ export class BoardLabContextImpl implements BoardLabContext {
         )
       })
     )
-    vscode.commands.executeCommand(
-      'setContext',
-      'currentSketchPath',
-      this.currentSketch?.sketchPath ?? ''
-    )
+    this.updateCurrentSketchContexts()
     const lastSelectedSketchPath = this.workspaceState.get<string>(
       LAST_CURRENT_SKETCH_WORKSPACE_KEY
     )
@@ -1147,6 +1143,9 @@ export class BoardLabContextImpl implements BoardLabContext {
   private async updateCurrentSketch(
     pathLike: SketchPathLike
   ): Promise<boolean> {
+    if (!this.cliContext.daemon.address) {
+      return this.updateCurrentSketchWithoutCli(pathLike)
+    }
     const { arduino } = await this.client
     const sketch = await this.sketchbooks.resolve(pathLike, arduino)
     if (sketch) {
@@ -1154,11 +1153,7 @@ export class BoardLabContextImpl implements BoardLabContext {
         sketchPathEquals(s, sketch)
       )
       this._currentSketchIndex = index
-      vscode.commands.executeCommand(
-        'setContext',
-        'currentSketchPath',
-        sketch.sketchPath
-      )
+      this.updateCurrentSketchContexts(sketch)
       this._onDidChangeCurrentSketch.fire(sketch)
       await this.workspaceState.update(
         LAST_CURRENT_SKETCH_WORKSPACE_KEY,
@@ -1168,6 +1163,79 @@ export class BoardLabContextImpl implements BoardLabContext {
     }
     vscode.window.showErrorMessage(`Sketch ${pathLike} is not opened.`)
     return false
+  }
+
+  private async updateCurrentSketchWithoutCli(
+    pathLike: SketchPathLike
+  ): Promise<boolean> {
+    const sketchPath = this.sketchPathOf(pathLike)
+    if (!sketchPath) {
+      vscode.window.showErrorMessage(`Sketch ${pathLike} is not opened.`)
+      return false
+    }
+
+    const index = this.openedSketches.findIndex(
+      (sketch) => sketch.sketchPath === sketchPath
+    )
+    if (index < 0) {
+      vscode.window.showErrorMessage(`Sketch ${pathLike} is not opened.`)
+      return false
+    }
+
+    this._currentSketchIndex = index
+    this.updateCurrentSketchContexts(this.currentSketch)
+    this._onDidChangeCurrentSketch.fire(this.currentSketch)
+    await this.workspaceState.update(LAST_CURRENT_SKETCH_WORKSPACE_KEY, sketchPath)
+    return true
+  }
+
+  private updateCurrentSketchContexts(
+    sketch: SketchFolder | undefined = this.currentSketch
+  ): void {
+    const sketchPath = sketch?.sketchPath ?? ''
+    const fqbn =
+      sketch && isBoardDetails(sketch.board)
+        ? sketch.configOptions ?? sketch.board.fqbn
+        : ''
+    const port =
+      sketch?.port?.protocol && sketch.port.address
+        ? createPortKey({
+            protocol: sketch.port.protocol,
+            address: sketch.port.address,
+          })
+        : ''
+    vscode.commands.executeCommand('setContext', 'currentSketchPath', sketchPath)
+    vscode.commands.executeCommand('setContext', 'currentSketchFqbn', fqbn)
+    vscode.commands.executeCommand('setContext', 'currentSketchPort', port)
+  }
+
+  private async resolveMutableSketch(
+    sketch: SketchFolder | undefined
+  ): Promise<SketchFolderImpl | undefined> {
+    if (!sketch) {
+      return undefined
+    }
+    if (sketch instanceof SketchFolderImpl) {
+      return sketch
+    }
+    if (!this.cliContext.daemon.address) {
+      return undefined
+    }
+    const { arduino } = await this.client
+    return this.sketchbooks.resolve(sketch.sketchPath, arduino)
+  }
+
+  private sketchPathOf(pathLike: SketchPathLike): string | undefined {
+    if (typeof pathLike === 'string') {
+      return pathLike
+    }
+    if (pathLike instanceof vscode.Uri) {
+      return pathLike.fsPath
+    }
+    if (isSketch(pathLike)) {
+      return pathLike.uri.fsPath
+    }
+    return pathLike.sketchPath
   }
 
   async pickSketch(
@@ -1230,13 +1298,15 @@ export class BoardLabContextImpl implements BoardLabContext {
       }>
     | undefined
   > {
-    if (!currentSketch) {
+    const sketch =
+      (await this.resolveMutableSketch(currentSketch)) ?? currentSketch
+    if (!sketch) {
       return undefined
     }
     const { arduino } = await this.client
     const boardsConfig = {
-      selectedBoard: currentSketch.board,
-      selectedPort: currentSketch.port,
+      selectedBoard: sketch.board,
+      selectedPort: sketch.port,
     }
     const pickedBoard = await pickBoard(
       arduino,
@@ -1251,7 +1321,7 @@ export class BoardLabContextImpl implements BoardLabContext {
       board = pickedBoard.board
     } else if (pickedBoard) {
       board = pickedBoard
-      port = await this.pickPort(currentSketch)
+      port = await this.pickPort(sketch)
     } else {
       return undefined
     }
@@ -1270,8 +1340,8 @@ export class BoardLabContextImpl implements BoardLabContext {
       | Promise<SketchFolder | undefined>
       | undefined = this.selectSketch()
   ): Promise<Defined<BoardsConfig> | undefined> {
-    const sketch = await currentSketch
-    if (!(sketch instanceof SketchFolderImpl)) {
+    const sketch = await this.resolveMutableSketch(await currentSketch)
+    if (!sketch) {
       return undefined
     }
     const boardsConfig = await this.pickBoardsConfig(sketch)
@@ -1289,9 +1359,11 @@ export class BoardLabContextImpl implements BoardLabContext {
       .currentSketch,
     maybeOptions?: PortPickOptions
   ): Promise<SketchPort> {
-    const currentSketch = isPortPickOptions(currentSketchOrOptions)
+    const sketchLike = isPortPickOptions(currentSketchOrOptions)
       ? this.currentSketch
       : currentSketchOrOptions
+    const currentSketch =
+      (await this.resolveMutableSketch(sketchLike)) ?? sketchLike
     const options = isPortPickOptions(currentSketchOrOptions)
       ? currentSketchOrOptions
       : maybeOptions
@@ -1337,10 +1409,12 @@ export class BoardLabContextImpl implements BoardLabContext {
       | undefined = this.currentSketch ?? this.selectSketch(),
     maybeOptions?: PortPickOptions
   ): Promise<SketchPort> {
-    const sketch = await (isPortPickOptions(currentSketchOrOptions)
-      ? (this.currentSketch ?? this.selectSketch())
-      : currentSketchOrOptions)
-    if (!(sketch instanceof SketchFolderImpl)) {
+    const sketch = await this.resolveMutableSketch(
+      await (isPortPickOptions(currentSketchOrOptions)
+        ? (this.currentSketch ?? this.selectSketch())
+        : currentSketchOrOptions)
+    )
+    if (!sketch) {
       return undefined
     }
     const options = isPortPickOptions(currentSketchOrOptions)
@@ -1360,9 +1434,11 @@ export class BoardLabContextImpl implements BoardLabContext {
       .currentSketch,
     maybeOptions?: BoardPickOptions
   ): Promise<PickBoardResult | undefined> {
-    const currentSketch = isBoardPickOptions(currentSketchOrOptions)
+    const sketchLike = isBoardPickOptions(currentSketchOrOptions)
       ? this.currentSketch
       : currentSketchOrOptions
+    const currentSketch =
+      (await this.resolveMutableSketch(sketchLike)) ?? sketchLike
     const options = isBoardPickOptions(currentSketchOrOptions)
       ? currentSketchOrOptions
       : maybeOptions
@@ -1434,8 +1510,8 @@ export class BoardLabContextImpl implements BoardLabContext {
       | Promise<SketchFolder | undefined>
       | undefined = this.currentSketch ?? this.selectSketch()
   ): Promise<ApiBoardDetails | undefined> {
-    const sketch = await currentSketch
-    if (!(sketch instanceof SketchFolderImpl)) {
+    const sketch = await this.resolveMutableSketch(await currentSketch)
+    if (!sketch) {
       return undefined
     }
     const boardDetails = await this.getBoardDetails(fqbn)
@@ -1461,10 +1537,12 @@ export class BoardLabContextImpl implements BoardLabContext {
       | undefined = this.currentSketch ?? this.selectSketch(),
     maybeOptions?: BoardPickOptions
   ): Promise<PickBoardResult | undefined> {
-    const sketch = await (isBoardPickOptions(currentSketchOrOptions)
-      ? (this.currentSketch ?? this.selectSketch())
-      : currentSketchOrOptions)
-    if (!(sketch instanceof SketchFolderImpl)) {
+    const sketch = await this.resolveMutableSketch(
+      await (isBoardPickOptions(currentSketchOrOptions)
+        ? (this.currentSketch ?? this.selectSketch())
+        : currentSketchOrOptions)
+    )
+    if (!sketch) {
       return undefined
     }
     const options = isBoardPickOptions(currentSketchOrOptions)
@@ -1561,17 +1639,19 @@ export class BoardLabContextImpl implements BoardLabContext {
   async pickProgrammer(
     currentSketch: SketchFolder | undefined = this.currentSketch
   ): Promise<Programmer | undefined> {
-    if (!currentSketch) {
+    const sketch =
+      (await this.resolveMutableSketch(currentSketch)) ?? currentSketch
+    if (!sketch) {
       return undefined
     }
-    const board = currentSketch.board
+    const board = sketch.board
     if (!isBoardDetails(board)) {
       return undefined
     }
     if (!board.programmers.length) {
       return undefined
     }
-    const selectedProgrammer = currentSketch.selectedProgrammer
+    const selectedProgrammer = sketch.selectedProgrammer
     const selectedProgrammerId =
       typeof selectedProgrammer === 'string'
         ? selectedProgrammer
@@ -1610,8 +1690,8 @@ export class BoardLabContextImpl implements BoardLabContext {
       | Promise<SketchFolder | undefined>
       | undefined = this.currentSketch ?? this.selectSketch()
   ): Promise<Programmer | undefined> {
-    const sketch = await currentSketch
-    if (!(sketch instanceof SketchFolderImpl)) {
+    const sketch = await this.resolveMutableSketch(await currentSketch)
+    if (!sketch) {
       return undefined
     }
     const programmer = await this.pickProgrammer(sketch)
@@ -1627,10 +1707,11 @@ export class BoardLabContextImpl implements BoardLabContext {
     option: string,
     currentSketch: SketchFolder | undefined = this.currentSketch
   ): Promise<Omit<ConfigValue, 'selected'> | undefined> {
-    if (!(currentSketch instanceof SketchFolderImpl)) {
+    const sketch = await this.resolveMutableSketch(currentSketch)
+    if (!sketch) {
       return undefined
     }
-    const board = currentSketch.board
+    const board = sketch.board
     if (!isBoardDetails(board)) {
       return undefined
     }
@@ -1647,12 +1728,12 @@ export class BoardLabContextImpl implements BoardLabContext {
     const selectedValue = getSelectedConfigValue(
       option,
       configValues,
-      currentSketch.configOptions ?? board.fqbn
+      sketch.configOptions ?? board.fqbn
     )
 
     const defaultOptions =
-      (currentSketch.defaultConfigOptions &&
-        new FQBN(currentSketch.defaultConfigOptions).options) ??
+      (sketch.defaultConfigOptions &&
+        new FQBN(sketch.defaultConfigOptions).options) ??
       {}
     const defaultValue = defaultOptions && defaultOptions[option]
 
@@ -1690,8 +1771,8 @@ export class BoardLabContextImpl implements BoardLabContext {
       | Promise<SketchFolder | undefined>
       | undefined = this.currentSketch ?? this.selectSketch()
   ): Promise<ConfigValue['value'] | undefined> {
-    const sketch = await currentSketch
-    if (!(sketch instanceof SketchFolderImpl)) {
+    const sketch = await this.resolveMutableSketch(await currentSketch)
+    if (!sketch) {
       return undefined
     }
     const board = sketch.board
@@ -1736,8 +1817,8 @@ export class BoardLabContextImpl implements BoardLabContext {
       | Promise<SketchFolder | undefined>
       | undefined = this.currentSketch ?? this.selectSketch()
   ): Promise<void> {
-    const sketch = await currentSketch
-    if (!(sketch instanceof SketchFolderImpl)) {
+    const sketch = await this.resolveMutableSketch(await currentSketch)
+    if (!sketch) {
       return
     }
     if (!sketch.board) {
@@ -1755,6 +1836,9 @@ export class BoardLabContextImpl implements BoardLabContext {
   ): void {
     if (!changedProperties.length) {
       return
+    }
+    if (this.currentSketch && sketchPathEquals(this.currentSketch, sketch)) {
+      this.updateCurrentSketchContexts(sketch)
     }
     this._onDidChangeSketch.fire({
       object: sketch,

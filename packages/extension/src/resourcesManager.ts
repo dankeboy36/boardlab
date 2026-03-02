@@ -70,6 +70,49 @@ interface ResourceManagerToolbarParam {
   readonly canRemove?: boolean
 }
 
+type InstallCommandResource = Readonly<{
+  id: string
+  name: string
+  availableVersions: readonly Version[]
+}>
+
+type InstallCommandParam =
+  | ResourceManagerToolbarParam
+  | InstallResourceParams
+  | InstallCommandResource
+  | undefined
+
+function isToolbarInstallCommandParam(
+  arg: unknown
+): arg is ResourceManagerToolbarParam {
+  return (
+    typeof arg === 'object' &&
+    arg !== null &&
+    'args' in arg &&
+    Array.isArray((arg as { args?: unknown }).args)
+  )
+}
+
+function isInstallResourceParams(arg: unknown): arg is InstallResourceParams {
+  return (
+    typeof arg === 'object' &&
+    arg !== null &&
+    typeof (arg as { id?: unknown }).id === 'string' &&
+    typeof (arg as { name?: unknown }).name === 'string' &&
+    typeof (arg as { version?: unknown }).version === 'string'
+  )
+}
+
+function isInstallCommandResource(arg: unknown): arg is InstallCommandResource {
+  return (
+    typeof arg === 'object' &&
+    arg !== null &&
+    typeof (arg as { id?: unknown }).id === 'string' &&
+    typeof (arg as { name?: unknown }).name === 'string' &&
+    Array.isArray((arg as { availableVersions?: unknown }).availableVersions)
+  )
+}
+
 abstract class ResourcesManager<
   T extends Resource = Resource,
   F extends SearchFilterParams = SearchFilterParams,
@@ -350,26 +393,37 @@ export class LibrariesManager extends ResourcesManager {
     const registerInstallCommand = (
       commandId: string,
       resolveVersion: (
-        resource: Resource,
+        resource: InstallCommandResource,
         selectedVersion: Version | undefined
       ) => Version | undefined
     ) =>
       vscode.commands.registerCommand(
         commandId,
-        async (params: ResourceManagerToolbarParam | undefined) => {
-          const [resource, selectedVersion] = (params?.args ?? []) as [
-            Resource | undefined,
-            Version | undefined,
-          ]
-          if (!resource) {
+        async (params: InstallCommandParam) => {
+          const [resource, selectedVersion] = isToolbarInstallCommandParam(
+            params
+          )
+            ? (params.args as [Resource | undefined, Version | undefined])
+            : [undefined, undefined]
+          const directInstall = isInstallResourceParams(params)
+            ? params
+            : undefined
+          const directResource = isInstallCommandResource(params)
+            ? params
+            : undefined
+          if (directInstall) {
+            return this.install(directInstall)
+          }
+          const installResource = resource ?? directResource
+          if (!installResource) {
             return
           }
-          const version = resolveVersion(resource, selectedVersion)
-          if (!version) {
+          const installVersion = resolveVersion(installResource, selectedVersion)
+          if (!installVersion) {
             return
           }
-          const { id, name } = resource
-          return this.install({ id, name, version })
+          const { id, name } = installResource
+          return this.install({ id, name, version: installVersion })
         }
       )
     const registerUninstallCommand = (commandId: string) =>
@@ -743,18 +797,29 @@ export class PlatformsManager extends ResourcesManager<
     const registerInstallCommand = (
       commandId: string,
       resolveVersion: (
-        resource: Resource,
+        resource: InstallCommandResource,
         selectedVersion: Version | undefined
       ) => Version | undefined
     ) =>
       vscode.commands.registerCommand(
         commandId,
-        async (params: ResourceManagerToolbarParam | undefined) => {
-          const [resource, selectedVersion] = (params?.args ?? []) as [
-            Resource | undefined,
-            Version | undefined,
-          ]
-          if (!resource) {
+        async (params: InstallCommandParam) => {
+          const [resource, selectedVersion] = isToolbarInstallCommandParam(
+            params
+          )
+            ? (params.args as [Resource | undefined, Version | undefined])
+            : [undefined, undefined]
+          const directInstall = isInstallResourceParams(params)
+            ? params
+            : undefined
+          const directResource = isInstallCommandResource(params)
+            ? params
+            : undefined
+          if (directInstall) {
+            return this.install(directInstall)
+          }
+          const installResource = resource ?? directResource
+          if (!installResource) {
             const fallback = await this.resolveCurrentBoardInstallParams()
             if (!fallback) {
               await vscode.commands.executeCommand('boardlab.selectBoard')
@@ -762,12 +827,12 @@ export class PlatformsManager extends ResourcesManager<
             }
             return this.install(fallback)
           }
-          const version = resolveVersion(resource, selectedVersion)
-          if (!version) {
+          const installVersion = resolveVersion(installResource, selectedVersion)
+          if (!installVersion) {
             return
           }
-          const { id, name } = resource
-          return this.install({ id, name, version })
+          const { id, name } = installResource
+          return this.install({ id, name, version: installVersion })
         }
       )
     const registerUninstallCommand = (commandId: string) =>

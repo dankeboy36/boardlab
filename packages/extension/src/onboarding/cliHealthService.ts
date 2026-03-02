@@ -38,27 +38,6 @@ export class CliHealthService implements vscode.Disposable {
         return
       }
       this.setCliStatus('required')
-      this.cliContext.resolveExecutablePath().then(
-        () => {
-          if (token !== this.refreshToken) {
-            return
-          }
-          this.setCliStatus('ready')
-        },
-        (error) => {
-          if (token !== this.refreshToken) {
-            return
-          }
-          if (error instanceof Error && error.name === 'AbortError') {
-            return
-          }
-          this.outputChannel?.appendLine(
-            `Arduino CLI installation did not complete: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          )
-        }
-      )
     } catch (error) {
       if (token !== this.refreshToken) {
         return
@@ -69,6 +48,30 @@ export class CliHealthService implements vscode.Disposable {
         }`
       )
       this.setCliStatus('required')
+    }
+  }
+
+  async confirmAndInstallCli(): Promise<boolean> {
+    const token = ++this.refreshToken
+    try {
+      await this.cliContext.resolveExecutablePathWithConfirmation()
+      if (token === this.refreshToken) {
+        this.setCliStatus('ready')
+      }
+      return true
+    } catch (error) {
+      if (token === this.refreshToken) {
+        this.setCliStatus('required')
+      }
+      if (error instanceof Error && error.name === 'AbortError') {
+        return false
+      }
+      this.outputChannel?.appendLine(
+        `Arduino CLI installation did not complete: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      )
+      return false
     }
   }
 

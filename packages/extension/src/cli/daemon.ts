@@ -62,6 +62,9 @@ export class Daemon implements vscode.Disposable {
     if (this._deferredAddress) {
       return this._deferredAddress.promise
     }
+    if (!(await this.cliContext.isExecutableAvailable())) {
+      return undefined
+    }
     const command = await this.cliContext.resolveExecutablePath()
     await this.cliContext.cliConfig.ready()
     this._deferredAddress = defer()

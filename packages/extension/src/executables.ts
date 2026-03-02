@@ -30,6 +30,7 @@ export class ExecutableContext {
   ) {}
 
   private _downloadInProgress: DeferredPromise<string> | undefined
+  private _promptInProgress: DeferredPromise<boolean> | undefined
 
   async isExecutableAvailable(): Promise<boolean> {
     try {
@@ -48,13 +49,6 @@ export class ExecutableContext {
     }
   }
 
-  checkAvailability(): void {
-    this.resolveExecutablePath().catch(() => {
-      // Intentionally ignored: this is used to surface the existing
-      // welcome/download prompt without forcing the caller to await it.
-    })
-  }
-
   async resolveExecutablePath(): Promise<string> {
     if (this._downloadInProgress) {
       return this._downloadInProgress.promise
@@ -63,6 +57,19 @@ export class ExecutableContext {
       return this.toolPath
     }
     if (!(await this.promptDownload())) {
+      throw new AbortError()
+    }
+    return this.ensureDownloaded()
+  }
+
+  async resolveExecutablePathWithConfirmation(): Promise<string> {
+    if (this._downloadInProgress) {
+      return this._downloadInProgress.promise
+    }
+    if (await this.isExecutableAvailable()) {
+      return this.toolPath
+    }
+    if (!(await this.confirmDownload())) {
       throw new AbortError()
     }
     return this.ensureDownloaded()
@@ -133,14 +140,44 @@ export class ExecutableContext {
     )
   }
 
-  private async promptDownload(): Promise<boolean> {
+  private promptDownload(): Promise<boolean> {
+    if (this._promptInProgress) {
+      return this._promptInProgress.promise
+    }
+
+    const deferred = pDefer<boolean>()
+    this._promptInProgress = deferred
+    const { tool, version } = this.params
+    vscode.window
+      .showInformationMessage(
+        `Welcome to BoardLab! BoardLab needs the ${tool} (version ${version}) to work. It can be downloaded automatically from the official Arduino servers. Would you like to download it now?`,
+        'Yes',
+        'Later'
+      )
+      .then(
+        (answer) => {
+          deferred.resolve(answer === 'Yes')
+          this._promptInProgress = undefined
+        },
+        (error) => {
+          deferred.reject(error)
+          this._promptInProgress = undefined
+        }
+      )
+    return deferred.promise
+  }
+
+  private async confirmDownload(): Promise<boolean> {
     const { tool, version } = this.params
     const answer = await vscode.window.showInformationMessage(
-      `Welcome to BoardLab! BoardLab needs the ${tool} (version ${version}) to work. It can be downloaded automatically from the official Arduino servers. Would you like to download it now?`,
-      'Yes',
-      'Later'
+      'Welcome to BoardLab',
+      {
+        modal: true,
+        detail: `BoardLab needs the ${tool} (version ${version}) to work. It can be downloaded automatically from the official Arduino servers. Would you like to download it now?`,
+      },
+      'Download'
     )
-    return answer === 'Yes'
+    return answer === 'Download'
   }
 
   private showSuccess(): void {

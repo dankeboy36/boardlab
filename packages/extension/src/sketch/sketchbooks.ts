@@ -115,7 +115,7 @@ export class Sketchbooks implements vscode.Disposable {
           this._sketchbooks = undefined
           this._onDidChangeUserSketchbook.fire()
 
-          this.refresh()
+          this.refresh({ showLoading: false })
         }
       }),
       this._onDidChangeUserSketchbook,
@@ -135,6 +135,11 @@ export class Sketchbooks implements vscode.Disposable {
         }
       }),
       vscode.workspace.onDidChangeWorkspaceFolders(() => this.refresh()),
+      boardlabContext.cliContext.daemon.onDidChangeAddress((address) => {
+        if (address) {
+          this.refresh({ showLoading: false })
+        }
+      }),
     ]
     this.refresh()
   }
@@ -143,6 +148,11 @@ export class Sketchbooks implements vscode.Disposable {
     openedSketches?: readonly Sketch[]
   ): Promise<void> {
     const sketches = openedSketches ?? this.openedSketches
+    if (!sketches.length || !this.boardlabContext.cliContext.daemon.address) {
+      this._resolvedSketches = []
+      this._onDidChangeResolvedSketches.fire()
+      return
+    }
     const { arduino } = await this.boardlabContext.client
     const resolvedSketches = await Promise.all(
       sketches.map((sketch) => this.resolve(sketch, arduino))
@@ -204,7 +214,7 @@ export class Sketchbooks implements vscode.Disposable {
         )
         .map((sketch) => sketch.uri.fsPath)
       this._onDidChangeSketchFolders.fire({ addedPaths, removedPaths })
-      await this.resolveOpenedSketchFolders(newOpenedSketches)
+      await this.resolveOpenedSketchFolders(workspaceOpenedSketches)
     } finally {
       this.setSketchbooksLoading(false)
       this._onDidRefresh.fire()

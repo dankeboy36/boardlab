@@ -33,6 +33,7 @@ export interface StatusBarModelContext {
   readonly portDetected?: boolean
   readonly canInstallPlatform?: boolean
   readonly platformInstallLabel?: string
+  readonly platformInstallArgs?: readonly unknown[]
   readonly runtime?: RuntimeState
 }
 
@@ -49,7 +50,8 @@ function createItem(
   text: string,
   command?: string,
   priority = 100,
-  tooltip?: string
+  tooltip?: string,
+  args?: readonly unknown[]
 ): StatusBarModelItem {
   return {
     id,
@@ -57,6 +59,7 @@ function createItem(
     command,
     priority,
     tooltip,
+    args,
   }
 }
 
@@ -300,12 +303,16 @@ export function deriveStatusBarModel(
         items.push(
           createItem(
             'platform-required',
-            `$(cloud-download) Install ${ctx.platformInstallLabel || 'platform'}`,
+            `$(cloud-download) Install ${
+              ctx.platformInstallLabel || 'platform'
+            }`,
             'boardlab.installPlatform',
             120,
-            `Install ${ctx.platformInstallLabel || 'platform'}`
+            `Install ${ctx.platformInstallLabel || 'platform'}`,
+            ctx.platformInstallArgs
           )
         )
+        items.push(boardItem(ctx, 118))
       } else {
         items.push(
           createItem(

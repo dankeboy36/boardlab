@@ -322,9 +322,6 @@ class PortTreeItem extends TreeItem {
     )
     if (port?.address) {
       this.description = port.address
-      if (port.protocol) {
-        this.description += ` (${port.protocol})`
-      }
     }
     this.contextValue = 'port'
   }

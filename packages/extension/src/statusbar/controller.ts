@@ -1,10 +1,12 @@
 import { basename } from 'node:path'
 
 import { createPortKey } from 'boards-list'
+import { FQBN } from 'fqbn'
 import * as vscode from 'vscode'
 
 import type { BoardLabContextImpl } from '../boardlabContext'
 import { deriveOnboardingState } from '../onboarding/state'
+import { extractPlatformInfo } from '../platformMissing'
 import { platformIdFromFqbn } from '../platformUtils'
 import {
   deriveStatusBarModel,
@@ -21,17 +23,118 @@ function toAlignment(alignment?: 'left' | 'right'): vscode.StatusBarAlignment {
     : vscode.StatusBarAlignment.Left
 }
 
-function boardLabel(board: unknown): string | undefined {
+function boardNameFromDetectedBoards(
+  boards: readonly unknown[] | undefined,
+  fqbn: string | undefined
+): string | undefined {
+  if (!boards?.length) {
+    return undefined
+  }
+  const namedBoards = boards.flatMap((board) => {
+    const name = (board as { name?: unknown })?.name
+    if (typeof name !== 'string' || !name.trim()) {
+      return []
+    }
+    const candidateFqbn = (board as { fqbn?: unknown })?.fqbn
+    return [
+      {
+        name: name.trim(),
+        fqbn:
+          typeof candidateFqbn === 'string' && candidateFqbn.trim()
+            ? candidateFqbn.trim()
+            : undefined,
+      },
+    ]
+  })
+  if (!namedBoards.length) {
+    return undefined
+  }
+  if (fqbn) {
+    const matched = namedBoards.find((board) =>
+      boardFqbnEquals(board.fqbn, fqbn)
+    )
+    if (matched) {
+      return matched.name
+    }
+  }
+  return namedBoards.length === 1 ? namedBoards[0]?.name : undefined
+}
+
+function boardFqbnEquals(left: string | undefined, right: string): boolean {
+  if (!left) {
+    return false
+  }
+  try {
+    return new FQBN(left).sanitize().equals(new FQBN(right).sanitize())
+  } catch {
+    return left.trim() === right.trim()
+  }
+}
+
+function derivedBoardLabelFromDetectedPorts(
+  boardlabContext: BoardLabContextImpl,
+  fqbn: string | undefined,
+  selectedPort: { protocol: string; address: string } | undefined
+): string | undefined {
+  const detectedPorts = Object.values(boardlabContext.boardsListWatcher.detectedPorts)
+  if (!detectedPorts.length) {
+    return undefined
+  }
+  if (selectedPort) {
+    const exactMatch =
+      boardlabContext.boardsListWatcher.detectedPorts[createPortKey(selectedPort)]
+    const exactLabel = boardNameFromDetectedBoards(exactMatch?.boards, fqbn)
+    if (exactLabel) {
+      return exactLabel
+    }
+
+    const selectedAddress = normalizePortAddress(selectedPort.address)
+    if (selectedAddress) {
+      const addressMatch = detectedPorts.find(
+        ({ port }) => normalizePortAddress(port?.address) === selectedAddress
+      )
+      const addressLabel = boardNameFromDetectedBoards(addressMatch?.boards, fqbn)
+      if (addressLabel) {
+        return addressLabel
+      }
+    }
+  }
+
+  const labels = detectedPorts
+    .map((detectedPort) => boardNameFromDetectedBoards(detectedPort.boards, fqbn))
+    .filter((label): label is string => Boolean(label))
+  return labels.length === 1 ? labels[0] : undefined
+}
+
+function boardLabel(
+  boardlabContext: BoardLabContextImpl,
+  board: unknown,
+  selectedPort: { protocol: string; address: string } | undefined
+): string | undefined {
   if (!board || typeof board !== 'object') {
     return undefined
   }
   const name = (board as { name?: unknown }).name
-  if (typeof name === 'string' && name.trim()) {
-    return name.trim()
-  }
   const fqbn = (board as { fqbn?: unknown }).fqbn
-  if (typeof fqbn === 'string' && fqbn.trim()) {
-    return fqbn.trim()
+  const trimmedName = typeof name === 'string' && name.trim() ? name.trim() : undefined
+  const trimmedFqbn =
+    typeof fqbn === 'string' && fqbn.trim() ? fqbn.trim() : undefined
+  if (trimmedName && (!trimmedFqbn || trimmedName !== trimmedFqbn)) {
+    return trimmedName
+  }
+  const detectedLabel = derivedBoardLabelFromDetectedPorts(
+    boardlabContext,
+    trimmedFqbn,
+    selectedPort
+  )
+  if (detectedLabel) {
+    return detectedLabel
+  }
+  if (trimmedName) {
+    return trimmedName
+  }
+  if (trimmedFqbn) {
+    return trimmedFqbn
   }
   return undefined
 }
@@ -47,31 +150,59 @@ function boardFqbn(board: unknown): string | undefined {
   return undefined
 }
 
-function derivePlatformInstallCandidate(board: unknown): {
+function formatPlatformInstallLabel(name: string, id: string): string {
+  const trimmedName = name.trim()
+  const trimmedId = id.trim()
+  if (trimmedName && trimmedId && trimmedName !== trimmedId) {
+    return `${trimmedName} (${trimmedId}) platform`
+  }
+  return `${trimmedName || trimmedId} platform`
+}
+
+async function derivePlatformInstallCandidate(
+  boardlabContext: BoardLabContextImpl,
+  board: unknown
+): Promise<{
   canInstall: boolean
   label?: string
-} {
+  args?: readonly unknown[]
+}> {
   if (!board || typeof board !== 'object') {
     return { canInstall: false }
   }
-  const platform = (board as { platform?: any }).platform
-  const metadataId = platform?.metadata?.id
-  const platformName = platform?.release?.name ?? platform?.name
+  const platform = extractPlatformInfo(board as any)
   const fqbn = (board as { fqbn?: unknown }).fqbn
   const platformId =
-    (typeof metadataId === 'string' && metadataId.trim()) ||
+    (typeof platform?.id === 'string' && platform.id.trim()) ||
     (typeof fqbn === 'string' ? platformIdFromFqbn(fqbn) : undefined)
 
   if (!platformId) {
     return { canInstall: false }
   }
-  const label =
-    (typeof platformName === 'string' && platformName.trim()) ||
-    platformId ||
-    'platform'
+  const quick = await boardlabContext.platformsManager
+    .lookupPlatformQuick(platformId)
+    .catch(() => undefined)
+  const platformName =
+    (typeof platform?.name === 'string' && platform.name.trim()) ||
+    quick?.label ||
+    platformId
+  const version =
+    (typeof platform?.version === 'string' && platform.version.trim()) ||
+    quick?.availableVersions[0] ||
+    quick?.installedVersion
+  const label = formatPlatformInstallLabel(platformName, platformId)
   return {
     canInstall: true,
     label,
+    args: version
+      ? [
+          {
+            id: platformId,
+            name: platformName,
+            availableVersions: [version],
+          },
+        ]
+      : undefined,
   }
 }
 
@@ -136,6 +267,10 @@ interface OnboardingStatusBarControllerParams {
 export class OnboardingStatusBarController implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[]
   private readonly itemsById = new Map<string, vscode.StatusBarItem>()
+  private readonly itemLayoutById = new Map<
+    string,
+    Pick<StatusBarModelItem, 'alignment' | 'priority'>
+  >()
   private readonly statusBarIdPrefix = 'boardlab.onboardingStatusBar'
   private updateToken = 0
 
@@ -167,10 +302,17 @@ export class OnboardingStatusBarController implements vscode.Disposable {
       item.dispose()
     }
     this.itemsById.clear()
+    this.itemLayoutById.clear()
   }
 
   private refresh(): void {
     const token = ++this.updateToken
+    void this.refreshInternal(token).catch((error) =>
+      console.warn('Failed to refresh onboarding status bar', error)
+    )
+  }
+
+  private async refreshInternal(token: number): Promise<void> {
     const {
       boardlabContext,
       cliHealthService,
@@ -193,18 +335,22 @@ export class OnboardingStatusBarController implements vscode.Disposable {
           }
         : undefined
     const portDetected = isSelectedPortDetected(boardlabContext, selectedPort)
-    const candidate = derivePlatformInstallCandidate(currentSketch?.board)
+    const candidate = await derivePlatformInstallCandidate(
+      boardlabContext,
+      currentSketch?.board
+    )
     const context: StatusBarModelContext = {
       currentSketchName: currentSketch
         ? basename(currentSketch.sketchPath)
         : undefined,
       openedSketchesCount: workspaceOpenedSketchesCount(boardlabContext),
-      boardLabel: boardLabel(currentSketch?.board),
+      boardLabel: boardLabel(boardlabContext, currentSketch?.board, selectedPort),
       boardFqbn: boardFqbn(currentSketch?.board),
       portAddress: selectedPort?.address,
       portDetected,
       canInstallPlatform: candidate.canInstall,
       platformInstallLabel: candidate.label,
+      platformInstallArgs: candidate.args,
       runtime: runtimeStateService.runtimeState,
     }
 
@@ -240,20 +386,32 @@ export class OnboardingStatusBarController implements vscode.Disposable {
       }
       item.dispose()
       this.itemsById.delete(id)
+      this.itemLayoutById.delete(id)
     }
   }
 
   private upsertItem(item: StatusBarModelItem): vscode.StatusBarItem {
     const existing = this.itemsById.get(item.id)
-    if (existing) {
+    const nextLayout = {
+      alignment: item.alignment,
+      priority: item.priority,
+    }
+    const currentLayout = this.itemLayoutById.get(item.id)
+    if (
+      existing &&
+      currentLayout?.alignment === nextLayout.alignment &&
+      currentLayout?.priority === nextLayout.priority
+    ) {
       return existing
     }
+    existing?.dispose()
     const created = vscode.window.createStatusBarItem(
       `${this.statusBarIdPrefix}.${item.id}`,
       toAlignment(item.alignment),
       item.priority
     )
     this.itemsById.set(item.id, created)
+    this.itemLayoutById.set(item.id, nextLayout)
     return created
   }
 }
