@@ -125,12 +125,13 @@ describe('deriveStatusBarModel', () => {
       },
     })
     expect(model.every((item) => Boolean(item.tooltip))).toBe(true)
+    expect(model.find((item) => item.id === 'compile')?.tooltip).toBe('Compile')
     expect(model.find((item) => item.id === 'board')?.tooltip).toContain(
       'arduino:avr:uno'
     )
   })
 
-  it('adds pulse prefix to port text when monitor is running', () => {
+  it('shows in-progress icon when monitor is running', () => {
     const model = deriveStatusBarModel('READY_FULL', {
       ...baseContext,
       runtime: {
@@ -141,12 +142,11 @@ describe('deriveStatusBarModel', () => {
     })
     const port = model.find((item) => item.id === 'port')
     const monitor = model.find((item) => item.id === 'monitor')
-    expect(port?.text).toContain('$(pulse)')
-    expect(port?.text).toContain('on /dev/ttyUSB0')
+    expect(port?.text).toBe('$(plug-in-progress-icon) on /dev/ttyUSB0')
     expect(monitor?.tooltip).toBe('Monitor running')
   })
 
-  it('adds spinner prefix to port text when monitor is suspended', () => {
+  it('shows blocked icon when monitor is suspended', () => {
     const model = deriveStatusBarModel('READY_FULL', {
       ...baseContext,
       runtime: {
@@ -156,8 +156,7 @@ describe('deriveStatusBarModel', () => {
       },
     })
     const port = model.find((item) => item.id === 'port')
-    expect(port?.text).toContain('$(sync~spin)')
-    expect(port?.text).toContain('on /dev/ttyUSB0')
+    expect(port?.text).toBe('$(plug-in-progress-blocked-icon) on /dev/ttyUSB0')
   })
 
   it('shows plain port label when monitor is stopped', () => {
@@ -170,10 +169,10 @@ describe('deriveStatusBarModel', () => {
       },
     })
     const port = model.find((item) => item.id === 'port')
-    expect(port?.text).toBe('$(plug) on /dev/ttyUSB0')
+    expect(port?.text).toBe('$(plug-success-icon) on /dev/ttyUSB0')
   })
 
-  it('shows no icon when selected port is not detected', () => {
+  it('shows detached icon when selected port is not detected', () => {
     const model = deriveStatusBarModel('READY_FULL', {
       ...baseContext,
       portDetected: false,
@@ -184,7 +183,7 @@ describe('deriveStatusBarModel', () => {
       },
     })
     const port = model.find((item) => item.id === 'port')
-    expect(port?.text).toBe('on /dev/ttyUSB0')
+    expect(port?.text).toBe('$(plug-not-connected-icon) on /dev/ttyUSB0')
   })
 
   it('keeps compile command passive and shows trailing compile activity with percent', () => {

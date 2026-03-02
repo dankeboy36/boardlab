@@ -110,13 +110,13 @@
       },
       {
         "command": "boardlab.compile",
-        "title": "Compile Sketch",
+        "title": "Compile",
         "icon": "$(check)",
         "category": "BoardLab"
       },
       {
         "command": "boardlab.upload",
-        "title": "Upload Sketch",
+        "title": "Upload",
         "icon": "$(arrow-right)",
         "category": "BoardLab"
       },
@@ -864,6 +864,34 @@
         "default": {
           "fontPath": "./resources/theme/boardlab.woff",
           "fontCharacter": "\\e001"
+        }
+      },
+      "plug-success-icon": {
+        "description": "Plug success",
+        "default": {
+          "fontPath": "./resources/theme/boardlab.woff",
+          "fontCharacter": "\\e002"
+        }
+      },
+      "plug-not-connected-icon": {
+        "description": "Plug not connected",
+        "default": {
+          "fontPath": "./resources/theme/boardlab.woff",
+          "fontCharacter": "\\e003"
+        }
+      },
+      "plug-in-progress-icon": {
+        "description": "Plug in-progress",
+        "default": {
+          "fontPath": "./resources/theme/boardlab.woff",
+          "fontCharacter": "\\e004"
+        }
+      },
+      "plug-in-progress-blocked-icon": {
+        "description": "Plug blocked",
+        "default": {
+          "fontPath": "./resources/theme/boardlab.woff",
+          "fontCharacter": "\\e005"
         }
       }
     },

@@ -109,17 +109,22 @@ function portTextForReadyFull(
   runtime: RuntimeState,
   portDetected: boolean | undefined
 ): string {
-  const addressLabel = portAddress ? `on ${portAddress}` : 'Select Port'
+  if (!portAddress) {
+    return '$(plug) Select Port'
+  }
+  const addressLabel = `on ${portAddress}`
   switch (runtime.monitor.state) {
     case 'running':
-      return `$(pulse) ${addressLabel}`
+      return `$(plug-in-progress-icon) ${addressLabel}`
     case 'suspended':
-      return `$(sync~spin) ${addressLabel}`
+      return `$(plug-in-progress-blocked-icon) ${addressLabel}`
     case 'error':
       return `$(error) ${addressLabel}`
     case 'stopped':
     default:
-      return portDetected ? `$(plug) ${addressLabel}` : addressLabel
+      return portDetected
+        ? `$(plug-success-icon) ${addressLabel}`
+        : `$(plug-not-connected-icon) ${addressLabel}`
   }
 }
 
@@ -203,7 +208,7 @@ function compileItem(priority: number): StatusBarModelItem {
     '$(check)',
     'boardlab.compile',
     priority,
-    'Compile sketch'
+    'Compile'
   )
 }
 

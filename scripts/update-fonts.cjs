@@ -5,9 +5,14 @@ const path = require('node:path')
 
 const webfont = require('webfont')
 
-const svgs = ['boardlab.svg', 'monitor.svg'].map((name) =>
-  path.join(__dirname, '..', 'resources', 'icons', name)
-)
+const svgs = [
+  'boardlab.svg',
+  'monitor.svg',
+  'plug-success.svg',
+  'plug-not-connected.svg',
+  'plug-in-progress.svg',
+  'plug-blocked.svg',
+].map((name) => path.join(__dirname, '..', 'resources', 'icons', name))
 
 async function generateFont() {
   try {
