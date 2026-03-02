@@ -8,8 +8,12 @@ import { SketchFolder } from 'vscode-arduino-api'
 
 import { BoardLabContextImpl } from '../boardlabContext'
 import { getSelectedConfigValue, isBoardDetails } from '../boards'
-import { portProtocolIcon } from '../ports'
-import { type TaskKind } from '../taskTracker'
+import { portStateIcon, type PortIconState } from '../ports'
+import {
+  getTaskStatus,
+  onDidChangeTaskStates,
+  type TaskKind,
+} from '../taskTracker'
 import { presentTaskStatus } from '../taskUiState'
 import { HasSketchFolder } from './sketchbooks'
 import { SketchFolderImpl } from './sketchFolder'
@@ -117,6 +121,16 @@ class CurrentSketchViewDataProvider
       }),
       boardlabContext.onDidChangeSketch(() => this._onDidChange.fire()),
       boardlabContext.onDidChangeActiveProfile(() => this._onDidChange.fire()),
+      boardlabContext.boardsListWatcher.onDidChangeDetectedPorts(() =>
+        this._onDidChange.fire()
+      ),
+      boardlabContext.monitorManager.onDidChangeRunningMonitors(() =>
+        this._onDidChange.fire()
+      ),
+      boardlabContext.monitorManager.onDidChangeMonitorState(() =>
+        this._onDidChange.fire()
+      ),
+      onDidChangeTaskStates(() => this._onDidChange.fire()),
       vscode.workspace.onDidCreateFiles((event) =>
         this.onFilesChanged(event.files)
       ),
@@ -164,7 +178,13 @@ class CurrentSketchViewDataProvider
             new ProgrammerItem(currentSketch, programmerDescription.description)
           )
         }
-        items.push(new PortTreeItem(currentSketch, currentSketch.port))
+        items.push(
+          new PortTreeItem(
+            currentSketch,
+            currentSketch.port,
+            derivePortTreeItemState(this.boardlabContext, currentSketch)
+          )
+        )
 
         items.push(
           new BuildAndUploadTasksRootItem(currentSketch),
@@ -221,14 +241,84 @@ class CurrentSketchViewDataProvider
   }
 }
 
+function derivePortTreeItemState(
+  boardlabContext: BoardLabContextImpl,
+  sketch: SketchFolder
+): PortIconState | undefined {
+  const port = sketch.port
+  if (!port?.address || !port.protocol) {
+    return undefined
+  }
+
+  const portKey = createPortKey(port)
+  const uploadKinds: TaskKind[] = [
+    'upload',
+    'upload-using-programmer',
+    'burn-bootloader',
+  ]
+  if (
+    uploadKinds.some(
+      (kind) => getTaskStatus(kind, sketch.sketchPath, portKey) === 'running'
+    )
+  ) {
+    return 'blocked'
+  }
+
+  const monitorState = boardlabContext.monitorManager.getMonitorState({
+    protocol: port.protocol,
+    address: port.address,
+  })
+  if (monitorState === 'suspended') {
+    return 'blocked'
+  }
+  if (monitorState === 'running') {
+    return 'in-progress'
+  }
+
+  return isSketchPortDetected(boardlabContext, port) ? 'ok' : 'disconnected'
+}
+
+function isSketchPortDetected(
+  boardlabContext: BoardLabContextImpl,
+  port: NonNullable<SketchFolder['port']>
+): boolean {
+  if (boardlabContext.boardsListWatcher.detectedPorts[createPortKey(port)]) {
+    return true
+  }
+  if (
+    boardlabContext.monitorManager.isPortDetected({
+      protocol: port.protocol,
+      address: port.address,
+    })
+  ) {
+    return true
+  }
+
+  const selectedAddress = normalizePortAddress(port.address)
+  if (!selectedAddress) {
+    return false
+  }
+
+  return Object.values(boardlabContext.boardsListWatcher.detectedPorts).some(
+    ({ port: detectedPort }) =>
+      normalizePortAddress(detectedPort?.address) === selectedAddress
+  )
+}
+
+function normalizePortAddress(address: string | undefined): string | undefined {
+  const trimmed = address?.trim()
+  return trimmed ? trimmed.toLowerCase() : undefined
+}
+
 class PortTreeItem extends TreeItem {
   constructor(
     readonly sketch: SketchFolder,
-    port: SketchFolder['port']
+    port: SketchFolder['port'],
+    portState?: PortIconState
   ) {
     super(port?.address ? 'Port' : 'No port selected')
     this.iconPath = new vscode.ThemeIcon(
-      port ? portProtocolIcon(port, false) : 'plug'
+      portState ? portStateIcon(portState, false) : 'plug'
     )
     if (port?.address) {
       this.description = port.address

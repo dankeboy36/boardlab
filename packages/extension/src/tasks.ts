@@ -23,7 +23,7 @@ import {
   isPlatformNotInstalledError,
   platformIdFromFqbn,
 } from './platformUtils'
-import { portProtocolIcon, resolvePort } from './ports'
+import { portStateIcon, resolvePort } from './ports'
 import {
   createValidateSketchProfileTask,
   isValidateSketchProfileTaskDefinition,
@@ -1680,10 +1680,13 @@ export class BoardLabTasks implements vscode.TaskProvider, vscode.Disposable {
   private portLabel(long = true): string {
     if (this.resolvedPort) {
       const resolvePort = this.resolvedPort
-      const resolveLabel = portProtocolIcon(resolvePort) + resolvePort.label
+      const resolveLabel = portStateIcon('ok') + resolvePort.label
       return resolveLabel
     }
     const label = this.boardlabContext.currentSketch?.port?.address ?? ''
+    if (label) {
+      return portStateIcon('disconnected') + label
+    }
     if (!label && long) {
       return 'No port selected'
     }

@@ -29,7 +29,7 @@ import {
 } from 'vscode-arduino-api'
 
 import { Arduino } from './cli/arduino'
-import { portProtocolIcon } from './ports'
+import { portStateIcon, type PortIconState } from './ports'
 import {
   matchesQuickPickConstraints,
   type QuickPickConstraints,
@@ -500,8 +500,12 @@ class BoardsListQuickPickItem extends BoardQuickPickItem {
     }
   }
 }
-export function portQuickItemLabel(port: Port, selected = false): string {
-  const icon = portProtocolIcon(port)
+export function portQuickItemLabel(
+  port: Port,
+  selected = false,
+  state: PortIconState = 'ok'
+): string {
+  const icon = portStateIcon(state)
   return `${selected ? '$(check) ' : ''}${icon} ${port.label}`
 }
 

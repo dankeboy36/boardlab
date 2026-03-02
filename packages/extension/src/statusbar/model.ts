@@ -198,7 +198,7 @@ function uploadItem(priority: number): StatusBarModelItem {
     '$(arrow-right)',
     'boardlab.upload',
     priority,
-    'Upload sketch'
+    'Upload'
   )
 }
 

@@ -77,7 +77,7 @@ import {
   matchesPlatformId,
   toUnresolvedBoard,
 } from './platformUtils'
-import { PortPickOptions, pickPort } from './ports'
+import { PortPickOptions, pickPort, type PortIconState } from './ports'
 import { readProfiles } from './profile/profiles'
 import { LibrariesManager, PlatformsManager } from './resourcesManager'
 import { ConfigOptionItem } from './sketch/currentSketchView'
@@ -90,6 +90,11 @@ import {
   sketchPathEquals,
 } from './sketch/sketchbooks'
 import { SketchPickOptions, pickSketch } from './sketch/sketches'
+import {
+  getTaskStatus,
+  onDidChangeTaskStates,
+  type TaskKind,
+} from './taskTracker'
 import { Sketch } from './sketch/types'
 import { BaseRecentItems, RecentItems, disposeAll, mementoKey } from './utils'
 
@@ -292,6 +297,70 @@ function isPortPickOptions(arg: unknown): arg is PortPickOptions {
     !(arg instanceof SketchFolderImpl) &&
     !isPromiseLike(arg)
   )
+}
+
+function derivePortPickerItemState(
+  boardlabContext: BoardLabContextImpl,
+  sketch: SketchFolder,
+  port: PortIdentifier,
+  isDetected: boolean
+): PortIconState {
+  const portKey = createPortKey(port)
+  const uploadKinds: TaskKind[] = [
+    'upload',
+    'upload-using-programmer',
+    'burn-bootloader',
+  ]
+  if (
+    uploadKinds.some(
+      (kind) => getTaskStatus(kind, sketch.sketchPath, portKey) === 'running'
+    )
+  ) {
+    return 'blocked'
+  }
+
+  const monitorState = boardlabContext.monitorManager.getMonitorState(port)
+  if (monitorState === 'suspended') {
+    return 'blocked'
+  }
+  if (monitorState === 'running') {
+    return 'in-progress'
+  }
+
+  return isPortDetectedForPicker(boardlabContext, port, isDetected)
+    ? 'ok'
+    : 'disconnected'
+}
+
+function isPortDetectedForPicker(
+  boardlabContext: BoardLabContextImpl,
+  port: PortIdentifier,
+  isDetected: boolean
+): boolean {
+  if (isDetected) {
+    return true
+  }
+  if (boardlabContext.boardsListWatcher.detectedPorts[createPortKey(port)]) {
+    return true
+  }
+  if (boardlabContext.monitorManager.isPortDetected(port)) {
+    return true
+  }
+
+  const selectedAddress = normalizePortAddress(port.address)
+  if (!selectedAddress) {
+    return false
+  }
+
+  return Object.values(boardlabContext.boardsListWatcher.detectedPorts).some(
+    ({ port: detectedPort }) =>
+      normalizePortAddress(detectedPort?.address) === selectedAddress
+  )
+}
+
+function normalizePortAddress(address: string | undefined): string | undefined {
+  const trimmed = address?.trim()
+  return trimmed ? trimmed.toLowerCase() : undefined
 }
 
 export function createBoardLabContext(
@@ -1229,12 +1298,33 @@ export class BoardLabContextImpl implements BoardLabContext {
     if (!currentSketch) {
       return undefined
     }
+    const effectiveOptions: PortPickOptions = {
+      ...options,
+      resolvePortState:
+        options?.resolvePortState ??
+        ((port, detectedPort) =>
+          derivePortPickerItemState(
+            this,
+            currentSketch,
+            {
+              protocol: port.protocol,
+              address: port.address,
+            },
+            Boolean(detectedPort)
+          )),
+      onDidChangePortStates: [
+        ...(options?.onDidChangePortStates ?? []),
+        this.monitorManager.onDidChangeRunningMonitors,
+        this.monitorManager.onDidChangeMonitorState,
+        onDidChangeTaskStates,
+      ],
+    }
     const port = await pickPort(
       () => this.boardsListWatcher.detectedPorts,
       this.boardsListWatcher.onDidChangeDetectedPorts,
       this.pinnedPorts,
       this.recentPorts,
-      options
+      effectiveOptions
     )
     return port
   }

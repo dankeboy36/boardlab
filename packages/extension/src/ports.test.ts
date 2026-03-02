@@ -86,6 +86,15 @@ async function waitFor(
 }
 
 describe('toPortItems (history + detection alignment)', () => {
+  it('maps each port icon state to the custom plug glyph', async () => {
+    const { portStateIcon } = await loadPortsModule()
+
+    expect(portStateIcon('ok')).toBe('$(plug-success-icon)')
+    expect(portStateIcon('disconnected')).toBe('$(plug-not-connected-icon)')
+    expect(portStateIcon('in-progress')).toBe('$(plug-in-progress-icon)')
+    expect(portStateIcon('blocked')).toBe('$(plug-in-progress-blocked-icon)')
+  })
+
   it('shows unresolved pinned and recent ports from user history', async () => {
     const { toPortItems } = await loadPortsModule()
 
@@ -107,8 +116,10 @@ describe('toPortItems (history + detection alignment)', () => {
 
     expect(labels).toContain('pinned ports')
     expect(labels).toContain('recent ports')
-    expect(labels).toContain('$(plug) /dev/cu.usbmodem-offline')
-    expect(labels).toContain('$(radio-tower) 192.168.4.1:3232')
+    expect(labels).toContain(
+      '$(plug-not-connected-icon) /dev/cu.usbmodem-offline'
+    )
+    expect(labels).toContain('$(plug-not-connected-icon) 192.168.4.1:3232')
 
     const unresolvedCount = items.filter(
       (item) => item?.description === 'not detected'
@@ -137,11 +148,11 @@ describe('toPortItems (history + detection alignment)', () => {
     const labels = labelsOf(items)
 
     expect(labels).toContain('pinned ports')
-    expect(labels).toContain('$(plug) tty.usbmodem14101')
+    expect(labels).toContain('$(plug-success-icon) tty.usbmodem14101')
     expect(labels).not.toContain('serial ports')
 
     const resolvedItem = items.find(
-      (item) => item?.label === '$(plug) tty.usbmodem14101'
+      (item) => item?.label === '$(plug-success-icon) tty.usbmodem14101'
     )
     expect(resolvedItem?.description).toBe('Arduino Nano')
   })
@@ -157,9 +168,9 @@ describe('toPortItems (history + detection alignment)', () => {
     const items = await toPortItems({} as DetectedPorts, [p1], [p1, p2, p3, p4])
     const recentLabels = labelsInRange(items, 'recent ports')
     expect(recentLabels).toEqual([
-      '$(plug) /dev/p2',
-      '$(plug) /dev/p3',
-      '$(plug) /dev/p4',
+      '$(plug-not-connected-icon) /dev/p2',
+      '$(plug-not-connected-icon) /dev/p3',
+      '$(plug-not-connected-icon) /dev/p4',
     ])
   })
 
@@ -172,6 +183,70 @@ describe('toPortItems (history + detection alignment)', () => {
 })
 
 describe('pickPort (live detected ports refresh)', () => {
+  it('updates a port item when runtime state changes', async () => {
+    const { InmemoryRecentPortQNames, pickPort } = await loadPortsModule()
+
+    const fakeQuickPick = new FakeQuickPick()
+    Object.defineProperty(vscode, 'window', {
+      configurable: true,
+      writable: true,
+      value: { createQuickPick: () => fakeQuickPick },
+    })
+
+    const portKey = createPortKey({
+      protocol: 'serial',
+      address: '/dev/tty.stateful',
+    })
+    const recent = new InmemoryRecentPortQNames()
+    await recent.add(portKey)
+    const pinned = new InmemoryRecentPortQNames()
+    const onDidChangeDetectedPorts = new vscode.EventEmitter<void>()
+    const onDidChangePortStates = new vscode.EventEmitter<void>()
+    let currentState: 'disconnected' | 'in-progress' = 'disconnected'
+
+    try {
+      const pickPromise = pickPort(
+        () => ({}) as DetectedPorts,
+        onDidChangeDetectedPorts.event,
+        pinned,
+        recent,
+        {
+          resolvePortState: () => currentState,
+          onDidChangePortStates: [onDidChangePortStates.event],
+        }
+      )
+
+      await waitFor(
+        () =>
+          findByLabel(
+            fakeQuickPick.items,
+            '$(plug-not-connected-icon) /dev/tty.stateful'
+          ) !== undefined
+      )
+
+      currentState = 'in-progress'
+      onDidChangePortStates.fire()
+
+      await waitFor(
+        () =>
+          findByLabel(
+            fakeQuickPick.items,
+            '$(plug-in-progress-icon) /dev/tty.stateful'
+          ) !== undefined
+      )
+
+      fakeQuickPick.hide()
+      await pickPromise
+    } finally {
+      recent.dispose()
+      pinned.dispose()
+      onDidChangeDetectedPorts.dispose()
+      onDidChangePortStates.dispose()
+      // @ts-ignore
+      delete vscode.window
+    }
+  })
+
   it('updates recent port item from unresolved to resolved when detection appears', async () => {
     const { InmemoryRecentPortQNames, pickPort } = await loadPortsModule()
 
@@ -202,8 +277,10 @@ describe('pickPort (live detected ports refresh)', () => {
 
       await waitFor(
         () =>
-          findByLabel(fakeQuickPick.items, '$(plug) /dev/tty.usbmodem14101')
-            ?.description === 'not detected'
+          findByLabel(
+            fakeQuickPick.items,
+            '$(plug-not-connected-icon) /dev/tty.usbmodem14101'
+          )?.description === 'not detected'
       )
 
       const detectedPort: DetectedPort = {
@@ -222,8 +299,10 @@ describe('pickPort (live detected ports refresh)', () => {
 
       await waitFor(
         () =>
-          findByLabel(fakeQuickPick.items, '$(plug) tty.usbmodem14101')
-            ?.description === 'Arduino Nano'
+          findByLabel(
+            fakeQuickPick.items,
+            '$(plug-success-icon) tty.usbmodem14101'
+          )?.description === 'Arduino Nano'
       )
 
       fakeQuickPick.hide()

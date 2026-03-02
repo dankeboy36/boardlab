@@ -42,7 +42,13 @@ interface PortQuickPickItem extends vscode.QuickPickItem {
 }
 
 export interface PortPickOptions
-  extends QuickPickConstraints<PortPickCandidate> {}
+  extends QuickPickConstraints<PortPickCandidate> {
+  readonly onDidChangePortStates?: readonly vscode.Event<unknown>[]
+  readonly resolvePortState?: (
+    port: Port,
+    detectedPort?: DetectedPort
+  ) => PortIconState
+}
 
 async function isPortAllowed(
   detectedPort: DetectedPort,
@@ -144,7 +150,9 @@ export async function pickPort(
         }),
         pinnedPorts.onDidUpdate(updateItems),
         recentPorts.onDidUpdate(updateItems),
-        onDidChangeDetectedPorts(updateItems)
+        onDidChangeDetectedPorts(updateItems),
+        ...(options.onDidChangePortStates?.map((event) => event(updateItems)) ??
+          [])
       )
     })
     return selected
@@ -225,11 +233,33 @@ async function toHistoryEntries(
   return entries
 }
 
-function toHistoryQuickPickItem(entry: PortHistoryEntry): PortQuickPickItem {
+function resolvePortItemState(
+  port: Port,
+  detectedPort: DetectedPort | undefined,
+  options: PortPickOptions
+): PortIconState {
+  return (
+    options.resolvePortState?.(port, detectedPort) ??
+    (detectedPort ? 'ok' : 'disconnected')
+  )
+}
+
+function toHistoryQuickPickItem(
+  entry: PortHistoryEntry,
+  options: PortPickOptions
+): PortQuickPickItem {
   if (entry.detectedPort) {
-    return new DetectedPortQuickItem(entry.detectedPort, false)
+    return new DetectedPortQuickItem(
+      entry.detectedPort,
+      false,
+      resolvePortItemState(entry.detectedPort.port, entry.detectedPort, options)
+    )
   }
-  return new PortQNameQuickItem(entry.portKey, entry.port)
+  return new PortQNameQuickItem(
+    entry.portKey,
+    entry.port,
+    resolvePortItemState(entry.port, undefined, options)
+  )
 }
 
 export async function toPortItems(
@@ -272,7 +302,7 @@ export async function toPortItems(
       label: 'pinned ports',
     })
     for (const entry of pinned) {
-      const item = toHistoryQuickPickItem(entry)
+      const item = toHistoryQuickPickItem(entry, options)
       setPortButtons(item, pinnedPortQNames, recentPortQNames)
       quickItems.push(item)
     }
@@ -284,7 +314,7 @@ export async function toPortItems(
       label: 'recent ports',
     })
     for (const entry of recent) {
-      const item = toHistoryQuickPickItem(entry)
+      const item = toHistoryQuickPickItem(entry, options)
       setPortButtons(item, pinnedPortQNames, recentPortQNames)
       quickItems.push(item)
     }
@@ -302,7 +332,11 @@ export async function toPortItems(
     quickItems.push(
       { kind: vscode.QuickPickItemKind.Separator, label: `${protocol} ports` },
       ...visiblePorts.map((detectedPort) => {
-        const item = new DetectedPortQuickItem(detectedPort, false)
+        const item = new DetectedPortQuickItem(
+          detectedPort,
+          false,
+          resolvePortItemState(detectedPort.port, detectedPort, options)
+        )
         setPortButtons(item, pinnedPortQNames, recentPortQNames)
         return item
       })
@@ -328,11 +362,12 @@ class DetectedPortQuickItem implements PortQuickPickItem {
 
   constructor(
     readonly detectedPort: DetectedPort,
-    selected: boolean
+    selected: boolean,
+    state: PortIconState
   ) {
     this.port = detectedPort.port
     this.portKey = createPortKey(detectedPort.port)
-    this.label = portQuickItemLabel(detectedPort.port, selected)
+    this.label = portQuickItemLabel(detectedPort.port, selected, state)
     const boards = detectedPort.boards
     if (!boards || !boards?.length) {
       // for unrecognized boards, such as ESP32 Wroom
@@ -366,9 +401,10 @@ class PortQNameQuickItem implements PortQuickPickItem {
 
   constructor(
     readonly portKey: PortQName,
-    readonly port: Port
+    readonly port: Port,
+    state: PortIconState
   ) {
-    this.label = portQuickItemLabel(port, false)
+    this.label = portQuickItemLabel(port, false, state)
     this.description = 'not detected'
   }
 }
@@ -403,6 +439,29 @@ export function resolvePort(
     }
   }
   return undefined
+}
+
+export type PortIconState = 'ok' | 'disconnected' | 'in-progress' | 'blocked'
+
+export function portStateIcon(state: PortIconState, escape = true): string {
+  let iconName: string
+  switch (state) {
+    case 'ok':
+      iconName = 'plug-success-icon'
+      break
+    case 'disconnected':
+      iconName = 'plug-not-connected-icon'
+      break
+    case 'in-progress':
+      iconName = 'plug-in-progress-icon'
+      break
+    case 'blocked':
+      iconName = 'plug-in-progress-blocked-icon'
+      break
+    default:
+      iconName = 'plug'
+  }
+  return escape ? `$(${iconName})` : iconName
 }
 
 export function portProtocolIcon(
