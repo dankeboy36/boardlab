@@ -71,6 +71,7 @@ import {
   MonitorManager,
   type MonitorRuntimeState,
 } from './monitor/monitorManager'
+import { getOfflinePackageIndexUrl } from './offlineBoardsCatalog'
 import { PlatformInfo, getPlatformRequirement } from './platformMissing'
 import {
   collectHistoryUpdates,
@@ -90,12 +91,12 @@ import {
   sketchPathEquals,
 } from './sketch/sketchbooks'
 import { SketchPickOptions, pickSketch } from './sketch/sketches'
+import { Sketch, isSketch } from './sketch/types'
 import {
   getTaskStatus,
   onDidChangeTaskStates,
   type TaskKind,
 } from './taskTracker'
-import { isSketch, Sketch } from './sketch/types'
 import { BaseRecentItems, RecentItems, disposeAll, mementoKey } from './utils'
 
 class MementoRecentItems<T> extends BaseRecentItems<T> {
@@ -422,6 +423,8 @@ export class BoardLabContextImpl implements BoardLabContext {
   private _currentSketchIndex = -1
   private _client?: Promise<Client>
   private _currentCliConfig?: TrackedCliConfig
+  private latestCliConfigChangeTask: Promise<void> = Promise.resolve()
+  private pendingCliConfigChange: Promise<void> = Promise.resolve()
 
   // Active profiles per profiles document URI (sketch.yaml)
   private readonly activeProfilesByUri: Map<string, string>
@@ -491,7 +494,7 @@ export class BoardLabContextImpl implements BoardLabContext {
 
         // No package/libraries index update, etc. when the previous state was undefined (first load)
         if (current && internalChangedProperties.length && previous) {
-          this.handleCliConfigChange({
+          this.enqueueCliConfigChange({
             object: current,
             changedProperties: internalChangedProperties,
           })
@@ -781,6 +784,17 @@ export class BoardLabContextImpl implements BoardLabContext {
     // await this.persistDaemonState() // XXX: no need to write it to the disk, the user changes the file directly
     // TODO: this will be required if the file is changed with a graphical editor
     reportOneUnitOfWork?.()
+  }
+
+  private enqueueCliConfigChange(event: ChangeEvent<TrackedCliConfig>): void {
+    const task = this.pendingCliConfigChange.then(
+      () => this.handleCliConfigChange(event),
+      () => this.handleCliConfigChange(event)
+    )
+    this.latestCliConfigChangeTask = task
+    this.pendingCliConfigChange = task.catch((error) => {
+      console.error('Failed to apply Arduino CLI configuration change', error)
+    })
   }
 
   private async updateDaemonState(
@@ -1185,7 +1199,10 @@ export class BoardLabContextImpl implements BoardLabContext {
     this._currentSketchIndex = index
     this.updateCurrentSketchContexts(this.currentSketch)
     this._onDidChangeCurrentSketch.fire(this.currentSketch)
-    await this.workspaceState.update(LAST_CURRENT_SKETCH_WORKSPACE_KEY, sketchPath)
+    await this.workspaceState.update(
+      LAST_CURRENT_SKETCH_WORKSPACE_KEY,
+      sketchPath
+    )
     return true
   }
 
@@ -1195,7 +1212,7 @@ export class BoardLabContextImpl implements BoardLabContext {
     const sketchPath = sketch?.sketchPath ?? ''
     const fqbn =
       sketch && isBoardDetails(sketch.board)
-        ? sketch.configOptions ?? sketch.board.fqbn
+        ? (sketch.configOptions ?? sketch.board.fqbn)
         : ''
     const port =
       sketch?.port?.protocol && sketch.port.address
@@ -1204,7 +1221,11 @@ export class BoardLabContextImpl implements BoardLabContext {
             address: sketch.port.address,
           })
         : ''
-    vscode.commands.executeCommand('setContext', 'currentSketchPath', sketchPath)
+    vscode.commands.executeCommand(
+      'setContext',
+      'currentSketchPath',
+      sketchPath
+    )
     vscode.commands.executeCommand('setContext', 'currentSketchFqbn', fqbn)
     vscode.commands.executeCommand('setContext', 'currentSketchPort', port)
   }
@@ -1602,14 +1623,19 @@ export class BoardLabContextImpl implements BoardLabContext {
           'Install',
           'Skip'
         )
-        .then(async (answer) => {
+        .then((answer) => {
           if (answer === 'Install') {
-            await this.platformsManager.install({
+            this.installPlatformRequirementForBoard(board, {
               id,
               name,
               version,
+            }).catch((error) => {
+              const message =
+                error instanceof Error ? error.message : String(error)
+              vscode.window.showErrorMessage(
+                `Failed to install platform '${id}': ${message}`
+              )
             })
-            // TODO: reselect board with FQBN!
           }
         })
     }
@@ -1627,6 +1653,45 @@ export class BoardLabContextImpl implements BoardLabContext {
     )
 
     return picked
+  }
+
+  async installPlatformRequirementForBoard(
+    board: BoardIdentifier | ApiBoardDetails,
+    platformRequirement: Required<PlatformInfo>
+  ): Promise<void> {
+    await this.ensureOfflineBoardPackageIndexConfigured(board)
+    await this.platformsManager.install({
+      id: platformRequirement.id,
+      name: platformRequirement.name,
+      version: platformRequirement.version,
+    })
+  }
+
+  private async ensureOfflineBoardPackageIndexConfigured(
+    board: BoardIdentifier | ApiBoardDetails
+  ): Promise<void> {
+    const url = getOfflinePackageIndexUrl(board as BoardIdentifier)
+    if (!url) {
+      return
+    }
+
+    await this.cliContext.cliConfig.ready()
+    if (this.cliContext.cliConfig.data?.additionalUrls?.includes(url)) {
+      return
+    }
+
+    const previousCliConfigTask = this.latestCliConfigChangeTask
+    const added = await this.cliContext.cliConfig.addAdditionalPackageIndexUrl({
+      url,
+    })
+    if (!added) {
+      return
+    }
+
+    await this.cliContext.cliConfig.refresh({ allowPrompt: false })
+    if (this.latestCliConfigChangeTask !== previousCliConfigTask) {
+      await this.latestCliConfigChangeTask
+    }
   }
 
   async applyBoardSettingsFromFqbn(

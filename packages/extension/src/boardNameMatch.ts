@@ -22,6 +22,13 @@ export function compactBoardName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '')
 }
 
+function isDeprecatedCandidate(candidate: BoardListItem): boolean {
+  return (
+    candidate.platform?.metadata?.deprecated === true ||
+    candidate.platform?.release?.deprecated === true
+  )
+}
+
 export function matchBoardByName(
   targetName: string,
   candidates: BoardListItem[],
@@ -39,24 +46,45 @@ export function matchBoardByName(
       )
     : candidates
 
+  let exactMatch: BoardNameMatch | undefined
+  let normalizedMatch: BoardNameMatch | undefined
+
   for (const candidate of filtered) {
     const candidateName = candidate.name || ''
     const normalizedCandidate = normalizeBoardName(candidateName)
     if (!normalizedCandidate) {
       continue
     }
+    const deprecated = isDeprecatedCandidate(candidate)
     if (normalizedCandidate === normalizedTarget) {
-      return { board: candidate, kind: 'exact', score: 1 }
+      if (!exactMatch || (!deprecated && exactMatch.score === 0)) {
+        exactMatch = {
+          board: candidate,
+          kind: 'exact',
+          score: deprecated ? 0 : 1,
+        }
+      }
+      continue
     }
 
     const compactCandidate = compactBoardName(candidateName)
     if (compactCandidate && compactCandidate === compactTarget) {
-      return {
-        board: candidate,
-        kind: 'normalized',
-        score: 0.95,
+      if (!normalizedMatch || (!deprecated && normalizedMatch.score === 0)) {
+        normalizedMatch = {
+          board: candidate,
+          kind: 'normalized',
+          score: deprecated ? 0 : 0.95,
+        }
       }
+      continue
     }
+  }
+
+  if (exactMatch) {
+    return exactMatch
+  }
+  if (normalizedMatch) {
+    return normalizedMatch
   }
 
   if (!filtered.length) {
@@ -74,18 +102,24 @@ export function matchBoardByName(
     return undefined
   }
 
-  const best = results[0]
-  const bestScore = best.score ?? 1
-  const normalizedScore = Math.max(0, 1 - bestScore)
-  if (normalizedScore < minScore) {
-    return undefined
+  for (const best of results) {
+    const bestScore = best.score ?? 1
+    let normalizedScore = Math.max(0, 1 - bestScore)
+    if (isDeprecatedCandidate(best.item)) {
+      normalizedScore = 0
+    }
+    if (normalizedScore < minScore) {
+      continue
+    }
+
+    return {
+      board: best.item,
+      kind: 'fuzzy',
+      score: normalizedScore,
+    }
   }
 
-  return {
-    board: best.item,
-    kind: 'fuzzy',
-    score: normalizedScore,
-  }
+  return undefined
 }
 
 export function findBoardHistoryMatches(

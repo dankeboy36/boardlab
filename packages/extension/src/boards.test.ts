@@ -139,6 +139,19 @@ async function waitFor(
 }
 
 describe('toBoardQuickPickItems (history + search interaction)', () => {
+  it('shows no entries when no search is active', async () => {
+    const { toBoardQuickPickItems } = await loadBoardsModule()
+
+    const items = await toBoardQuickPickItems(
+      createBoardsList([]),
+      undefined,
+      [],
+      []
+    )
+
+    expect(items).toEqual([])
+  })
+
   it('does not show history boards that are not in search results', async () => {
     const { toBoardQuickPickItems } = await loadBoardsModule()
 
@@ -196,7 +209,51 @@ describe('toBoardQuickPickItems (history + search interaction)', () => {
 
     const labels = labelsOf(items)
     expect(labels).not.toContain('attached boards')
-    expect(labels).toContain('No matching results')
+    expect(items).toEqual([])
+  })
+
+  it('shows offline-catalog and add-url actions when a search has no matches', async () => {
+    const { toBoardQuickPickItems } = await loadBoardsModule()
+
+    const items = await toBoardQuickPickItems(
+      createBoardsList([]),
+      [],
+      [],
+      [],
+      {
+        searchValue: 'wroom',
+        canIncludeOfflineCatalog: true,
+        canAddPackageIndexUrlAction: true,
+      }
+    )
+
+    expect(labelsOf(items)).toEqual([
+      'No matching boards for "wroom"',
+      'Include offline 3rd-party board catalog',
+      'Add 3rd-party package index URL',
+    ])
+  })
+
+  it('only shows add-url action when offline catalog is already enabled', async () => {
+    const { toBoardQuickPickItems } = await loadBoardsModule()
+
+    const items = await toBoardQuickPickItems(
+      createBoardsList([]),
+      [],
+      [],
+      [],
+      {
+        searchValue: 'wroom',
+        offlineCatalogEnabled: true,
+        canIncludeOfflineCatalog: true,
+        canAddPackageIndexUrlAction: true,
+      }
+    )
+
+    expect(labelsOf(items)).toEqual([
+      'No matching boards for "wroom"',
+      'Add 3rd-party package index URL',
+    ])
   })
 
   it('shows recent board with port when the board is currently identified', async () => {
@@ -257,7 +314,278 @@ describe('toBoardQuickPickItems (history + search interaction)', () => {
   })
 })
 
+describe('getBoardPickerPlaceholder', () => {
+  it('indicates when the offline catalog is enabled', async () => {
+    const { getBoardPickerPlaceholder } = await loadBoardsModule()
+
+    expect(getBoardPickerPlaceholder(false)).toBe(
+      "Filter boards by name or FQBN. For example, 'Arduino UNO' or 'avr:uno'"
+    )
+    expect(getBoardPickerPlaceholder(true)).toBe(
+      "Filter boards by name or FQBN. For example, 'Arduino UNO' or 'avr:uno' (offline 3rd-party catalog enabled)"
+    )
+  })
+})
+
+describe('searchBoardsForPicker', () => {
+  it('does not merge offline catalog matches unless explicitly enabled', async () => {
+    const { searchBoardsForPicker } = await loadBoardsModule()
+    const { normalizeOfflineBoardCatalog } = await import(
+      './offlineBoardsCatalog'
+    )
+
+    const offlineCatalog = normalizeOfflineBoardCatalog({
+      items: [
+        {
+          normalizedUrl: 'https://vendor.example/package_vendor_index.json',
+          validationStatus: 'accepted',
+        },
+      ],
+      catalog: {
+        platforms: [
+          {
+            url: 'https://vendor.example/package_vendor_index.json',
+            platformId: 'vendor:esp32',
+            name: 'Vendor ESP32 Boards',
+            version: '1.0.0',
+          },
+        ],
+        boards: [
+          {
+            name: 'Wroom DevKit',
+            url: 'https://vendor.example/package_vendor_index.json',
+            platformId: 'vendor:esp32',
+          },
+        ],
+      },
+    })
+
+    const arduino = {
+      searchBoard: async () => [
+        createBoardListItem(
+          createBoardIdentifier('Arduino Uno', 'arduino:avr:uno')
+        ),
+      ],
+    }
+
+    const results = await searchBoardsForPicker(
+      arduino as unknown as Arduino,
+      'wroom',
+      undefined,
+      { offlineCatalog }
+    )
+
+    expect(results.map((board) => `${board.name}:${board.fqbn}`)).toEqual([
+      'Arduino Uno:arduino:avr:uno',
+    ])
+  })
+
+  it('merges live board search results with offline catalog matches', async () => {
+    const { searchBoardsForPicker } = await loadBoardsModule()
+    const { normalizeOfflineBoardCatalog } = await import(
+      './offlineBoardsCatalog'
+    )
+
+    const offlineCatalog = normalizeOfflineBoardCatalog({
+      items: [
+        {
+          normalizedUrl: 'https://vendor.example/package_vendor_index.json',
+          validationStatus: 'accepted',
+        },
+      ],
+      catalog: {
+        platforms: [
+          {
+            url: 'https://vendor.example/package_vendor_index.json',
+            platformId: 'vendor:esp32',
+            name: 'Vendor ESP32 Boards',
+            version: '1.0.0',
+          },
+        ],
+        boards: [
+          {
+            name: 'Wroom DevKit',
+            url: 'https://vendor.example/package_vendor_index.json',
+            platformId: 'vendor:esp32',
+          },
+        ],
+      },
+    })
+
+    const arduino = {
+      searchBoard: async () => [
+        createBoardListItem(
+          createBoardIdentifier('Arduino Uno', 'arduino:avr:uno')
+        ),
+      ],
+    }
+
+    const results = await searchBoardsForPicker(
+      arduino as unknown as Arduino,
+      'wroom',
+      undefined,
+      {
+        offlineCatalog,
+        includeOfflineCatalog: true,
+      }
+    )
+
+    expect(results.map((board) => `${board.name}:${board.fqbn}`)).toEqual([
+      'Arduino Uno:arduino:avr:uno',
+      'Wroom DevKit:',
+    ])
+  })
+})
+
 describe('pickBoard (live detected ports refresh)', () => {
+  it('enables the offline catalog from the no-match action', async () => {
+    const { pickBoard } = await loadBoardsModule()
+
+    const fakeQuickPick = new FakeQuickPick()
+    Object.defineProperty(vscode, 'window', {
+      configurable: true,
+      writable: true,
+      value: { createQuickPick: () => fakeQuickPick },
+    })
+    Object.defineProperty(vscode, 'commands', {
+      configurable: true,
+      writable: true,
+      value: {
+        executeCommand: async () => undefined,
+      },
+    })
+
+    const onDidChangeDetectedPorts = new vscode.EventEmitter<void>()
+    const arduino = {
+      searchBoard: async () => [],
+    }
+
+    try {
+      const pickPromise = pickBoard(
+        arduino as unknown as Arduino,
+        undefined,
+        () => ({}),
+        onDidChangeDetectedPorts.event,
+        undefined,
+        undefined,
+        {
+          offlineCatalog: {
+            platforms: new Map(),
+            boards: [],
+          },
+        }
+      )
+
+      fakeQuickPick.onDidChangeValueEmitter.fire('zzzzzz-no-match')
+
+      await waitFor(
+        () =>
+          !!findByLabel(
+            fakeQuickPick.items,
+            'Include offline 3rd-party board catalog'
+          )
+      )
+
+      const item = findByLabel(
+        fakeQuickPick.items,
+        'Include offline 3rd-party board catalog'
+      )
+      fakeQuickPick.onDidChangeSelectionEmitter.fire([item])
+
+      await waitFor(() =>
+        fakeQuickPick.placeholder.includes('offline 3rd-party catalog enabled')
+      )
+      await waitFor(
+        () =>
+          !findByLabel(
+            fakeQuickPick.items,
+            'Include offline 3rd-party board catalog'
+          )
+      )
+      expect(
+        findByLabel(fakeQuickPick.items, 'Add 3rd-party package index URL')
+      ).toBeTruthy()
+
+      fakeQuickPick.hide()
+      await pickPromise
+    } finally {
+      onDidChangeDetectedPorts.dispose()
+      // @ts-ignore
+      delete vscode.window
+      // @ts-ignore
+      delete vscode.commands
+    }
+  })
+
+  it('runs the add-url command from the no-match action', async () => {
+    const { pickBoard } = await loadBoardsModule()
+
+    const fakeQuickPick = new FakeQuickPick()
+    const executedCommands: string[] = []
+    Object.defineProperty(vscode, 'window', {
+      configurable: true,
+      writable: true,
+      value: { createQuickPick: () => fakeQuickPick },
+    })
+    Object.defineProperty(vscode, 'commands', {
+      configurable: true,
+      writable: true,
+      value: {
+        executeCommand: async (command: string) => {
+          executedCommands.push(command)
+          return undefined
+        },
+      },
+    })
+
+    const onDidChangeDetectedPorts = new vscode.EventEmitter<void>()
+    const arduino = {
+      searchBoard: async () => [],
+    }
+
+    try {
+      const pickPromise = pickBoard(
+        arduino as unknown as Arduino,
+        undefined,
+        () => ({}),
+        onDidChangeDetectedPorts.event,
+        undefined,
+        undefined,
+        {
+          offlineCatalog: {
+            platforms: new Map(),
+            boards: [],
+          },
+        }
+      )
+
+      fakeQuickPick.onDidChangeValueEmitter.fire('zzzzzz-no-match')
+
+      await waitFor(
+        () =>
+          !!findByLabel(fakeQuickPick.items, 'Add 3rd-party package index URL')
+      )
+
+      const item = findByLabel(
+        fakeQuickPick.items,
+        'Add 3rd-party package index URL'
+      )
+      fakeQuickPick.onDidChangeSelectionEmitter.fire([item])
+
+      await pickPromise
+
+      expect(executedCommands).toContain(
+        'boardlab.addAdditionalPackageIndexUrlToArduinoCliConfig'
+      )
+    } finally {
+      onDidChangeDetectedPorts.dispose()
+      // @ts-ignore
+      delete vscode.window
+      // @ts-ignore
+      delete vscode.commands
+    }
+  })
+
   it('updates recent board item when detected ports change while picker is open', async () => {
     const { InmemoryRecentBoards, pickBoard } = await loadBoardsModule()
 

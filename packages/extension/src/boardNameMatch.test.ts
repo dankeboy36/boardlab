@@ -10,15 +10,34 @@ import {
 function createBoard(
   name: string,
   fqbn: string,
-  platformId = 'arduino:mbed_giga'
+  platformId = 'arduino:mbed_giga',
+  platform?:
+    | string
+    | {
+        name?: string
+        metadataDeprecated?: boolean
+        releaseDeprecated?: boolean
+      }
 ): BoardListItem {
+  const options =
+    typeof platform === 'string' ? { name: platform } : platform || {}
+
   return {
     name,
     fqbn,
     isHidden: false,
     platform: {
-      metadata: { id: platformId } as any,
-      release: undefined,
+      metadata: {
+        id: platformId,
+        deprecated: options.metadataDeprecated === true,
+      } as any,
+      release:
+        options.name || options.releaseDeprecated === true
+          ? ({
+              name: options.name,
+              deprecated: options.releaseDeprecated === true,
+            } as any)
+          : undefined,
     },
   }
 }
@@ -58,6 +77,74 @@ describe('matchBoardByName', () => {
 
     expect(match?.kind).toBe('fuzzy')
     expect(match?.board.name).toBe('Arduino Giga R1 WiFi')
+  })
+
+  it('prefers a non-deprecated exact match over a deprecated one', () => {
+    const boards = [
+      createBoard('Arduino Giga', 'vendor:arch:deprecated', 'vendor:arch', {
+        name: 'Vendor Boards',
+        releaseDeprecated: true,
+      }),
+      createBoard('Arduino Giga', 'arduino:mbed_giga:giga'),
+    ]
+
+    const match = matchBoardByName('Arduino Giga', boards)
+
+    expect(match?.kind).toBe('exact')
+    expect(match?.score).toBe(1)
+    expect(match?.board.fqbn).toBe('arduino:mbed_giga:giga')
+  })
+
+  it('returns score 0 for deprecated exact matches', () => {
+    const boards = [
+      createBoard('Arduino Legacy', 'vendor:arch:legacy', 'vendor:arch', {
+        name: 'Vendor Boards',
+        releaseDeprecated: true,
+      }),
+    ]
+
+    const match = matchBoardByName('Arduino Legacy', boards)
+
+    expect(match?.kind).toBe('exact')
+    expect(match?.score).toBe(0)
+  })
+
+  it('returns score 0 for explicitly deprecated platform metadata', () => {
+    const boards = [
+      createBoard('Arduino Legacy', 'vendor:arch:legacy', 'vendor:arch', {
+        name: 'Vendor Boards',
+        metadataDeprecated: true,
+      }),
+    ]
+
+    const match = matchBoardByName('Arduino Legacy', boards)
+
+    expect(match?.kind).toBe('exact')
+    expect(match?.score).toBe(0)
+  })
+
+  it('returns score 0 for explicitly deprecated platform releases', () => {
+    const match = matchBoardByName('Arduino Legacy', [
+      createBoard('Arduino Legacy', 'vendor:arch:legacy', 'vendor:arch', {
+        name: 'Vendor Boards',
+        releaseDeprecated: true,
+      }),
+    ])
+
+    expect(match?.score).toBe(0)
+  })
+
+  it('does not return deprecated fuzzy matches', () => {
+    const boards = [
+      createBoard('Arduino Legacy WiFi', 'vendor:arch:legacy', 'vendor:arch', {
+        name: 'Vendor Boards',
+        releaseDeprecated: true,
+      }),
+    ]
+
+    const match = matchBoardByName('Arduino Legacy', boards)
+
+    expect(match).toBeUndefined()
   })
 })
 

@@ -76,13 +76,17 @@ function derivedBoardLabelFromDetectedPorts(
   fqbn: string | undefined,
   selectedPort: { protocol: string; address: string } | undefined
 ): string | undefined {
-  const detectedPorts = Object.values(boardlabContext.boardsListWatcher.detectedPorts)
+  const detectedPorts = Object.values(
+    boardlabContext.boardsListWatcher.detectedPorts
+  )
   if (!detectedPorts.length) {
     return undefined
   }
   if (selectedPort) {
     const exactMatch =
-      boardlabContext.boardsListWatcher.detectedPorts[createPortKey(selectedPort)]
+      boardlabContext.boardsListWatcher.detectedPorts[
+        createPortKey(selectedPort)
+      ]
     const exactLabel = boardNameFromDetectedBoards(exactMatch?.boards, fqbn)
     if (exactLabel) {
       return exactLabel
@@ -93,7 +97,10 @@ function derivedBoardLabelFromDetectedPorts(
       const addressMatch = detectedPorts.find(
         ({ port }) => normalizePortAddress(port?.address) === selectedAddress
       )
-      const addressLabel = boardNameFromDetectedBoards(addressMatch?.boards, fqbn)
+      const addressLabel = boardNameFromDetectedBoards(
+        addressMatch?.boards,
+        fqbn
+      )
       if (addressLabel) {
         return addressLabel
       }
@@ -101,7 +108,9 @@ function derivedBoardLabelFromDetectedPorts(
   }
 
   const labels = detectedPorts
-    .map((detectedPort) => boardNameFromDetectedBoards(detectedPort.boards, fqbn))
+    .map((detectedPort) =>
+      boardNameFromDetectedBoards(detectedPort.boards, fqbn)
+    )
     .filter((label): label is string => Boolean(label))
   return labels.length === 1 ? labels[0] : undefined
 }
@@ -116,7 +125,8 @@ function boardLabel(
   }
   const name = (board as { name?: unknown }).name
   const fqbn = (board as { fqbn?: unknown }).fqbn
-  const trimmedName = typeof name === 'string' && name.trim() ? name.trim() : undefined
+  const trimmedName =
+    typeof name === 'string' && name.trim() ? name.trim() : undefined
   const trimmedFqbn =
     typeof fqbn === 'string' && fqbn.trim() ? fqbn.trim() : undefined
   if (trimmedName && (!trimmedFqbn || trimmedName !== trimmedFqbn)) {
@@ -271,6 +281,7 @@ export class OnboardingStatusBarController implements vscode.Disposable {
     string,
     Pick<StatusBarModelItem, 'alignment' | 'priority'>
   >()
+
   private readonly statusBarIdPrefix = 'boardlab.onboardingStatusBar'
   private updateToken = 0
 
@@ -307,7 +318,7 @@ export class OnboardingStatusBarController implements vscode.Disposable {
 
   private refresh(): void {
     const token = ++this.updateToken
-    void this.refreshInternal(token).catch((error) =>
+    this.refreshInternal(token).catch((error) =>
       console.warn('Failed to refresh onboarding status bar', error)
     )
   }
@@ -344,7 +355,11 @@ export class OnboardingStatusBarController implements vscode.Disposable {
         ? basename(currentSketch.sketchPath)
         : undefined,
       openedSketchesCount: workspaceOpenedSketchesCount(boardlabContext),
-      boardLabel: boardLabel(boardlabContext, currentSketch?.board, selectedPort),
+      boardLabel: boardLabel(
+        boardlabContext,
+        currentSketch?.board,
+        selectedPort
+      ),
       boardFqbn: boardFqbn(currentSketch?.board),
       portAddress: selectedPort?.address,
       portDetected,

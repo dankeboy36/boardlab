@@ -29,6 +29,12 @@ import {
 } from 'vscode-arduino-api'
 
 import { Arduino } from './cli/arduino'
+import {
+  type OfflineBoardCatalog,
+  loadBundledOfflineBoardCatalog,
+  mergeBoardSearchResults,
+  searchOfflineBoardCatalog,
+} from './offlineBoardsCatalog'
 import { portStateIcon, type PortIconState } from './ports'
 import {
   matchesQuickPickConstraints,
@@ -63,7 +69,20 @@ export interface BoardPickCandidate {
 }
 
 export interface BoardPickOptions
-  extends QuickPickConstraints<BoardPickCandidate> {}
+  extends QuickPickConstraints<BoardPickCandidate> {
+  readonly allowOfflineCatalog?: boolean
+  readonly initialOfflineCatalogEnabled?: boolean
+  readonly offlineCatalog?: OfflineBoardCatalog
+}
+
+interface BoardQuickPickDisplayOptions extends BoardPickOptions {
+  readonly searchValue?: string
+  readonly offlineCatalogEnabled?: boolean
+  readonly canIncludeOfflineCatalog?: boolean
+  readonly canAddPackageIndexUrlAction?: boolean
+}
+
+type BoardQuickPickAction = 'enable-offline-catalog' | 'add-package-index-url'
 
 function toBoardPickCandidate(selection: PickBoardResult): BoardPickCandidate {
   if (isBoardIdentifier(selection)) {
@@ -122,6 +141,12 @@ export function isApiBoardListItem(
   return 'platform' in board && isPlatform(board.platform)
 }
 
+export function getBoardPickerPlaceholder(
+  offlineCatalogEnabled = false
+): string {
+  return `Filter boards by name or FQBN. For example, 'Arduino UNO' or 'avr:uno'${offlineCatalogEnabled ? ' (offline 3rd-party catalog enabled)' : ''}`
+}
+
 export async function pickBoard(
   arduino: Arduino,
   boardsConfig: BoardsConfig | undefined,
@@ -133,12 +158,14 @@ export async function pickBoard(
 ): Promise<PickBoardResult | undefined> {
   const toDispose: vscode.Disposable[] = []
   const input = vscode.window.createQuickPick()
+  let searchValue = ''
+  let offlineCatalogEnabled = options.initialOfflineCatalogEnabled === true
 
   // https://github.com/microsoft/vscode/issues/73904#issuecomment-680298036
   ;(input as any).sortByLabel = false
   // https://github.com/microsoft/vscode/issues/83425
   ;(input as any).matchOnLabel = false
-  input.placeholder = 'Filter boards by name or FQBN'
+  input.placeholder = getBoardPickerPlaceholder(offlineCatalogEnabled)
   input.busy = true
   // input.ignoreFocusOut = true // TODO:  (debug only)
   input.show()
@@ -148,12 +175,21 @@ export async function pickBoard(
         const cancel = new AbortController()
         let updateToken = 0
         let searchResultBoards: BoardListItem[] | undefined
-        const search = async (searchArgs = '') => {
+        const search = async (nextSearchValue = '') => {
+          searchValue = nextSearchValue
           input.busy = true
           try {
-            searchResultBoards = !searchArgs
+            searchResultBoards = !searchValue
               ? undefined
-              : await arduino.searchBoard({ searchArgs }, cancel.signal)
+              : await searchBoardsForPicker(
+                  arduino,
+                  searchValue,
+                  cancel.signal,
+                  {
+                    includeOfflineCatalog: offlineCatalogEnabled,
+                    offlineCatalog: options.offlineCatalog,
+                  }
+                )
           } finally {
             updateItems()
           }
@@ -169,7 +205,14 @@ export async function pickBoard(
                 searchResultBoards?.slice(),
                 pinnedItems.items,
                 recentItems.items,
-                options
+                {
+                  ...options,
+                  searchValue,
+                  offlineCatalogEnabled,
+                  canIncludeOfflineCatalog:
+                    options.allowOfflineCatalog !== false,
+                  canAddPackageIndexUrlAction: true,
+                }
               )
               if (currentToken !== updateToken) {
                 return
@@ -192,6 +235,32 @@ export async function pickBoard(
           input.onDidChangeSelection((items) => {
             ;(async () => {
               const item = items[0]
+              if (item instanceof BoardPickerActionQuickPickItem) {
+                if (item.action === 'enable-offline-catalog') {
+                  if (!offlineCatalogEnabled) {
+                    offlineCatalogEnabled = true
+                    input.placeholder = getBoardPickerPlaceholder(
+                      offlineCatalogEnabled
+                    )
+                    await search(searchValue)
+                  }
+                  return
+                }
+
+                resolve(undefined)
+                input.hide()
+                try {
+                  await vscode.commands.executeCommand(
+                    'boardlab.addAdditionalPackageIndexUrlToArduinoCliConfig'
+                  )
+                } catch (error) {
+                  console.warn(
+                    'Failed to run add additional package index URL command',
+                    error
+                  )
+                }
+                return
+              }
               if (item instanceof QuickInputNoopLabel) {
                 return
               }
@@ -245,12 +314,34 @@ export async function pickBoard(
   }
 }
 
+export async function searchBoardsForPicker(
+  arduino: Arduino,
+  searchArgs: string,
+  signal?: AbortSignal,
+  options?: {
+    offlineCatalog?: OfflineBoardCatalog
+    includeOfflineCatalog?: boolean
+  }
+): Promise<BoardListItem[]> {
+  const liveBoards = await arduino.searchBoard({ searchArgs }, signal)
+  if (options?.includeOfflineCatalog !== true) {
+    return liveBoards
+  }
+  const offlineCatalog =
+    options?.offlineCatalog ?? loadBundledOfflineBoardCatalog()
+  if (!offlineCatalog) {
+    return liveBoards
+  }
+  const offlineBoards = searchOfflineBoardCatalog(offlineCatalog, searchArgs)
+  return mergeBoardSearchResults(liveBoards, offlineBoards)
+}
+
 export async function toBoardQuickPickItems(
   boardsList: BoardsList,
   searchResultBoards: BoardListItem[] | undefined,
   pinnedBoards: BoardIdentifier[],
   recentBoards: BoardIdentifier[],
-  options: BoardPickOptions = {}
+  options: BoardQuickPickDisplayOptions = {}
 ): Promise<vscode.QuickPickItem[]> {
   const quickItems: vscode.QuickPickItem[] = []
   const filteredSearchResultBoards = searchResultBoards
@@ -391,7 +482,7 @@ export async function toBoardQuickPickItems(
   }
 
   if (!quickItems.length) {
-    return [new QuickInputNoopLabel('No matching results')]
+    return createBoardEmptyStateItems(options)
   }
 
   // When multiple items have the same label (board name), add a description
@@ -439,6 +530,47 @@ export async function toBoardQuickPickItems(
   return quickItems
 }
 
+function createBoardEmptyStateItems(
+  options: Pick<
+    BoardQuickPickDisplayOptions,
+    | 'searchValue'
+    | 'offlineCatalogEnabled'
+    | 'canIncludeOfflineCatalog'
+    | 'canAddPackageIndexUrlAction'
+  >
+): vscode.QuickPickItem[] {
+  const searchValue = options.searchValue?.trim() || ''
+  if (!searchValue) {
+    return []
+  }
+
+  const items: vscode.QuickPickItem[] = [
+    new QuickInputNoopLabel(`No matching boards for "${searchValue}"`),
+  ]
+
+  if (!options.offlineCatalogEnabled && options.canIncludeOfflineCatalog) {
+    items.push(
+      new BoardPickerActionQuickPickItem(
+        'enable-offline-catalog',
+        'Include offline 3rd-party board catalog',
+        'Search the bundled offline board catalog too'
+      )
+    )
+  }
+
+  if (options.canAddPackageIndexUrlAction) {
+    items.push(
+      new BoardPickerActionQuickPickItem(
+        'add-package-index-url',
+        'Add 3rd-party package index URL',
+        'Add a package index URL to the Arduino CLI configuration'
+      )
+    )
+  }
+
+  return items
+}
+
 function setBoardButtons(
   item: BaseQuickPickItem<BoardIdentifier>,
   pinnedBoards: BoardIdentifier[],
@@ -469,6 +601,19 @@ class BaseQuickPickItem<T> implements vscode.QuickPickItem {
     public label: string,
     public data: T
   ) {}
+}
+
+class BoardPickerActionQuickPickItem extends BaseQuickPickItem<BoardQuickPickAction> {
+  description?: string
+
+  constructor(
+    readonly action: BoardQuickPickAction,
+    label: string,
+    description?: string
+  ) {
+    super(label, action)
+    this.description = description
+  }
 }
 
 class BoardQuickPickItem extends BaseQuickPickItem<BoardIdentifier> {

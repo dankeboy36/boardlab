@@ -117,11 +117,19 @@ export class PlatformMissingStatusBar implements vscode.Disposable {
     }
 
     if (selection.action === 'install' && requirement) {
-      await this.boardlabContext.platformsManager.install({
-        id: requirement.id,
-        name: requirement.name,
-        version: requirement.version,
-      })
+      const board = this.boardlabContext.currentSketch?.board
+      if (board) {
+        await this.boardlabContext.installPlatformRequirementForBoard(
+          board,
+          requirement
+        )
+      } else {
+        await this.boardlabContext.platformsManager.install({
+          id: requirement.id,
+          name: requirement.name,
+          version: requirement.version,
+        })
+      }
       return
     }
 

@@ -298,7 +298,15 @@ abstract class ResourcesManager<
     if (!viewId) {
       return run()
     }
-    return vscode.window.withProgress({ location: { viewId } }, run)
+    try {
+      return await vscode.window.withProgress({ location: { viewId } }, run)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (/No webview with type .+ is registered/i.test(message)) {
+        return run()
+      }
+      throw error
+    }
   }
 
   protected abstract doNotifyIndexUpdated(): void
@@ -418,7 +426,10 @@ export class LibrariesManager extends ResourcesManager {
           if (!installResource) {
             return
           }
-          const installVersion = resolveVersion(installResource, selectedVersion)
+          const installVersion = resolveVersion(
+            installResource,
+            selectedVersion
+          )
           if (!installVersion) {
             return
           }
@@ -827,7 +838,10 @@ export class PlatformsManager extends ResourcesManager<
             }
             return this.install(fallback)
           }
-          const installVersion = resolveVersion(installResource, selectedVersion)
+          const installVersion = resolveVersion(
+            installResource,
+            selectedVersion
+          )
           if (!installVersion) {
             return
           }
