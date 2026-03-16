@@ -28,6 +28,51 @@ function createLiveBoard(
 }
 
 describe('normalizeOfflineBoardCatalog', () => {
+  it('builds boards from platforms[].boards when no dedicated boards section exists', () => {
+    const catalog = normalizeOfflineBoardCatalog({
+      platforms: [
+        {
+          url: 'https://vendor.example/package_good_index.json',
+          platformId: 'vendor:arch',
+          name: 'Vendor Boards',
+          version: '1.0.0',
+          boards: ['Vendor Dev Board', 'Vendor Mini'],
+        },
+      ],
+    })
+
+    expect(Array.from(catalog.platforms.keys())).toEqual(['vendor:arch'])
+    expect(catalog.boards.map((board) => board.name)).toEqual([
+      'Vendor Dev Board',
+      'Vendor Mini',
+    ])
+  })
+
+  it('supports top-level platforms/boards payloads from the generator', () => {
+    const catalog = normalizeOfflineBoardCatalog({
+      platforms: [
+        {
+          url: 'https://vendor.example/package_good_index.json',
+          platformId: 'vendor:arch',
+          name: 'Vendor Boards',
+          version: '1.0.0',
+        },
+      ],
+      boards: [
+        {
+          name: 'Vendor Dev Board',
+          url: 'https://vendor.example/package_good_index.json',
+          platformId: 'vendor:arch',
+        },
+      ],
+    })
+
+    expect(Array.from(catalog.platforms.keys())).toEqual(['vendor:arch'])
+    expect(catalog.boards.map((board) => board.name)).toEqual([
+      'Vendor Dev Board',
+    ])
+  })
+
   it('normalizes boards using canonical platform metadata and skips incomplete entries', () => {
     const catalog = normalizeOfflineBoardCatalog({
       items: [

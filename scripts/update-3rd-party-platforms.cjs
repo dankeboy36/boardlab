@@ -2,10 +2,12 @@
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { spawnSync, execFileSync } = require('node:child_process')
+const { spawnSync, execFileSync, execFile } = require('node:child_process')
+const { promisify } = require('node:util')
 
 const semver = require('semver')
 const { getTool } = require('get-arduino-tools')
+const prettier = require('prettier')
 
 const DEFAULT_USER_AGENT = 'boardlab/update-3rd-party-platforms'
 const DEFAULT_CLI_VERSION = process.env.BOARDLAB_ARDUINO_CLI_VERSION || '1.4.1'
@@ -17,6 +19,7 @@ const CLI_CACHE_ROOT = path.resolve(
   'arduino-cli'
 )
 const CLI_OUTPUT_LIMIT = 32 * 1024 * 1024
+const execFileAsync = promisify(execFile)
 
 /**
  * @param {readonly string[]} args
@@ -169,9 +172,9 @@ function parseArduinoWikiEntries(markdown) {
   const entries = []
   const lines = markdown.split(/\r?\n/)
 
-  const isTop = (line) => /^\*\s+\*\*[^*]+\*\*/.test(line)
+  const isTop = (/** @type {string} */ line) => /^\*\s+\*\*[^*]+\*\*/.test(line)
 
-  const extractUrlsFromLine = (line) => {
+  const extractUrlsFromLine = (/** @type {string} */ line) => {
     /** @type {string[]} */
     const urls = []
 
@@ -186,7 +189,7 @@ function parseArduinoWikiEntries(markdown) {
     return Array.from(new Set(urls))
   }
 
-  const cleanNote = (line) =>
+  const cleanNote = (/** @type {string} */ line) =>
     line
       .replace(/^\s*\*\s*/, '')
       .replace(/^\s*-\s*/, '')
@@ -279,6 +282,58 @@ function parseArduinoWikiEntries(markdown) {
 
 /**
  * @typedef {{
+ *   name: string
+ *   platformId: string
+ *   url: string
+ * }} CatalogPlatformRef
+ */
+
+/**
+ * @typedef {{
+ *   name: string
+ *   platformId: string
+ *   url: string
+ *   platformName?: string
+ * }} CatalogBoardRef
+ */
+
+/**
+ * @typedef {{
+ *   platforms: CatalogPlatform[]
+ *   boards: CatalogBoard[]
+ * }} CatalogData
+ */
+
+/**
+ * @typedef {{
+ *   catalog: CatalogData
+ *   dropped: {
+ *     deprecatedPlatforms: CatalogPlatformRef[]
+ *     deprecatedBoards: CatalogBoardRef[]
+ *     noisyBoards: CatalogBoardRef[]
+ *     platformsDroppedBecauseNoBoards: CatalogPlatformRef[]
+ *   }
+ * }} CatalogPruneResult
+ */
+
+/**
+ * @typedef {{
+ *   metadata?: {
+ *     id?: string
+ *   }
+ * }} CliBoardPlatform
+ */
+
+/**
+ * @typedef {{
+ *   name?: string
+ *   fqbn?: string
+ *   platform?: CliBoardPlatform
+ * }} CliBoardEntry
+ */
+
+/**
+ * @typedef {{
  *   cliPath: string
  *   cliConfigPath: string
  *   dataDirPath: string
@@ -288,7 +343,7 @@ function parseArduinoWikiEntries(markdown) {
 
 /**
  * @param {string | undefined} text
- * @returns {unknown}
+ * @returns {any}
  */
 function tryParseJson(text) {
   if (!text || !text.trim()) return undefined
@@ -320,6 +375,19 @@ function compactBoardName(value) {
 }
 
 /**
+ * @param {string} url
+ * @returns {boolean}
+ */
+function isOfficialArduinoIndexUrl(url) {
+  try {
+    const parsed = new URL(url)
+    return parsed.hostname.toLowerCase() === 'downloads.arduino.cc'
+  } catch {
+    return false
+  }
+}
+
+/**
  * @param {unknown} value
  * @returns {boolean}
  */
@@ -329,6 +397,57 @@ function hasDeprecatedCatalogMarker(value) {
     /(?:\bdeprecated\b|\buse\b[\s\S]{0,120}?\binstead\b|\bknown\s+issues?\b|\b(?:bugfix|critical|bugs|broken)\b|\bno\s+good\b|\bv?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?\b|<\s*\/?\s*[a-z][^>]*>|&(?:[a-z][a-z0-9]+|#\d+|#x[0-9a-f]+);)/i.test(
       value
     )
+  )
+}
+
+/**
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function isNoisyBoardName(value) {
+  if (typeof value !== 'string') {
+    return false
+  }
+
+  const noisyPatterns = [
+    /\bprogram\s+via\b/i,
+    /\bwindows\s+users?\b/i,
+    /\bif\s+win(?:dows)?\b/i,
+    /\bpost_install\.bat\b/i,
+    /\brelease\s+notes?\b/i,
+    /\bsupported\s+updi\b/i,
+    /\busb\s*\(micronucleus\)\s*(?:support|boards?)\b/i,
+    /\bserial\s+bootloader\b.*\bsupported\s+only\b/i,
+    /\bnot\s+supported\b.*\btoolchain\b/i,
+    /\btoolchain\b.*\bnot\s+supported\b/i,
+    /\bdoes(?:\s+not|n't)\s+(?:install|work)\b/i,
+    /\bfor\s+reasons?\s+i\s+don't\s+understand\b/i,
+    /\battention!?[\s:]/i,
+    /^\s*if\s+.*\bdrivers?\b.*\binstall\b/i,
+    /^(?:\s*(?:ATtiny|AVR)[A-Za-z0-9/]+(?:\s*,\s*(?:ATtiny|AVR)[A-Za-z0-9/]+){2,}\s*)$/i,
+    /\([tT]\d+[a-z]?(?:\s*,\s*[tT]\d+[a-z]?)+\)/,
+  ]
+  return noisyPatterns.some((pattern) => pattern.test(value))
+}
+
+/**
+ * @param {string} name
+ * @param {boolean} deprecatedFlag
+ * @returns {boolean}
+ */
+function isDeprecatedPlatform(name, deprecatedFlag) {
+  return deprecatedFlag || hasDeprecatedCatalogMarker(name)
+}
+
+/**
+ * @param {string} name
+ * @param {boolean} deprecatedFlag
+ * @param {boolean} platformDeprecated
+ * @returns {boolean}
+ */
+function isDeprecatedBoard(name, deprecatedFlag, platformDeprecated) {
+  return (
+    platformDeprecated || deprecatedFlag || hasDeprecatedCatalogMarker(name)
   )
 }
 
@@ -408,6 +527,196 @@ function packageIndexBasename(url) {
     return path.basename(new URL(url).pathname)
   } catch {
     return path.basename(url)
+  }
+}
+
+/**
+ * @param {CatalogPlatform} left
+ * @param {CatalogPlatform} right
+ * @returns {number}
+ */
+function compareCatalogPlatforms(left, right) {
+  const byUrl = left.url.localeCompare(right.url)
+  if (byUrl !== 0) return byUrl
+  return left.platformId.localeCompare(right.platformId)
+}
+
+/**
+ * @param {CatalogBoard} left
+ * @param {CatalogBoard} right
+ * @returns {number}
+ */
+function compareCatalogBoards(left, right) {
+  const byUrl = left.url.localeCompare(right.url)
+  if (byUrl !== 0) return byUrl
+  const byPlatform = left.platformId.localeCompare(right.platformId)
+  if (byPlatform !== 0) return byPlatform
+  return left.name.localeCompare(right.name)
+}
+
+/**
+ * @param {CatalogData} catalog
+ * @returns {CatalogPruneResult}
+ */
+function pruneCatalogForOutput(catalog) {
+  /** @type {CatalogPruneResult['dropped']} */
+  const dropped = {
+    deprecatedPlatforms: [],
+    deprecatedBoards: [],
+    noisyBoards: [],
+    platformsDroppedBecauseNoBoards: [],
+  }
+
+  /**
+   * @param {string} url
+   * @param {string} platformId
+   * @returns {string}
+   */
+  const platformKeyOf = (url, platformId) => `${url}\u0000${platformId}`
+
+  /** @type {Map<string, CatalogPlatform>} */
+  const keptPlatformsByKey = new Map()
+  for (const platform of catalog.platforms) {
+    const platformDeprecated = isDeprecatedPlatform(
+      platform.name,
+      platform.deprecated === true
+    )
+    const key = platformKeyOf(platform.url, platform.platformId)
+    if (platformDeprecated) {
+      dropped.deprecatedPlatforms.push({
+        name: platform.name,
+        platformId: platform.platformId,
+        url: platform.url,
+      })
+      continue
+    }
+    keptPlatformsByKey.set(key, {
+      ...platform,
+      deprecated: false,
+      boards: [],
+    })
+  }
+
+  /** @type {Map<string, string[]>} */
+  const boardNamesByPlatformKey = new Map()
+  /** @type {CatalogBoard[]} */
+  const keptBoards = []
+  const seenBoardKeys = new Set()
+  for (const board of catalog.boards) {
+    const platformKey = platformKeyOf(board.url, board.platformId)
+    if (!keptPlatformsByKey.has(platformKey)) {
+      continue
+    }
+
+    if (isNoisyBoardName(board.name)) {
+      dropped.noisyBoards.push({
+        name: board.name,
+        platformId: board.platformId,
+        url: board.url,
+        platformName: board.platformName,
+      })
+      continue
+    }
+
+    if (isDeprecatedBoard(board.name, board.deprecated === true, false)) {
+      dropped.deprecatedBoards.push({
+        name: board.name,
+        platformId: board.platformId,
+        url: board.url,
+        platformName: board.platformName,
+      })
+      continue
+    }
+
+    const boardKey = `${platformKey}\u0000${compactBoardName(board.name)}`
+    if (seenBoardKeys.has(boardKey)) {
+      continue
+    }
+    seenBoardKeys.add(boardKey)
+
+    keptBoards.push({
+      ...board,
+      deprecated: false,
+    })
+    if (!boardNamesByPlatformKey.has(platformKey)) {
+      boardNamesByPlatformKey.set(platformKey, [])
+    }
+    const names = boardNamesByPlatformKey.get(platformKey) || []
+    if (!names.includes(board.name)) {
+      names.push(board.name)
+    }
+  }
+
+  /** @type {CatalogPlatform[]} */
+  const finalPlatforms = []
+  for (const platform of keptPlatformsByKey.values()) {
+    const key = platformKeyOf(platform.url, platform.platformId)
+    const boardNames = boardNamesByPlatformKey.get(key) || []
+    if (!boardNames.length) {
+      dropped.platformsDroppedBecauseNoBoards.push({
+        name: platform.name,
+        platformId: platform.platformId,
+        url: platform.url,
+      })
+      continue
+    }
+    finalPlatforms.push({
+      ...platform,
+      boards: boardNames,
+    })
+  }
+
+  const finalPlatformKeys = new Set(
+    finalPlatforms.map((platform) =>
+      platformKeyOf(platform.url, platform.platformId)
+    )
+  )
+  const finalBoards = keptBoards.filter((board) =>
+    finalPlatformKeys.has(platformKeyOf(board.url, board.platformId))
+  )
+
+  const comparePlatformRefs = (
+    /** @type {{ url: string; platformId: string; name: string }} */ left,
+    /** @type {{ url: string; platformId: string; name: string }} */ right
+  ) => {
+    const byUrl = left.url.localeCompare(right.url)
+    if (byUrl !== 0) return byUrl
+    const byId = left.platformId.localeCompare(right.platformId)
+    if (byId !== 0) return byId
+    return left.name.localeCompare(right.name)
+  }
+  const compareBoardRefs = (
+    /** @type {{ url: string; platformId: string; name: string }} */ left,
+    /** @type {{ url: string; platformId: string; name: string }} */ right
+  ) => {
+    const byUrl = left.url.localeCompare(right.url)
+    if (byUrl !== 0) return byUrl
+    const byId = left.platformId.localeCompare(right.platformId)
+    if (byId !== 0) return byId
+    return left.name.localeCompare(right.name)
+  }
+
+  dropped.deprecatedPlatforms.sort(comparePlatformRefs)
+  dropped.deprecatedBoards.sort(compareBoardRefs)
+  dropped.noisyBoards.sort(compareBoardRefs)
+  dropped.platformsDroppedBecauseNoBoards.sort(comparePlatformRefs)
+
+  return {
+    catalog: {
+      platforms: finalPlatforms.sort(compareCatalogPlatforms),
+      boards: finalBoards.sort(compareCatalogBoards),
+    },
+    dropped,
+  }
+}
+
+/**
+ * @param {CatalogData} catalog
+ * @returns {{ platforms: CatalogPlatform[] }}
+ */
+function toPlatformOnlyCatalogPayload(catalog) {
+  return {
+    platforms: catalog.platforms,
   }
 }
 
@@ -564,7 +873,7 @@ function collectRejectedUrls(runResult, knownItems) {
     if (!urlsByBasename.has(basename)) {
       urlsByBasename.set(basename, [])
     }
-    urlsByBasename.get(basename).push(item.normalizedUrl)
+    urlsByBasename.get(basename)?.push(item.normalizedUrl)
   }
 
   /** @type {Map<string, string>} */
@@ -854,30 +1163,20 @@ function buildCatalogFromPackageIndexes(documents) {
   }
 
   return {
-    platforms: Array.from(platforms.values()).sort((left, right) => {
-      const byUrl = left.url.localeCompare(right.url)
-      if (byUrl !== 0) return byUrl
-      return left.platformId.localeCompare(right.platformId)
-    }),
-    boards: Array.from(boards.values()).sort((left, right) => {
-      const byUrl = left.url.localeCompare(right.url)
-      if (byUrl !== 0) return byUrl
-      const byPlatform = left.platformId.localeCompare(right.platformId)
-      if (byPlatform !== 0) return byPlatform
-      return left.name.localeCompare(right.name)
-    }),
+    platforms: Array.from(platforms.values()).sort(compareCatalogPlatforms),
+    boards: Array.from(boards.values()).sort(compareCatalogBoards),
   }
 }
 
 /**
  * @param {CatalogBoard[]} boards
- * @param {Record<string, unknown>[]} cliBoards
+ * @param {CliBoardEntry[]} cliBoards
  * @returns {{ matchedCount: number }}
  */
 function applyCliBoardResolution(boards, cliBoards) {
-  /** @type {Map<string, Record<string, unknown>>} */
+  /** @type {Map<string, CliBoardEntry>} */
   const byPlatformAndName = new Map()
-  /** @type {Map<string, Record<string, unknown>[]>>} */
+  /** @type {Map<string, CliBoardEntry[]>} */
   const byName = new Map()
 
   for (const maybeBoard of cliBoards) {
@@ -903,7 +1202,7 @@ function applyCliBoardResolution(boards, cliBoards) {
     if (!byName.has(compact)) {
       byName.set(compact, [])
     }
-    byName.get(compact).push(maybeBoard)
+    byName.get(compact)?.push(maybeBoard)
   }
 
   let matchedCount = 0
@@ -934,23 +1233,37 @@ function applyCliBoardResolution(boards, cliBoards) {
 }
 
 /**
- * @param {string[] | undefined} argv
+ * @param {string[] | undefined} [argv]
  * @returns {{
  *   cliPath?: string
  *   cliVersion?: string
  *   outFile: string
+ *   reportFile?: string
+ *   includeOfficial: boolean
+ *   fullOutput: boolean
  * }}
  */
 function parseArgs(argv) {
   const args = argv ?? process.argv.slice(2)
-  /** @type {{ cliPath?: string; cliVersion?: string; outFile: string }} */
+  /**
+   * @type {{
+   *   cliPath?: string
+   *   cliVersion?: string
+   *   outFile: string
+   *   reportFile?: string
+   *   includeOfficial: boolean
+   *   fullOutput: boolean
+   * }}
+   */
   const result = {
     outFile: path.resolve(
       __dirname,
       '..',
       'resources',
-      'third-party-indexes.json'
+      'third-party-platforms.json'
     ),
+    includeOfficial: false,
+    fullOutput: false,
   }
 
   for (let i = 0; i < args.length; i++) {
@@ -966,12 +1279,119 @@ function parseArgs(argv) {
       case '--out':
         result.outFile = path.resolve(args[++i])
         break
+      case '--report':
+      case '--report-out':
+        result.reportFile = path.resolve(args[++i])
+        break
+      case '--full':
+        result.fullOutput = true
+        break
+      case '--include-official':
+        result.includeOfficial = true
+        break
       default:
         throw new Error(`Unknown argument: ${arg}`)
     }
   }
 
   return result
+}
+
+/**
+ * @param {string} value
+ * @returns {string}
+ */
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * @param {string | undefined} value
+ * @param {string[]} transientPaths
+ * @returns {string | undefined}
+ */
+function sanitizeTransientPaths(value, transientPaths) {
+  if (!value) {
+    return value
+  }
+
+  let result = String(value)
+  for (const transientPath of transientPaths) {
+    if (!transientPath) {
+      continue
+    }
+    result = result.replace(
+      new RegExp(escapeRegExp(transientPath), 'g'),
+      '<tmp>'
+    )
+  }
+
+  return result.replace(
+    /\/var\/folders\/[^\s'"]+|\/tmp\/[^\s'"]+|\\Temp\\[^\s'"]+/g,
+    '<tmp>'
+  )
+}
+
+/**
+ * @param {string} title
+ * @param {string[]} values
+ * @param {number} [limit]
+ */
+function printReportList(title, values, limit = 20) {
+  console.log(`[report] ${title}: ${values.length}`)
+  if (!values.length) {
+    return
+  }
+
+  const sorted = Array.from(new Set(values)).sort((left, right) =>
+    left.localeCompare(right)
+  )
+  const shown = sorted.slice(0, limit)
+  for (const value of shown) {
+    console.log(`  - ${value}`)
+  }
+  if (sorted.length > shown.length) {
+    console.log(`  ... and ${sorted.length - shown.length} more`)
+  }
+}
+
+/**
+ * @param {string} filePath
+ * @returns {Promise<void>}
+ */
+async function formatJsonWithPrettier(filePath) {
+  let config = {}
+  try {
+    config = (await prettier.resolveConfig(filePath)) || {}
+  } catch {
+    config = {}
+  }
+
+  const source = fs.readFileSync(filePath, 'utf8')
+  const formatted = await prettier.format(source, {
+    ...config,
+    filepath: filePath,
+    parser: 'json',
+  })
+
+  if (formatted !== source) {
+    fs.writeFileSync(filePath, formatted, 'utf8')
+  }
+}
+
+/**
+ * @param {string} filePath
+ * @returns {Promise<boolean>}
+ */
+async function runPrettierCliFallback(filePath) {
+  try {
+    await execFileAsync('npx', ['prettier', '--write', filePath], {
+      encoding: 'utf8',
+    })
+    return true
+  } catch {
+    return false
+  }
 }
 
 async function main() {
@@ -1090,6 +1510,20 @@ async function main() {
     const sortedItems = Array.from(items.values()).sort((left, right) =>
       left.normalizedUrl.localeCompare(right.normalizedUrl)
     )
+    const officialExcludedItems = options.includeOfficial
+      ? []
+      : sortedItems.filter((item) =>
+          isOfficialArduinoIndexUrl(item.normalizedUrl)
+        )
+    const officialExcludedByUrl = new Map(
+      officialExcludedItems.map((item) => [
+        item.normalizedUrl,
+        'Excluded official Arduino package index URL',
+      ])
+    )
+    const candidateItems = sortedItems.filter(
+      (item) => !officialExcludedByUrl.has(item.normalizedUrl)
+    )
 
     const cliPath = await resolveArduinoCliPath(
       options.cliPath,
@@ -1101,20 +1535,23 @@ async function main() {
     )
 
     console.log(
-      `-> Prefetching ${sortedItems.length} candidate package indexes and rejecting non-JSON responses`
+      `-> Prefetching ${candidateItems.length} candidate package indexes and rejecting non-JSON responses`
     )
-    const prefetched = await loadPackageIndexDocuments(sortedItems)
+    const prefetched = await loadPackageIndexDocuments(candidateItems)
     /** @type {Map<string, PackageIndexDocument>} */
     const documentsByUrl = new Map(
       prefetched.documents.map((document) => [document.normalizedUrl, document])
     )
     /** @type {Map<string, string>} */
-    const rejectedByUrl = new Map(prefetched.rejectedByUrl)
-    const prevalidatedItems = sortedItems.filter((item) =>
+    const rejectedByUrl = new Map([
+      ...officialExcludedByUrl.entries(),
+      ...prefetched.rejectedByUrl.entries(),
+    ])
+    const prevalidatedItems = candidateItems.filter((item) =>
       documentsByUrl.has(item.normalizedUrl)
     )
     console.log(
-      `[ok] Prefetch accepted ${prevalidatedItems.length} URLs and rejected ${prefetched.rejectedByUrl.size}`
+      `[ok] Prefetch accepted ${prevalidatedItems.length} URLs and rejected ${prefetched.rejectedByUrl.size}${officialExcludedItems.length ? ` (+${officialExcludedItems.length} official excluded)` : ''}`
     )
 
     const validationEnv = createCliEnv(cliPath, tmpRoot, 'validation')
@@ -1188,13 +1625,23 @@ async function main() {
     }
 
     console.log('-> Building catalog from accepted package indexes')
-    const documents = acceptedItems
-      .map((item) => documentsByUrl.get(item.normalizedUrl))
-      .filter((document) => Boolean(document))
-    const catalog = buildCatalogFromPackageIndexes(documents)
+    const documents = /** @type {PackageIndexDocument[]} */ (
+      acceptedItems
+        .map((item) => documentsByUrl.get(item.normalizedUrl))
+        .filter((document) => Boolean(document))
+    )
+    const rawCatalog = buildCatalogFromPackageIndexes(documents)
+    const prunedCatalog = pruneCatalogForOutput(rawCatalog)
+    const catalog = prunedCatalog.catalog
 
     console.log(
-      `-> Extracted ${catalog.platforms.length} platforms and ${catalog.boards.length} boards from package indexes`
+      `-> Extracted ${rawCatalog.platforms.length} raw platforms and ${rawCatalog.boards.length} raw boards from package indexes`
+    )
+    console.log(
+      `[ok] Clean catalog has ${catalog.platforms.length} platforms and ${catalog.boards.length} boards`
+    )
+    console.log(
+      `[stats] Dropped: official URLs ${officialExcludedItems.length}, deprecated platforms ${prunedCatalog.dropped.deprecatedPlatforms.length}, deprecated boards ${prunedCatalog.dropped.deprecatedBoards.length}, noisy boards ${prunedCatalog.dropped.noisyBoards.length}, empty platforms ${prunedCatalog.dropped.platformsDroppedBecauseNoBoards.length}`
     )
 
     const cliBoardList = loadCliBoardList(cliPath, catalogEnv.cliConfigPath)
@@ -1229,22 +1676,37 @@ async function main() {
     for (const item of sortedItems) {
       const message = rejectedByUrl.get(item.normalizedUrl)
       item.validationStatus = message ? 'rejected' : 'accepted'
-      item.validationMessage = message
+      item.validationMessage = sanitizeTransientPaths(message, [tmpRoot])
       item.platformCount = platformCounts.get(item.normalizedUrl) || 0
       item.boardCount = boardCounts.get(item.normalizedUrl) || 0
     }
 
-    const payload = {
+    const rawDeprecatedPlatforms = rawCatalog.platforms.filter(
+      (platform) => platform.deprecated
+    )
+    const rawDeprecatedBoards = rawCatalog.boards.filter(
+      (board) => board.deprecated
+    )
+
+    const report = {
       generatedAt: new Date().toISOString(),
       sources: {
-        inoplatformsTsv: {
-          type: 'raw',
+        tsv: {
           url: tsvUrl,
+          rawCandidates: tsvUrls.length,
+          normalizedCandidates: tsvNormalized.length,
+          uniqueCandidates: tsvUnique.size,
         },
-        arduinoWiki: {
-          type: 'git',
-          repo: 'https://github.com/arduino/Arduino.wiki.git',
-          page: 'Unofficial-list-of-3rd-party-boards-support-urls.md',
+        wiki: {
+          entries: wikiEntries.length,
+          rawUrls: wikiUrls.length,
+          normalizedUrls: wikiNormalized.length,
+          uniqueUrls: wikiUnique.size,
+        },
+        overlap: {
+          sharedUrls: overlap,
+          tsvOnly: tsvUnique.size - overlap,
+          wikiOnly: wikiUnique.size - overlap,
         },
       },
       cli: {
@@ -1252,27 +1714,87 @@ async function main() {
         actualVersion: cliInfo.version,
         boardListCommand: cliBoardList.command,
       },
-      validation: {
-        acceptedUrls: acceptedItems.map((item) => item.normalizedUrl),
-        rejectedUrls: Array.from(rejectedByUrl.entries()).map(
-          ([url, message]) => ({
-            url,
-            message,
-          })
-        ),
+      prefetch: {
+        acceptedUrls: prevalidatedItems.length,
+        rejectedUrls: prefetched.rejectedByUrl.size,
+        officialExcludedUrls: officialExcludedItems.length,
       },
-      items: sortedItems,
+      validation: {
+        acceptedUrls: acceptedItems.length,
+        rejectedUrls: Array.from(rejectedByUrl.entries())
+          .sort((left, right) => left[0].localeCompare(right[0]))
+          .map(([url, message]) => ({
+            url,
+            message: sanitizeTransientPaths(message, [tmpRoot]),
+          })),
+      },
       catalog: {
-        platforms: catalog.platforms,
-        boards: catalog.boards,
-        stats: {
+        rawStats: {
+          platforms: rawCatalog.platforms.length,
+          boards: rawCatalog.boards.length,
+          deprecatedPlatforms: rawDeprecatedPlatforms.length,
+          deprecatedBoards: rawDeprecatedBoards.length,
+        },
+        cleanStats: {
           platforms: catalog.platforms.length,
           boards: catalog.boards.length,
           boardsWithResolvedFqbn: catalog.boards.filter((board) => board.fqbn)
             .length,
         },
       },
+      filtering: {
+        officialExcludedUrls: {
+          count: officialExcludedItems.length,
+          items: officialExcludedItems
+            .map((item) => item.normalizedUrl)
+            .sort((left, right) => left.localeCompare(right)),
+        },
+        deprecatedPlatformsDropped: {
+          count: prunedCatalog.dropped.deprecatedPlatforms.length,
+          items: prunedCatalog.dropped.deprecatedPlatforms,
+        },
+        deprecatedBoardsDropped: {
+          count: prunedCatalog.dropped.deprecatedBoards.length,
+          items: prunedCatalog.dropped.deprecatedBoards,
+        },
+        noisyBoardsDropped: {
+          count: prunedCatalog.dropped.noisyBoards.length,
+          items: prunedCatalog.dropped.noisyBoards,
+        },
+        platformsDroppedBecauseNoBoards: {
+          count: prunedCatalog.dropped.platformsDroppedBecauseNoBoards.length,
+          items: prunedCatalog.dropped.platformsDroppedBecauseNoBoards,
+        },
+      },
     }
+
+    const catalogPayload = toPlatformOnlyCatalogPayload(catalog)
+
+    const payload = options.fullOutput
+      ? {
+          generatedAt: report.generatedAt,
+          sources: {
+            inoplatformsTsv: {
+              type: 'raw',
+              url: tsvUrl,
+            },
+            arduinoWiki: {
+              type: 'git',
+              repo: 'https://github.com/arduino/Arduino.wiki.git',
+              page: 'Unofficial-list-of-3rd-party-boards-support-urls.md',
+            },
+          },
+          cli: report.cli,
+          validation: {
+            acceptedUrls: acceptedItems.map((item) => item.normalizedUrl),
+            rejectedUrls: report.validation.rejectedUrls,
+          },
+          filtering: report.filtering,
+          items: sortedItems,
+          platforms: catalogPayload.platforms,
+          stats: report.catalog.cleanStats,
+        }
+      : catalogPayload
 
     fs.mkdirSync(path.dirname(options.outFile), { recursive: true })
     fs.writeFileSync(
@@ -1280,24 +1802,101 @@ async function main() {
       JSON.stringify(payload, null, 2) + '\n',
       'utf8'
     )
+    try {
+      await formatJsonWithPrettier(options.outFile)
+    } catch (error) {
+      const formattedWithCli = await runPrettierCliFallback(options.outFile)
+      if (!formattedWithCli) {
+        console.warn(
+          `[warn] Could not format generated JSON with Prettier: ${error instanceof Error ? error.message : String(error)}`
+        )
+      }
+    }
+
+    if (options.reportFile) {
+      fs.mkdirSync(path.dirname(options.reportFile), { recursive: true })
+      fs.writeFileSync(
+        options.reportFile,
+        JSON.stringify(report, null, 2) + '\n',
+        'utf8'
+      )
+      try {
+        await formatJsonWithPrettier(options.reportFile)
+      } catch (error) {
+        const formattedWithCli = await runPrettierCliFallback(
+          options.reportFile
+        )
+        if (!formattedWithCli) {
+          console.warn(
+            `[warn] Could not format report JSON with Prettier: ${error instanceof Error ? error.message : String(error)}`
+          )
+        }
+      }
+    }
 
     console.log(
-      `[ok] Wrote ${acceptedItems.length} accepted indexes, ${catalog.platforms.length} platforms, and ${catalog.boards.length} boards to ${options.outFile}`
+      `[ok] Wrote ${catalog.platforms.length} platforms and ${catalog.boards.length} boards to ${options.outFile}${options.fullOutput ? ' (full metadata)' : ' (catalog only)'}`
+    )
+    if (options.reportFile) {
+      console.log(`[ok] Wrote generation report to ${options.reportFile}`)
+    }
+
+    printReportList(
+      'Dropped deprecated platforms',
+      prunedCatalog.dropped.deprecatedPlatforms.map((platform) => platform.name)
+    )
+    printReportList(
+      'Dropped deprecated boards',
+      prunedCatalog.dropped.deprecatedBoards.map((board) => board.name)
+    )
+    printReportList(
+      'Dropped noisy boards',
+      prunedCatalog.dropped.noisyBoards.map((board) => board.name)
+    )
+    printReportList(
+      'Dropped platforms without boards',
+      prunedCatalog.dropped.platformsDroppedBecauseNoBoards.map(
+        (platform) => platform.name
+      )
+    )
+    printReportList(
+      'Excluded official package indexes',
+      officialExcludedItems.map((item) => item.normalizedUrl)
+    )
+    printReportList(
+      'Rejected package indexes',
+      report.validation.rejectedUrls.map(
+        (entry) => `${entry.url} :: ${entry.message || 'unknown error'}`
+      ),
+      10
     )
   } finally {
     fs.rmSync(tmpRoot, { recursive: true, force: true })
   }
 }
 
-main().catch((err) => {
-  if (err && typeof err === 'object') {
-    if ('stderr' in err && err.stderr) {
-      process.stderr.write(String(err.stderr))
+module.exports = {
+  hasDeprecatedCatalogMarker,
+  isNoisyBoardName,
+  isOfficialArduinoIndexUrl,
+  isDeprecatedPlatform,
+  isDeprecatedBoard,
+  pruneCatalogForOutput,
+  toPlatformOnlyCatalogPayload,
+  parseArgs,
+}
+
+if (require.main === module) {
+  main().catch((err) => {
+    if (err && typeof err === 'object') {
+      if ('stderr' in err && err.stderr) {
+        process.stderr.write(String(err.stderr))
+      }
+      if ('stdout' in err && err.stdout) {
+        process.stderr.write(String(err.stdout))
+      }
     }
-    if ('stdout' in err && err.stdout) {
-      process.stderr.write(String(err.stdout))
-    }
-  }
-  console.error(err instanceof Error ? err.message : String(err))
-  process.exit(1)
-})
+    console.error(err instanceof Error ? err.message : String(err))
+    process.exit(1)
+  })
+}

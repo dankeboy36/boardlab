@@ -26,6 +26,7 @@ interface ThirdPartyCatalogPlatformRecord {
   readonly maintainer?: string
   readonly website?: string
   readonly types?: readonly string[]
+  readonly boards?: readonly string[]
   readonly deprecated?: boolean
 }
 
@@ -43,6 +44,8 @@ interface ThirdPartyBoardsCatalogRecord {
 
 export interface ThirdPartyIndexesResourceRecord {
   readonly items?: readonly ThirdPartyIndexItemRecord[]
+  readonly platforms?: readonly ThirdPartyCatalogPlatformRecord[]
+  readonly boards?: readonly ThirdPartyCatalogBoardRecord[]
   readonly catalog?: ThirdPartyBoardsCatalogRecord
 }
 
@@ -91,6 +94,29 @@ function toStringArray(value: unknown): string[] {
     }
   }
   return result
+}
+
+function boardsFromPlatforms(
+  platforms: readonly ThirdPartyCatalogPlatformRecord[]
+): ThirdPartyCatalogBoardRecord[] {
+  const boards: ThirdPartyCatalogBoardRecord[] = []
+  for (const platform of platforms) {
+    const url = toNonEmptyString(platform.url)
+    const platformId = toNonEmptyString(platform.platformId)
+    if (!url || !platformId) {
+      continue
+    }
+
+    for (const boardName of toStringArray(platform.boards)) {
+      boards.push({
+        name: boardName,
+        url,
+        platformId,
+        deprecated: platform.deprecated === true ? true : undefined,
+      })
+    }
+  }
+  return boards
 }
 
 function isOfficialArduinoPackageIndexUrl(url: string): boolean {
@@ -288,6 +314,12 @@ export function normalizeOfflineBoardCatalog(
   options: NormalizeOfflineBoardCatalogOptions = {}
 ): OfflineBoardCatalog {
   const includeOfficial = options.includeOfficialArduinoPackageIndexes === true
+  const platformsSource =
+    resource.platforms ?? resource.catalog?.platforms ?? []
+  const boardsSource =
+    resource.boards ??
+    resource.catalog?.boards ??
+    boardsFromPlatforms(platformsSource)
 
   const acceptedUrls = new Set(
     (resource.items ?? [])
@@ -299,7 +331,7 @@ export function normalizeOfflineBoardCatalog(
 
   const candidatePlatforms = new Map<string, OfflineBoardCatalogPlatform[]>()
 
-  for (const entry of resource.catalog?.platforms ?? []) {
+  for (const entry of platformsSource) {
     const platformId = toNonEmptyString(entry.platformId)
     const url = toNonEmptyString(entry.url)
     const name = toNonEmptyString(entry.name)
@@ -367,7 +399,7 @@ export function normalizeOfflineBoardCatalog(
 
   const boards: OfflineBoardListItem[] = []
   const seenBoards = new Set<string>()
-  for (const entry of resource.catalog?.boards ?? []) {
+  for (const entry of boardsSource) {
     const name = toNonEmptyString(entry.name)
     const platformId = toNonEmptyString(entry.platformId)
     if (!name || !platformId) {
@@ -447,25 +479,15 @@ export function loadBundledOfflineBoardCatalog():
 
   try {
     const catalogPath = [
-      path.resolve(__dirname, '..', 'resources', 'third-party-indexes.json'),
-      path.resolve(
-        __dirname,
-        '..',
-        '..',
-        '..',
-        'resources',
-        'third-party-indexes.json'
-      ),
-      path.resolve(
-        __dirname,
-        '..',
-        '..',
-        '..',
-        '..',
-        'resources',
-        'third-party-indexes.json'
-      ),
-    ].find((candidate) => existsSync(candidate))
+      'third-party-platforms.json',
+      'third-party-indexes.json',
+    ]
+      .flatMap((filename) => [
+        path.resolve(__dirname, '..', 'resources', filename),
+        path.resolve(__dirname, '..', '..', '..', 'resources', filename),
+        path.resolve(__dirname, '..', '..', '..', '..', 'resources', filename),
+      ])
+      .find((candidate) => existsSync(candidate))
     if (!catalogPath) {
       throw new Error('Bundled offline boards catalog was not found')
     }
