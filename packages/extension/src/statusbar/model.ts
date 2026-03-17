@@ -336,7 +336,7 @@ export function deriveStatusBarModel(
         )
       )
       return items
-    case 'PLATFORM_REQUIRED':
+    case 'PLATFORM_REQUIRED': {
       const platformInstall = platformInstallActivity(runtime)
       const usesInstallingPlaceholder = Boolean(
         ctx.canInstallPlatform && platformInstall
@@ -385,6 +385,7 @@ export function deriveStatusBarModel(
         items.push(platformRequiredActivity)
       }
       return items
+    }
     case 'PORT_REQUIRED': {
       items.push(
         compileItem(120),
