@@ -53,6 +53,7 @@ export interface ResourcesServer<
 export interface InstallEventParams {
   readonly id: string
   readonly version: string
+  readonly name?: string
 }
 export interface UninstallEventParams {
   readonly id: string

@@ -77,6 +77,30 @@ describe('deriveStatusBarModel', () => {
     expect(model[1]?.text).toBe('Arduino Uno')
   })
 
+  it('replaces install action with spinner while platform install is running', () => {
+    const model = deriveStatusBarModel('PLATFORM_REQUIRED', {
+      ...baseContext,
+      canInstallPlatform: true,
+      platformInstallLabel: 'ATTinyCore (ATTinyCore:avr) platform',
+      runtime: {
+        compile: { state: 'idle' },
+        monitor: { state: 'stopped' },
+        upload: { state: 'idle' },
+        platformInstall: {
+          state: 'running',
+          id: 'ATTinyCore:avr',
+          name: 'ATTinyCore',
+        },
+      },
+    })
+    expect(idsOf(model)).toEqual(['platform-required-installing', 'board'])
+    const installing = model.find(
+      (item) => item.id === 'platform-required-installing'
+    )
+    expect(installing?.text).toBe('$(sync~spin) Installing ATTinyCore…')
+    expect(installing?.command).toBeUndefined()
+  })
+
   it('falls back to select board when platform target is unknown', () => {
     const model = deriveStatusBarModel('PLATFORM_REQUIRED', {
       ...baseContext,
@@ -232,6 +256,25 @@ describe('deriveStatusBarModel', () => {
     expect(activity?.tooltip).toBe('Pre-compile tasks')
   })
 
+  it('shows platform install activity with platform name', () => {
+    const model = deriveStatusBarModel('READY_FULL', {
+      ...baseContext,
+      runtime: {
+        compile: { state: 'idle' },
+        monitor: { state: 'stopped' },
+        upload: { state: 'idle' },
+        platformInstall: {
+          state: 'running',
+          id: 'ATTinyCore:avr',
+          name: 'ATTinyCore',
+        },
+      },
+    })
+    const activity = model.find((item) => item.id === 'activity')
+    expect(activity?.text).toBe('$(sync~spin) Installing ATTinyCore…')
+    expect(activity?.tooltip).toContain('Installing ATTinyCore')
+  })
+
   it('shows combined upload and compile activity in the tail item', () => {
     const model = deriveStatusBarModel('READY_FULL', {
       ...baseContext,
@@ -250,5 +293,27 @@ describe('deriveStatusBarModel', () => {
     expect(monitor?.command).toBe('boardlab.openMonitor')
     expect(activity?.text).toBe('$(sync~spin) Uploading… • Compiling… 7%')
     expect(activity?.command).toBeUndefined()
+  })
+
+  it('includes platform install in combined activity text', () => {
+    const model = deriveStatusBarModel('READY_FULL', {
+      ...baseContext,
+      runtime: {
+        compile: { state: 'running', percent: 7, message: 'Compiling core' },
+        monitor: { state: 'suspended' },
+        upload: { state: 'running' },
+        platformInstall: {
+          state: 'running',
+          id: 'ATTinyCore:avr',
+          name: 'ATTinyCore',
+          count: 2,
+        },
+      },
+    })
+    const activity = model.find((item) => item.id === 'activity')
+    expect(activity?.text).toBe(
+      '$(sync~spin) Installing ATTinyCore… (+1 more) • Uploading… • Compiling… 7%'
+    )
+    expect(activity?.tooltip).toContain('Installing ATTinyCore')
   })
 })

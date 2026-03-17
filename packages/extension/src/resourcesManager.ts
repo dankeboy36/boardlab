@@ -344,25 +344,25 @@ abstract class ResourcesManager<
   }
 
   private fireWillInstall(params: InstallResourceParams): void {
-    const { id, version } = params
+    const { id, name, version } = params
     this._busyResources.add(id)
-    this.onWillInstallEmitter.fire({ id, version })
+    this.onWillInstallEmitter.fire({ id, name, version })
   }
 
   private fireDidInstall(params: InstallResourceParams): void {
-    const { id, version } = params
+    const { id, name, version } = params
     this._busyResources.delete(id)
-    this.onDidInstallEmitter.fire({ id, version })
+    this.onDidInstallEmitter.fire({ id, name, version })
   }
 
   private fireDidErrorInstall(
     params: InstallResourceParams,
     reason: unknown
   ): void {
-    const { id, version } = params
+    const { id, name, version } = params
     const message = reason instanceof Error ? reason.message : String(reason)
     this._busyResources.delete(id)
-    this.onDidErrorInstallEmitter.fire({ id, version, message })
+    this.onDidErrorInstallEmitter.fire({ id, name, version, message })
   }
 
   private fireWillUninstall(params: UninstallResourceParams): void {

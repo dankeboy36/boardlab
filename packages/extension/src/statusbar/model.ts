@@ -3,6 +3,7 @@ import type { OnboardingState } from '../onboarding/state'
 export type MonitorRuntimeState = 'stopped' | 'running' | 'suspended' | 'error'
 export type UploadRuntimeState = 'idle' | 'running' | 'error'
 export type CompileRuntimeState = 'idle' | 'running'
+export type PlatformInstallRuntimeState = 'idle' | 'running'
 
 export interface RuntimeState {
   readonly compile: {
@@ -12,6 +13,12 @@ export interface RuntimeState {
   }
   readonly monitor: { readonly state: MonitorRuntimeState }
   readonly upload: { readonly state: UploadRuntimeState }
+  readonly platformInstall?: {
+    readonly state: PlatformInstallRuntimeState
+    readonly id?: string
+    readonly name?: string
+    readonly count?: number
+  }
 }
 
 export interface StatusBarModelItem {
@@ -41,6 +48,7 @@ export const defaultRuntimeState: RuntimeState = {
   compile: { state: 'idle' },
   monitor: { state: 'stopped' },
   upload: { state: 'idle' },
+  platformInstall: { state: 'idle' },
 }
 
 const CHECK_CLI_COMMAND = 'boardlab.checkCliAvailability'
@@ -217,10 +225,18 @@ function compileItem(priority: number): StatusBarModelItem {
 
 function activityItem(
   runtime: RuntimeState,
-  priority: number
+  priority: number,
+  options?: {
+    includePlatformInstall?: boolean
+  }
 ): StatusBarModelItem | undefined {
   const labels: string[] = []
   const tooltips: string[] = []
+  const platformInstall = platformInstallActivity(runtime)
+  if (options?.includePlatformInstall !== false && platformInstall) {
+    labels.push(platformInstall.label)
+    tooltips.push(platformInstall.tooltip)
+  }
   if (runtime.upload.state === 'running') {
     labels.push('Uploading…')
     tooltips.push('Upload in progress')
@@ -243,6 +259,28 @@ function activityItem(
     priority,
     tooltips.join(' ')
   )
+}
+
+function platformInstallActivity(
+  runtime: RuntimeState
+): { label: string; tooltip: string } | undefined {
+  if (runtime.platformInstall?.state !== 'running') {
+    return undefined
+  }
+  const count =
+    typeof runtime.platformInstall.count === 'number' &&
+    runtime.platformInstall.count > 1
+      ? runtime.platformInstall.count
+      : 1
+  const primaryName =
+    runtime.platformInstall.name?.trim() ||
+    runtime.platformInstall.id?.trim() ||
+    'platform'
+  const extraCount = count > 1 ? ` (+${count - 1} more)` : ''
+  return {
+    label: `Installing ${primaryName}…${extraCount}`,
+    tooltip: `Installing ${primaryName}`,
+  }
 }
 
 export function deriveStatusBarModel(
@@ -299,19 +337,35 @@ export function deriveStatusBarModel(
       )
       return items
     case 'PLATFORM_REQUIRED':
+      const platformInstall = platformInstallActivity(runtime)
+      const usesInstallingPlaceholder = Boolean(
+        ctx.canInstallPlatform && platformInstall
+      )
       if (ctx.canInstallPlatform) {
-        items.push(
-          createItem(
-            'platform-required',
-            `$(cloud-download) Install ${
-              ctx.platformInstallLabel || 'platform'
-            }`,
-            'boardlab.installPlatform',
-            120,
-            `Install ${ctx.platformInstallLabel || 'platform'}`,
-            ctx.platformInstallArgs
+        if (platformInstall) {
+          items.push(
+            createItem(
+              'platform-required-installing',
+              `$(sync~spin) ${platformInstall.label}`,
+              undefined,
+              120,
+              platformInstall.tooltip
+            )
           )
-        )
+        } else {
+          items.push(
+            createItem(
+              'platform-required',
+              `$(cloud-download) Install ${
+                ctx.platformInstallLabel || 'platform'
+              }`,
+              'boardlab.installPlatform',
+              120,
+              `Install ${ctx.platformInstallLabel || 'platform'}`,
+              ctx.platformInstallArgs
+            )
+          )
+        }
         items.push(boardItem(ctx, 118))
       } else {
         items.push(
@@ -323,6 +377,12 @@ export function deriveStatusBarModel(
             'Select board'
           )
         )
+      }
+      const platformRequiredActivity = activityItem(runtime, 115, {
+        includePlatformInstall: !usesInstallingPlaceholder,
+      })
+      if (platformRequiredActivity) {
+        items.push(platformRequiredActivity)
       }
       return items
     case 'PORT_REQUIRED': {

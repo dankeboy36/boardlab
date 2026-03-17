@@ -15,6 +15,7 @@ import {
 } from './model'
 
 function cloneRuntimeState(state: RuntimeState): RuntimeState {
+  const platformInstall = state.platformInstall ?? { state: 'idle' as const }
   return {
     compile: {
       state: state.compile.state,
@@ -23,6 +24,12 @@ function cloneRuntimeState(state: RuntimeState): RuntimeState {
     },
     monitor: { state: state.monitor.state },
     upload: { state: state.upload.state },
+    platformInstall: {
+      state: platformInstall.state,
+      id: platformInstall.id,
+      name: platformInstall.name,
+      count: platformInstall.count,
+    },
   }
 }
 
@@ -30,12 +37,18 @@ function areRuntimeStatesEqual(
   left: RuntimeState,
   right: RuntimeState
 ): boolean {
+  const leftPlatformInstall = left.platformInstall
+  const rightPlatformInstall = right.platformInstall
   return (
     left.compile.state === right.compile.state &&
     left.compile.percent === right.compile.percent &&
     left.compile.message === right.compile.message &&
     left.monitor.state === right.monitor.state &&
-    left.upload.state === right.upload.state
+    left.upload.state === right.upload.state &&
+    leftPlatformInstall?.state === rightPlatformInstall?.state &&
+    leftPlatformInstall?.id === rightPlatformInstall?.id &&
+    leftPlatformInstall?.name === rightPlatformInstall?.name &&
+    leftPlatformInstall?.count === rightPlatformInstall?.count
   )
 }
 
@@ -60,6 +73,7 @@ export class RuntimeStateService implements vscode.Disposable {
     new vscode.EventEmitter<RuntimeState>()
 
   private readonly disposables: vscode.Disposable[]
+  private readonly installingPlatforms = new Map<string, string | undefined>()
   private runtimeStateValue: RuntimeState =
     cloneRuntimeState(defaultRuntimeState)
 
@@ -79,6 +93,18 @@ export class RuntimeStateService implements vscode.Disposable {
       boardlabContext.monitorManager.onDidChangeMonitorState(() =>
         this.refresh()
       ),
+      boardlabContext.platformsManager.onWillInstall((event) => {
+        this.installingPlatforms.set(event.id, normalizeInstallName(event.name))
+        this.refresh()
+      }),
+      boardlabContext.platformsManager.onDidInstall((event) => {
+        this.installingPlatforms.delete(event.id)
+        this.refresh()
+      }),
+      boardlabContext.platformsManager.onDidErrorInstall((event) => {
+        this.installingPlatforms.delete(event.id)
+        this.refresh()
+      }),
       onDidChangeTaskStates(() => this.refresh()),
       tasks.onDidChangeCompileProgress(() => this.refresh()),
     ]
@@ -139,6 +165,7 @@ export class RuntimeStateService implements vscode.Disposable {
       compileProgress && compileProgress.sketchPath === sketchPath
         ? compileProgress
         : undefined
+    const activePlatformInstall = this.activePlatformInstall()
 
     return {
       compile: {
@@ -151,6 +178,33 @@ export class RuntimeStateService implements vscode.Disposable {
       },
       monitor: { state: monitorState },
       upload: { state: toUploadRuntimeState(uploadRunning) },
+      platformInstall: activePlatformInstall
+        ? {
+            state: 'running',
+            id: activePlatformInstall.id,
+            name: activePlatformInstall.name,
+            count: this.installingPlatforms.size,
+          }
+        : { state: 'idle' },
     }
   }
+
+  private activePlatformInstall():
+    | {
+        id: string
+        name?: string
+      }
+    | undefined {
+    const firstEntry = this.installingPlatforms.entries().next().value
+    if (!firstEntry) {
+      return undefined
+    }
+    const [id, name] = firstEntry
+    return { id, name }
+  }
+}
+
+function normalizeInstallName(name: string | undefined): string | undefined {
+  const trimmed = name?.trim()
+  return trimmed || undefined
 }
