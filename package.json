@@ -1623,7 +1623,7 @@
     "vscode-messenger-common": "^0.5.1",
     "vscode-ws-jsonrpc": "^3.4.0",
     "ws": "^8.18.3",
-    "yaml": "^2.8.1"
+    "yaml": "^2.8.3"
   },
   "devDependencies": {
     "@semantic-release/changelog": "^6.0.3",
