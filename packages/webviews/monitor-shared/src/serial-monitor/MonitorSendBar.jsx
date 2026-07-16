@@ -72,7 +72,7 @@ function MonitorSendBar({ client, lineEnding }) {
   })()
 
   let sendPlaceholder = selectedPort
-    ? `Message (Enter to send; append ${lineEndingDescription}, ${selectedPort.address}, baudrate: ${selectedBaudrate})`
+    ? `Message (Enter to send; append ${lineEndingDescription}, ${selectedPort.address}${selectedBaudrate ? `, baudrate: ${selectedBaudrate}` : ''})`
     : 'Select a port to send'
 
   let sendDisabled = !selectedPort
