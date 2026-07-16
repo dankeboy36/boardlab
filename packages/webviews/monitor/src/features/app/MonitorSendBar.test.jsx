@@ -136,6 +136,35 @@ describe('MonitorSendBar', () => {
     expect(pointerEventsOf(sendIcon)).not.toBe('none')
   })
 
+  it('omits the baudrate for ports without baudrate support', () => {
+    const port = {
+      protocol: 'teensy',
+      address: 'usb:1000000',
+    }
+    const portKey = createPortKey(port)
+    const placeholder = 'Message (Enter to send; append LF, usb:1000000)'
+
+    withSerialMonitorState({
+      selectedPort: port,
+      selectedBaudrates: [],
+      detectedPorts: {
+        [portKey]: { port },
+      },
+      sessionStates: {
+        [portKey]: makeSessionState({
+          portKey,
+          port,
+          status: 'active',
+          desired: 'running',
+          lastCompletedAttemptId: 1,
+        }),
+      },
+    })
+
+    const textarea = screen.getByPlaceholderText(placeholder)
+    expect(textarea).toHaveAttribute('placeholder', placeholder)
+  })
+
   it('shows suspended UI while started and waiting for device', () => {
     vi.useFakeTimers()
     withSerialMonitorState({
